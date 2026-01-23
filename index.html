@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPS Competidor - Rally</title>
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; text-align: center; background: #ecf0f1; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
-        button { background: #27ae60; color: white; border: none; font-weight: bold; cursor: pointer; }
-        button:disabled { background: #95a5a6; }
-        #status { margin-top: 15px; font-size: 14px; color: #7f8c8d; }
-        .vel-display { font-size: 48px; font-weight: bold; color: #2c3e50; margin: 20px 0; }
+        body { font-family: sans-serif; padding: 20px; text-align: center; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { background: #2ecc71; color: white; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:active { transform: scale(0.98); }
+        #status { margin-top: 15px; font-size: 14px; font-weight: bold; }
+        .vel-display { font-size: 50px; font-weight: bold; color: #2c3e50; margin: 15px 0; }
     </style>
 </head>
 <body>
@@ -20,7 +20,7 @@
     <h2>Registro do Piloto</h2>
     
     <div id="setup">
-        <input type="text" id="nome" placeholder="Nome Completo">
+        <input type="text" id="nome" placeholder="Nome do Piloto">
         <input type="number" id="carroNum" placeholder="Nº do Carro (1-100)" min="1" max="100">
         <select id="categoria">
             <option value="4x2">Categoria 4x2</option>
@@ -30,10 +30,10 @@
     </div>
 
     <div id="tracking" style="display:none;">
-        <p>TRANSMITINDO LOCALIZAÇÃO</p>
-        <div class="vel-display"><span id="speed">0</span> <small style="font-size: 18px;">km/h</small></div>
-        <p id="carInfo"></p>
-        <div id="status">📡 Buscando sinal GPS...</div>
+        <p>📡 TRANSMITINDO AO VIVO</p>
+        <div class="vel-display"><span id="speed">0</span> <small style="font-size: 20px;">km/h</small></div>
+        <p id="carInfo" style="color: #7f8c8d;"></p>
+        <div id="status" style="color: #e67e22;">Iniciando GPS...</div>
     </div>
 </div>
 
@@ -41,6 +41,10 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
 <script>
+    // 1. Definição Global das Variáveis
+    let db;
+
+    // 2. Configuração
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         authDomain: "cronometro-rally.firebaseapp.com",
@@ -48,4 +52,79 @@
         projectId: "cronometro-rally",
         storageBucket: "cronometro-rally.firebasestorage.app",
         messagingSenderId: "341731891354",
-        appId: "1
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+
+    // 3. Inicialização IMEDIATA ao carregar a página
+    try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        console.log("Firebase conectado com sucesso!");
+    } catch (error) {
+        console.error("Erro ao conectar ao Firebase:", error);
+        alert("Erro de conexão com o servidor.");
+    }
+
+    function validarEIniciar() {
+        const num = document.getElementById('carroNum').value;
+        const nome = document.getElementById('nome').value;
+        const cat = document.getElementById('categoria').value;
+        
+        if (!num || !nome) return alert("Preencha o nome e o número!");
+
+        // Agora db já está garantido aqui
+        db.ref('competidores/' + num).once('value', snap => {
+            if (snap.exists()) {
+                alert("O carro " + num + " já está em uso por outro piloto!");
+            } else {
+                iniciarGps(num, nome, cat);
+            }
+        });
+    }
+
+    function iniciarGps(num, nome, cat) {
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('tracking').style.display = 'block';
+        document.getElementById('carInfo').innerText = `Piloto: ${nome} | Carro: ${num} (${cat})`;
+
+        if (!navigator.geolocation) {
+            document.getElementById('status').innerText = "❌ GPS não suportado";
+            return;
+        }
+
+        navigator.geolocation.watchPosition(
+            (pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                const speedKmh = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+
+                document.getElementById('speed').innerText = speedKmh;
+                document.getElementById('status').innerText = "✅ SINAL ATIVO";
+                document.getElementById('status').style.color = "#27ae60";
+
+                // Envio para o Firebase
+                const dados = {
+                    nome: nome,
+                    numero: num,
+                    categoria: cat,
+                    lat: lat,
+                    lng: lng,
+                    velocidade: speedKmh,
+                    pontos: 150000,
+                    ultimaAtualizacao: Date.now()
+                };
+
+                db.ref('competidores/' + num).update(dados);
+                db.ref('rastros/' + num).push({ lat, lng, vel: speedKmh, t: Date.now() });
+            },
+            (err) => {
+                document.getElementById('status').innerText = "❌ Erro de Sinal (Verifique o GPS)";
+                document.getElementById('status').style.color = "#c0392b";
+                console.warn(err);
+            },
+            { enableHighAccuracy: true, maximumAge: 0 }
+        );
+    }
+</script>
+</body>
+</html>
