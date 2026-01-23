@@ -16,18 +16,18 @@
 </head>
 <body>
     <div class="card">
-        <div class="logo-box">
-            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo-img">
+        <div class="logo-box" style="text-align: center; margin-bottom: 20px;">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo-img" style="width: 80px;">
         </div>
         <div id="setup">
             <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto">
+            <input type="text" id="nome" placeholder="Nome do Piloto (Apenas letras)">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
+            <input type="number" id="carro" placeholder="Nº do Carro (1-100)" min="1" max="100">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
         <div id="ativo" class="tracking">
@@ -52,30 +52,61 @@
         const db = firebase.database(app);
 
         document.getElementById('btnIniciar').onclick = async function() {
-            const num = document.getElementById('carro').value;
-            const nome = document.getElementById('nome').value;
+            const num = parseInt(document.getElementById('carro').value);
+            const nomeInput = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
 
-            if(!num || !nome) return alert("Preencha tudo!");
+            // 1. Validação de Nome (Apenas letras e espaços)
+            const apenasLetras = /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/;
+            if(!apenasLetras.test(nomeInput)) {
+                return alert("O nome do piloto deve conter apenas letras!");
+            }
 
-            const snap = await db.ref('competidores/' + num).once('value');
-            if(snap.exists()) return alert("Carro já cadastrado!");
+            // 2. Validação de Número do Carro (1-100)
+            if(isNaN(num) || num < 1 || num > 100) {
+                return alert("O número do carro deve ser entre 1 e 100!");
+            }
 
-            await db.ref('competidores/' + num).set({ nome, categoria: cat, pontos: 150000 });
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
-            document.getElementById('viewCarro').innerText = "Carro " + num;
+            try {
+                // 3. Verificar se o número do carro já existe
+                const snapCarro = await db.ref('competidores/' + num).once('value');
+                if(snapCarro.exists()) return alert("Este número de carro já está cadastrado!");
 
-            navigator.geolocation.watchPosition(pos => {
-                const vel = (pos.coords.speed || 0) * 3.6;
-                document.getElementById('viewVel').innerText = vel.toFixed(1);
-                const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel, ts: Date.now() };
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-            }, null, { enableHighAccuracy: true });
+                // 4. Verificar se o nome do piloto já existe (Unicidade)
+                const snapTodos = await db.ref('competidores').once('value');
+                let nomeExiste = false;
+                snapTodos.forEach(child => {
+                    if(child.val().nome.toLowerCase() === nomeInput.toLowerCase()) {
+                        nomeExiste = true;
+                    }
+                });
+
+                if(nomeExiste) return alert("Este piloto já está cadastrado!");
+
+                // Se passou em tudo, salva
+                await db.ref('competidores/' + num).set({ 
+                    nome: nomeInput, 
+                    categoria: cat, 
+                    pontos: 150000 
+                });
+
+                document.getElementById('setup').style.display = 'none';
+                document.getElementById('ativo').style.display = 'block';
+                document.getElementById('viewCarro').innerText = "Carro " + num;
+
+                navigator.geolocation.watchPosition(pos => {
+                    const vel = (pos.coords.speed || 0) * 3.6;
+                    document.getElementById('viewVel').innerText = vel.toFixed(1);
+                    const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel, ts: Date.now() };
+                    db.ref('posicoes/' + num).set(coord);
+                    db.ref('rastros/' + num).push(coord);
+                }, null, { enableHighAccuracy: true });
+
+            } catch (error) {
+                alert("Erro ao conectar com o banco de dados.");
+                console.error(error);
+            }
         };
     </script>
 </body>
 </html>
-
-
