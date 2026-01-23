@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Rastro Rally - Visualização</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
+        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 1000; }
+        #map { flex-grow: 1; }
+        h2 { color: #e67e22; margin-top: 0; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 16px; }
+        select { background: #333; color: white; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:hover { background: #d35400; }
+        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 14px; }
+        .back-btn { background: #7f8c8d; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h2>🛰️ Rastro GPS</h2>
+        <label>Selecione o Competidor:</label>
+        <select id="carSelect">
+            <option value="">Carregando...</option>
+        </select>
+        <button onclick="drawTrack()">VER TRAJETO NO MAPA</button>
+        <div id="details">Selecione um carro para ver os detalhes do percurso.</div>
+        <button class="back-btn" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
+
+        const map = L.map('map').setView([-12.26, -38.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        // Camada para a linha do rastro
+        let poly = L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.7}).addTo(map);
+
+        // Escuta a lista de competidores e atualiza o Select
+        db.ref('competidores').on('value', snap => {
+            const select = document.getElementById('carSelect');
+            const data = snap.val();
+            
+            let options = '<option value="">Selecione um carro...</option>';
+            if (data) {
+                // Converte para array para ordenar por número do carro
+                const ids = Object.keys(data).sort((a, b) => a - b);
+                ids.forEach(id => {
+                    options += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
+                });
+            }
+            select.innerHTML = options;
+        });
+
+        async function drawTrack() {
+            const id = document.getElementById('carSelect').value;
+            if(!id) return alert("Selecione um competidor primeiro.");
+
+            const snap = await db.ref('rastros/' + id).once('value');
+            const data = snap.val();
+            
+            if(!data) {
+                poly.setLatLngs([]);
+                return alert("Nenhum dado de rastro encontrado para este veículo.");
+            }
+
+            // Converter os dados do rastro (que é um objeto de pushes) em um array de coordenadas
+            const path = Object.values(data).map(p => [p.lat, p.lng]);
+            
+            poly.setLatLngs(path);
+            map.fitBounds(poly.getBounds(), { padding: [50, 50] });
+
+            document.getElementById('details').innerHTML = `
+                <strong>Resumo do Trajeto:</strong><br>
+                🚗 Carro: ${id}<br>
+                📍 Pontos registrados: ${path.length}<br>
+                🕒 Última atualização: ${new Date(Object.values(data).pop().ts).toLocaleTimeString()}
+            `;
+        }
+    </script>
+</body>
+</html>
