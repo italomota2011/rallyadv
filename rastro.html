@@ -2,57 +2,104 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro em Tempo Real</title>
+    <title>Rastro Rally - Tempo Real</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, #map { height: 100vh; margin: 0; }
-        .car-icon { background: #2c3e50; color: white; border: 2px solid #fff; border-radius: 50%; 
-                    text-align: center; line-height: 25px; font-weight: bold; width: 25px!important; height: 25px!important; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
+        #map { height: 100vh; width: 100%; }
+        #info-box {
+            position: absolute; top: 10px; left: 50px; z-index: 1000;
+            background: rgba(255, 255, 255, 0.9); padding: 15px;
+            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            font-family: sans-serif;
+        }
+        /* Ícone redondo com número do carro */
+        .car-icon {
+            background: #2980b9; color: white; border: 2px solid white;
+            border-radius: 50%; text-align: center; line-height: 26px;
+            font-weight: bold; font-size: 11px; width: 26px !important; height: 26px !important;
+        }
     </style>
 </head>
 <body>
+
+<div id="info-box">
+    <strong>Monitoramento Rally</strong><br>
+    Carros Online: <span id="count">0</span>
+</div>
+
 <div id="map"></div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    const firebaseConfig = { apiKey: "SUA_API", databaseURL: "SUA_URL", projectId: "SEU_ID" };
+    // 1. Sua Configuração Exata
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+
+    // 2. Inicialização
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    const map = L.map('map').setView([-23.5505, -46.6333], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // 3. Configuração do Mapa
+    const map = L.map('map').setView([-23.5505, -46.6333], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 
     const markers = {};
     let focado = false;
 
-    // Carregar desenhos da prova
-    db.ref('prova/configuracao').once('value', s => {
-        if(s.exists()) L.geoJSON(s.val(), {
-            style: { color: 'blue', weight: 2 },
-            pointToLayer: (f, l) => f.properties.radius ? L.circle(l, {radius: f.properties.radius, color: 'orange'}) : null
-        }).addTo(map);
-    });
+    // 4. Ouvir dados do Firebase
+    db.ref('prova/carros').on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
 
-    // Monitorar carros
-    db.ref('prova/carros').on('value', s => {
-        const data = s.val();
-        for(let id in data) {
-            const c = data[id];
-            if(c.lat && c.lng) {
-                if(!focado) { map.setView([c.lat, c.lng], 14); focado = true; }
-                if(!markers[id]) {
-                    markers[id] = L.marker([c.lat, c.lng], {
-                        icon: L.divIcon({ className: 'car-icon', html: c.id })
-                    }).addTo(map);
-                } else {
-                    markers[id].setLatLng([c.lat, c.lng]);
+        let total = 0;
+        
+        for (let key in data) {
+            const c = data[key];
+            if (c.lat && c.lng) {
+                total++;
+                const pos = [c.lat, c.lng];
+
+                // Centraliza o mapa no primeiro carro que aparecer
+                if (!focado) {
+                    map.setView(pos, 13);
+                    focado = true;
                 }
-                markers[id].bindPopup(`Carro ${c.id}<br>Vel: ${c.velocidade}km/h`);
+
+                if (markers[key]) {
+                    // Atualiza marcador existente
+                    markers[key].setLatLng(pos);
+                    markers[key].getPopup().setContent(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
+                } else {
+                    // Cria novo marcador com ícone numerado
+                    const icon = L.divIcon({
+                        className: 'car-icon',
+                        html: c.id
+                    });
+
+                    markers[key] = L.marker(pos, { icon: icon })
+                        .addTo(map)
+                        .bindPopup(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
+                }
             }
         }
+        document.getElementById('count').innerText = total;
+    }, (error) => {
+        console.error("Erro ao ler Firebase:", error);
     });
 </script>
+
 </body>
 </html>
