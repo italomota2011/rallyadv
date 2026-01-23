@@ -1,32 +1,88 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Admin Rally - Controle Total</title>
+    <title>Admin - Tracker Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <style>
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; display: flex; flex-direction: column; font-family: 'Segoe UI', sans-serif; }
-        #map { flex-grow: 1; width: 100%; background: #e5e3df; }
-        .panel { padding: 15px; background: #1a1a1a; color: white; display: flex; gap: 10px; align-items: center; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        .results-area { height: 200px; overflow-y: auto; background: #fff; padding: 15px; font-family: monospace; font-size: 13px; border-top: 4px solid #ffc107; color: #333; }
-        button { padding: 10px 18px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; transition: 0.2s; }
-        .btn-save { background: #28a745; color: white; }
-        .btn-calc { background: #dc3545; color: white; }
-        .car-block { margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .penalty { color: #d32f2f; font-weight: bold; margin-left: 5px; }
-        .success { color: #388e3c; font-weight: bold; }
+        #map { height: 600px; width: 100%; }
+        .controls { padding: 10px; background: #f4f4f4; display: flex; gap: 10px; flex-wrap: wrap; }
+        .status-panel { margin-top: 10px; border: 1px solid #ccc; padding: 10px; max-height: 200px; overflow-y: auto; }
     </style>
 </head>
 <body>
 
-<div class="panel">
-    <strong style="color: #ffc107;">RALLY ADMIN v2.0</strong>
-    <button class="btn-save" onclick="saveConfig()">1. Salvar Mapa</button>
-    <button class="btn-calc" onclick="processRankings()">2. Processar Apuração</button>
-    <span id="status" style="margin-left: auto; color: #00ff00; font-size: 14px;">● Sistema Pronto</span>
-</div>
+    <div class="controls">
+        <button onclick="saveCourse()">Salvar Percurso e Regras</button>
+        <button onclick="calculateResults()" style="background: #ffcc00;">Finalizar e Apurar Resultados</button>
+    </div>
+    <div id="map"></div>
+    <div id="status" class="status-panel">Aguardando dados dos competidores...</div>
 
-<div id="map"></div>
-<div id="results" class="results-area">
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // Inicializar Mapa
+        const map = L.map('map').setView([-23.5505, -46.6333], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        const drawControl = new L.Control.Draw({
+            draw: { polyline: true, rectangle: true, marker: true, circle: false, polygon: false },
+            edit: { featureGroup: drawnItems }
+        });
+        map.addControl(drawControl);
+
+        let markers = {}; // Guardar marcadores dos carros
+
+        // Escutar carros em tempo real
+        db.ref('competidores').on('value', snapshot => {
+            const data = snapshot.val();
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = "<h4>Carros Ativos:</h4>";
+
+            for (let id in data) {
+                const { lat, lng, speed, nome, carNumber } = data[id];
+                
+                // Atualizar ou criar marcador
+                if (markers[id]) {
+                    markers[id].setLatLng([lat, lng]);
+                } else {
+                    markers[id] = L.marker([lat, lng]).addTo(map).bindPopup(`Carro ${carNumber}: ${nome}`);
+                }
+                statusDiv.innerHTML += `Carro ${carNumber} (${nome}): ${speed.toFixed(2)} km/h<br>`;
+            }
+        });
+
+        function saveCourse() {
+            const geojson = drawnItems.toGeoJSON();
+            db.ref('configuracao/prova').set(geojson);
+            alert("Percurso e áreas de radar salvos!");
+        }
+
+        async function calculateResults() {
+            // Lógica de apuração: Compara o histórico de cada carro com as áreas do DrawnItems
+            // Para uma apuração real, você deve salvar o histórico (breadcrumbs) no Firebase
+            alert("Iniciando processamento de penalidades... Verifique o console.");
+            // Aqui entraria o loop comparando cada coordenada do histórico com L.GeometryUtil.contains(layer, latlng)
+        }
+    </script>
+</body>
+</html>
