@@ -8,7 +8,7 @@
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; background: #1a202c; overflow: hidden; font-family: sans-serif; }
-        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
+        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 -15px; gap: 10px; z-index: 9999; position: relative; padding-left: 15px; }
         #map { height: calc(100vh - 60px); width: 100%; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
         button:hover { background: #718096; }
@@ -51,31 +51,38 @@
         let map, drawnItems;
 
         window.onload = function() {
-            // Inicializa o mapa
-            map = L.map('map').setView([-12.26, -38.96], 13);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            // 1. Definir as camadas
+            const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+            const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+            // 2. Inicializar o mapa (Versão que você confirmou que funciona)
+            map = L.map('map', {
+                center: [-12.26, -38.96],
+                zoom: 13,
+                layers: [ruas] // Começa com ruas
+            });
+
+            // 3. Adicionar o seletor de mapa no canto superior direito (Maneira oficial do Leaflet)
+            const baseMaps = {
+                "Mapa": ruas,
+                "Satélite": satelite
+            };
+            L.control.layers(baseMaps).addTo(map);
 
             drawnItems = new L.FeatureGroup().addTo(map);
 
-            // Adiciona ferramentas de desenho
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
                 draw: {
-                    polyline: true,
-                    polygon: true,
-                    circle: true,
-                    rectangle: false,
-                    marker: false,
-                    circlemarker: false
+                    polyline: true, polygon: true, circle: true,
+                    rectangle: false, marker: false, circlemarker: false
                 }
             });
             map.addControl(drawControl);
 
-            // Captura criação de desenhos
             map.on(L.Draw.Event.CREATED, (e) => {
                 const layer = e.layer;
                 layer.feature = layer.feature || { type: "Feature", properties: {} };
-
                 if (e.layerType === 'polygon') {
                     const v = prompt("Velocidade Radar (KM/H):", "60");
                     layer.feature.properties.velocidade = parseInt(v) || 60;
@@ -91,12 +98,15 @@
             rastrearCarros();
         };
 
+        // Funções de apoio
         window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
             if(!q) return;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+                const data = await res.json();
+                if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+            } catch(e) { console.error(e); }
         };
 
         window.salvar = function() {
@@ -112,7 +122,7 @@
                 }
                 data.features.push(gj);
             });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("✅ Trajeto e Penalidades salvos!"));
+            db.ref('configuracoes/percurso').set(data).then(() => alert("✅ Salvo!"));
         };
 
         function carregarTrajeto() {
@@ -144,35 +154,29 @@
         }
 
         window.apurar = async function() {
-            if(!confirm("Iniciar cálculo de penalidades?")) return;
+            if(!confirm("Iniciar cálculo?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
-
-            if(!config || !rastros) return alert("Erro: Sem percurso ou rastros.");
+            if(!config || !rastros) return alert("Sem dados.");
 
             for(let id in comps) {
-                let penalidades = 0;
+                let pen = 0;
                 const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
                 if(rastroArr.length === 0) continue;
 
                 config.features.forEach(feat => {
-                    // Radar (Polígono)
                     if(feat.geometry.type === 'Polygon') {
-                        const excesso = rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
-                        if(excesso) penalidades += 10000;
-                    } 
-                    // Waypoint (Círculo)
-                    else if(feat.properties && feat.properties.type === 'circle') {
+                        if(rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60))) pen += 10000;
+                    } else if(feat.properties && feat.properties.type === 'circle') {
                         const centro = feat.geometry.coordinates;
-                        const raioKm = feat.properties.radius / 1000;
-                        const passou = rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
-                        if(!passou) penalidades += 20000;
+                        const raio = feat.properties.radius / 1000;
+                        if(!rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raio)) pen += 20000;
                     }
                 });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidades });
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - pen });
             }
-            alert("✅ Apuração finalizada!");
+            alert("✅ Finalizado!");
         };
 
         window.resetar = function() {
