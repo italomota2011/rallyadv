@@ -6,23 +6,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
         #map { flex-grow: 1; width: 100%; }
         .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1000; }
-        /* Ícone do carro corrigido */
-        .marker-label { 
-            background: #e67e22; 
-            border: 2px solid white; 
-            border-radius: 50%; 
-            color: white; 
-            font-weight: bold; 
-            text-align: center; 
-            line-height: 30px; 
-            width: 30px; 
-            height: 30px; 
-            font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
-        }
+        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
         button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
     </style>
 </head>
@@ -32,7 +19,7 @@
         <button onclick="searchCity()">Buscar</button>
         <button onclick="toggleMap()">Satélite</button>
         <button onclick="saveRoute()" style="background:#27ae60; color:white;">Salvar Trajeto</button>
-        <button onclick="runApuracao()" style="background:#27ae60; color:white;">Apuração</button>
+        <button onclick="runApuracao()" style="background:#e67e22; color:white;">Rodar Apuração</button>
         <button onclick="location.href='resultados.html'">Ranking</button>
         <button onclick="location.href='rastro.html'">Rastro</button>
         <button onclick="resetSystem()" style="background:#c0392b; color:white;">Reset (261291)</button>
@@ -81,12 +68,7 @@
                     carMarkers[id].setLatLng([p.lat, p.lng]);
                 } else {
                     carMarkers[id] = L.marker([p.lat, p.lng], {
-                        icon: L.divIcon({
-                            className:'marker-label', 
-                            html: id,
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15]
-                        })
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] })
                     }).addTo(map);
                 }
             });
@@ -94,7 +76,7 @@
 
         map.on(L.Draw.Event.CREATED, e => {
             const layer = e.layer;
-            if(e.layerType === 'polygon') layer.feature = { properties: { velocidade: prompt("Limite Velocidade:") }};
+            if(e.layerType === 'polygon') layer.feature = { properties: { velocidade: prompt("Limite Velocidade (KM/H):", "60") }};
             if(e.layerType === 'circle') layer.feature = { properties: { type: 'circle', radius: layer.getRadius() }};
             drawnItems.addLayer(layer);
         });
@@ -114,37 +96,45 @@
                 const layer = Object.values(drawnItems._layers)[i];
                 if(layer instanceof L.Circle) { f.properties.type = 'circle'; f.properties.radius = layer.getRadius(); }
             });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Salvo!"));
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso Salvo!"));
         }
 
         async function runApuracao() {
-            if(!confirm("Iniciar apuração final?")) return;
+            if(!confirm("Deseja processar a pontuação de todos os competidores agora?")) return;
+            
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
 
+            if(!config || !rastros) return alert("Dados insuficientes para apuração.");
+
             for(let id in comps) {
                 let perdidos = 0;
-                const rastro = rastros[id];
-                if(!rastro) continue;
+                if(!rastros[id]) continue;
+
+                // Ordenação cronológica para garantir análise correta
+                const rastroOrdenado = Object.values(rastros[id]).sort((a, b) => a.ts - b.ts);
 
                 config.features.forEach(feat => {
                     let violou = false;
-                    for(let k in rastro) {
-                        const pt = turf.point([rastro[k].lng, rastro[k].lat]);
+                    rastroOrdenado.forEach(ponto => {
+                        const pt = turf.point([ponto.lng, ponto.lat]);
                         if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat)) {
-                            if(rastro[k].vel > (feat.properties.velocidade || 60)) violou = true;
+                            const limite = parseFloat(feat.properties.velocidade) || 60;
+                            if(ponto.vel > limite) violou = true;
                         }
-                    }
+                    });
                     if(violou) perdidos += 10000;
                 });
                 db.ref(`competidores/${id}`).update({ pontos: 150000 - perdidos });
             }
-            alert("Feito!");
+            alert("Apuração finalizada!");
         }
 
         function resetSystem() {
-            if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
+            if(prompt("Senha de Segurança:") === "261291") {
+                db.ref('/').remove().then(() => location.reload());
+            }
         }
     </script>
 </body>
