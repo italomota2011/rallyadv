@@ -1,112 +1,52 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Rally - Auditoria de Rastro</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Rastro Rally</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
-        #sidebar { width: 300px; background: #2c3e50; color: white; padding: 15px; overflow-y: auto; }
+        body { margin: 0; display: flex; height: 100vh; }
+        #sidebar { width: 250px; background: #34495e; color: white; padding: 15px; }
         #map { flex-grow: 1; }
-        .info-card { background: #34495e; padding: 10px; margin-bottom: 10px; border-radius: 4px; font-size: 0.9em; }
-        select, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 4px; border: none; }
-        button { background: #e67e22; color: white; cursor: pointer; }
-        .penalidade { color: #e74c3c; font-weight: bold; }
+        select, button { width: 100%; padding: 10px; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>🧐 Auditoria</h2>
-        <label>Selecione o Carro:</label>
-        <select id="selectCarro">
-            <option value="">Escolha...</option>
-        </select>
-        <button onclick="analisarRastro()">Verificar Rastro</button>
-        <hr>
-        <div id="detalhes-auditoria">
-            <p>Selecione um carro para ver o relatório de penalidades.</p>
-        </div>
+        <h3>Auditoria</h3>
+        <select id="carSelect"><option>Carregando...</option></select>
+        <button onclick="drawTrack()">Ver Rastro</button>
+        <div id="stats" style="margin-top: 20px;"></div>
     </div>
     <div id="map"></div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <script>
-        const firebaseConfig = { /* USE SEU CONFIG AQUI */ };
+        const firebaseConfig = { /* SEU CONFIG */ };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const map = L.map('map').setView([-12.266, -38.966], 13);
+        const map = L.map('map').setView([-12.26, -38.96], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let currentTrack = L.polyline([], {color: 'red'}).addTo(map);
 
-        let percursoLayer = L.geoJSON(null, {style: {color: 'gray', dashArray: '5, 5'}}).addTo(map);
-        let rastroLayer = L.polyline([], {color: 'blue'}).addTo(map);
-
-        // Popular Select de Carros
-        db.ref('competidores').once('value', snapshot => {
-            const select = document.getElementById('selectCarro');
-            snapshot.forEach(child => {
-                let opt = document.createElement('option');
-                opt.value = child.key;
-                opt.innerHTML = `Carro ${child.key} - ${child.val().nome}`;
-                select.appendChild(opt);
-            });
+        db.ref('competidores').once('value', snap => {
+            const s = document.getElementById('carSelect');
+            s.innerHTML = "";
+            snap.forEach(c => s.innerHTML += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`);
         });
 
-        async function analisarRastro() {
-            const idCarro = document.getElementById('selectCarro').value;
-            if(!idCarro) return;
-
-            // Limpar Mapa
-            rastroLayer.setLatLngs([]);
-            const detalhes = document.getElementById('detalhes-auditoria');
-            detalhes.innerHTML = "Analisando dados...";
-
-            // 1. Obter Percurso/Radares
-            const configSnap = await db.ref('configuracoes/percurso').once('value');
-            const percursoGeoJSON = configSnap.val();
-            if(percursoGeoJSON) percursoLayer.clearLayers().addData(percursoGeoJSON);
-
-            // 2. Obter Rastro do Carro
-            db.ref('rastros/' + idCarro).once('value', snapshot => {
-                const pontos = [];
-                let infrações = 0;
-                let waypointsVisitados = new Set();
-                
-                snapshot.forEach(p => {
-                    const data = p.val();
-                    const pt = [data.lat, data.lng];
-                    pontos.push(pt);
-
-                    // Lógica de Detecção de Radar (Simplificada)
-                    if(percursoGeoJSON) {
-                        percursoGeoJSON.features.forEach(feature => {
-                            const point = turf.point([data.lng, data.lat]);
-                            
-                            // Verificar Radares (Polígonos)
-                            if(feature.geometry.type === 'Polygon') {
-                                if(turf.booleanPointInPolygon(point, feature)) {
-                                    const velLimite = feature.properties.velocidade || 60;
-                                    if(data.vel > velLimite) infrações++;
-                                }
-                            }
-                        });
-                    }
-                });
-
-                rastroLayer.setLatLngs(pontos);
-                map.fitBounds(rastroLayer.getBounds());
-
-                detalhes.innerHTML = `
-                    <div class="info-card">
-                        <b>Resultado Carro ${idCarro}:</b><br>
-                        Infrações Radar: ${infrações}<br>
-                        <span class="penalidade">Total Perdido: -${infrações * 10000} pts</span>
-                    </div>
-                `;
-            });
+        async function drawTrack() {
+            const id = document.getElementById('carSelect').value;
+            const snap = await db.ref('rastros/' + id).once('value');
+            const pts = [];
+            snap.forEach(p => pts.push([p.val().lat, p.val().lng]));
+            
+            currentTrack.setLatLngs(pts);
+            if(pts.length > 0) map.fitBounds(currentTrack.getBounds());
+            document.getElementById('stats').innerHTML = `Pontos registrados: ${pts.length}`;
         }
     </script>
 </body>
