@@ -1,64 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Competidor - Rally</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Competidor - Rally</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; }
-        input, select, button { width: 100%; padding: 15px; margin: 10px 0; font-size: 1.2rem; }
-        #status { color: green; font-weight: bold; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; text-align: center; background: #ecf0f1; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; font-size: 16px; }
+        button { background: #27ae60; color: white; border: none; font-weight: bold; cursor: pointer; }
+        button:disabled { background: #95a5a6; }
+        #status { margin-top: 15px; font-size: 14px; color: #7f8c8d; }
+        .vel-display { font-size: 48px; font-weight: bold; color: #2c3e50; margin: 20px 0; }
     </style>
 </head>
 <body>
+
+<div class="card">
     <h2>Registro do Piloto</h2>
+    
     <div id="setup">
-        <input type="text" id="nome" placeholder="Seu Nome">
-        <input type="number" id="carroNum" placeholder="Número do Carro (1-100)" min="1" max="100">
+        <input type="text" id="nome" placeholder="Nome Completo">
+        <input type="number" id="carroNum" placeholder="Nº do Carro (1-100)" min="1" max="100">
         <select id="categoria">
-            <option value="4x2">4x2</option>
-            <option value="4x4">4x4</option>
+            <option value="4x2">Categoria 4x2</option>
+            <option value="4x4">Categoria 4x4</option>
         </select>
-        <button onclick="iniciarRastreio()">Iniciar Corrida</button>
+        <button id="btnIniciar" onclick="validarEIniciar()">INICIAR RASTREIO</button>
     </div>
+
     <div id="tracking" style="display:none;">
-        <p id="status">Transmitindo Localização...</p>
-        <h1 id="dispVel">0 km/h</h1>
+        <p>TRANSMITINDO LOCALIZAÇÃO</p>
+        <div class="vel-display"><span id="speed">0</span> <small style="font-size: 18px;">km/h</small></div>
+        <p id="carInfo"></p>
+        <div id="status">📡 Buscando sinal GPS...</div>
     </div>
+</div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <script>
-        const firebaseConfig = { /* SEU CONFIG AQUI */ };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
-        function iniciarRastreio() {
-            const num = document.getElementById('carroNum').value;
-            const nome = document.getElementById('nome').value;
-            const cat = document.getElementById('categoria').value;
-
-            // Verificar se carro já existe
-            db.ref('competidores/' + num).once('value', snap => {
-                if (snap.exists()) return alert("Número já em uso!");
-
-                document.getElementById('setup').style.display = 'none';
-                document.getElementById('tracking').style.display = 'block';
-
-                navigator.geolocation.watchPosition(pos => {
-                    const speed = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(0) : 0;
-                    document.getElementById('dispVel').innerText = speed + " km/h";
-                    
-                    const update = {
-                        nome: nome, numero: num, categoria: cat,
-                        lat: pos.coords.latitude, lng: pos.coords.longitude,
-                        velocidade: speed, pontos: 150000, timestamp: Date.now()
-                    };
-                    db.ref('competidores/' + num).update(update);
-                    // Salvar rastro para a Parte 4
-                    db.ref('rastros/' + num).push({lat: pos.coords.latitude, lng: pos.coords.longitude, vel: speed});
-                }, err => console.error(err), { enableHighAccuracy: true });
-            });
-        }
-    </script>
-</body>
-</html>
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1
