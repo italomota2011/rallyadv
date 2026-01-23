@@ -1,65 +1,92 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Rastro em Tempo Real</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <title>Simulador Rally - Transmissão Ativa</title>
     <style>
-        body, #map { height: 100vh; margin: 0; }
-        #status-box { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
-        .car-icon { background: #e67e22; color: white; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 24px; font-weight: bold; font-size: 10px; }
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; padding: 40px; background: #2c3e50; color: white; }
+        .card { background: white; color: #333; padding: 30px; border-radius: 15px; display: inline-block; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .status-dot { height: 15px; width: 15px; background-color: #27ae60; border-radius: 50%; display: inline-block; margin-right: 10px; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        #log { margin-top: 20px; font-size: 0.9em; color: #666; font-family: monospace; }
     </style>
 </head>
 <body>
-    <div id="status-box">Status: <span id="count">0</span> Carros Online</div>
-    <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <div class="card">
+        <h2><span class="status-dot"></span>Simulador de GPS Ativo</h2>
+        <p>Enviando dados de <strong>100 carros</strong> para o Firebase.</p>
+        <p>Projeto: <code>cronometro-rally</code></p>
+        <div id="log">Iniciando transmissão...</div>
+    </div>
+
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
     <script>
-        // COLOQUE AS MESMAS CREDENCIAIS AQUI
+        // Sua configuração exata do Firebase
         const firebaseConfig = {
-            apiKey: "SUA_API_KEY_AQUI",
-            databaseURL: "SUA_URL_DO_FIREBASE_AQUI",
-            projectId: "SEU_PROJECT_ID"
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
+
+        // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const map = L.map('map').setView([-23.5505, -46.6333], 12);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        // Ponto Central para a simulação (São Paulo por padrão)
+        const latBase = -23.5505;
+        const lngBase = -46.6333;
 
-        const markers = {};
+        function transmitirDados() {
+            const updates = {};
+            const logElement = document.getElementById('log');
+            const timestamp = Date.now();
 
-        // Escuta o nó "prova/carros"
-        db.ref('prova/carros').on('value', snapshot => {
-            const carros = snapshot.val();
-            if (!carros) return;
+            for (let i = 1; i <= 100; i++) {
+                // Gera movimento aleatório ao redor do ponto central
+                const lat = latBase + (Math.random() - 0.5) * 0.05;
+                const lng = lngBase + (Math.random() - 0.5) * 0.05;
+                const vel = Math.floor(Math.random() * 110); // 0 a 110 km/h
 
-            let totalOnline = 0;
-            for (let key in carros) {
-                const c = carros[key];
-                if (c.lat && c.lng) {
-                    totalOnline++;
-                    const pos = [c.lat, c.lng];
+                // Caminho no Banco de Dados
+                const path = 'prova/carros/carro_' + i;
+                
+                updates[path] = {
+                    id: i,
+                    lat: lat,
+                    lng: lng,
+                    velocidade: vel,
+                    ultimaAtualizacao: timestamp
+                };
 
-                    if (markers[key]) {
-                        markers[key].setLatLng(pos);
-                    } else {
-                        markers[key] = L.marker(pos, {
-                            icon: L.divIcon({ 
-                                className: 'car-icon', 
-                                html: c.id, 
-                                iconSize: [24, 24] 
-                            })
-                        }).addTo(map);
-                    }
-                    markers[key].bindPopup(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
-                }
+                // Opcional: Salvar histórico para a apuração final
+                // Remova o comentário abaixo se quiser gerar rastro para a página de resultados
+                // db.ref(path + '/historico').push({ lat, lng, vel, t: timestamp });
             }
-            document.getElementById('count').innerText = totalOnline;
-        });
+
+            // Envia todos os 100 updates de uma vez só (mais eficiente)
+            db.ref().update(updates)
+                .then(() => {
+                    logElement.innerText = "Último envio: " + new Date().toLocaleTimeString();
+                    console.log("100 carros atualizados com sucesso.");
+                })
+                .catch((error) => {
+                    logElement.innerText = "Erro: " + error.message;
+                    console.error("Erro ao enviar:", error);
+                });
+        }
+
+        // Transmitir a cada 3 segundos
+        setInterval(transmitirDados, 3000);
+        
+        // Executa a primeira vez imediatamente
+        transmitirDados();
     </script>
 </body>
 </html>
