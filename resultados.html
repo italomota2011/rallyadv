@@ -5,20 +5,31 @@
     <title>Ranking Rally</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .logo-res { height: 60px; }
+        .cat { background: white; margin-bottom: 25px; border-radius: 8px; padding: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); page-break-inside: avoid; }
+        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; margin-top: 0; }
         table { width: 100%; border-collapse: collapse; }
         td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8f9fa; }
+        th { background: #f8f9fa; color: #2c3e50; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
+        .btn-pdf { background: #27ae60; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>🏆 Classificação Oficial</h1>
-    <div id="results">Carregando...</div>
+    <div class="top-bar">
+        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo-res">
+        <h1 style="margin:0; color:#2c3e50;">🏆 Ranking Oficial</h1>
+        <button class="btn-pdf" onclick="exportarPDF()">Exportar PDF</button>
+    </div>
+
+    <div id="conteudo-pdf">
+        <div id="results">Carregando classificação...</div>
+    </div>
 
     <script>
         const firebaseConfig = {
@@ -30,8 +41,8 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
@@ -41,24 +52,17 @@
             cats.forEach(c => {
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
-                
-                // Ordena por maior pontuação
                 list.sort((a,b) => b.pontos - a.pontos);
 
                 if(list.length > 0) {
                     html += `<div class="cat">
                                 <h2>${c}</h2>
                                 <table>
-                                    <tr>
-                                        <th>Nº</th>
-                                        <th>Piloto</th>
-                                        <th>Penalidades</th>
-                                        <th>Pontuação Final</th>
-                                    </tr>`;
-                    
-                    list.forEach(p => {
+                                    <tr><th>Pos</th><th>Nº</th><th>Piloto</th><th>Penalidades</th><th>Total</th></tr>`;
+                    list.forEach((p, index) => {
                         const penalidade = 150000 - p.pontos;
                         html += `<tr>
+                                    <td>${index + 1}º</td>
                                     <td>${p.id}</td>
                                     <td>${p.nome}</td>
                                     <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
@@ -70,6 +74,30 @@
             });
             document.getElementById('results').innerHTML = html || "Nenhum competidor registrado.";
         });
+
+        function exportarPDF() {
+            const element = document.getElementById('conteudo-pdf');
+            const logo = document.querySelector('.logo-res').cloneNode(true);
+            logo.style.display = "block";
+            logo.style.margin = "0 auto 20px auto";
+            
+            const wrapper = document.createElement('div');
+            wrapper.appendChild(logo);
+            const titulo = document.createElement('h1');
+            titulo.innerText = "RESULTADOS RALLY MASTER";
+            titulo.style.textAlign = "center";
+            wrapper.appendChild(titulo);
+            wrapper.appendChild(element.cloneNode(true));
+
+            const opt = {
+                margin: 10,
+                filename: 'ranking_rally.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(wrapper).save();
+        }
     </script>
 </body>
 </html>
