@@ -1,28 +1,50 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastro Rally - Analítico</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
-        #sidebar { width: 280px; background: #34495e; color: white; padding: 15px; }
-        #map { flex-grow: 1; }
-        button { width: 100%; padding: 12px; background: #e67e22; color: white; border: none; cursor: pointer; }
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a1a1a; }
+        #sidebar { width: 320px; background: #2c3e50; color: white; padding: 25px; box-shadow: 4px 0 15px rgba(0,0,0,0.5); z-index: 1000; display: flex; flex-direction: column; }
+        #map { flex-grow: 1; height: 100%; }
+        h2 { color: #e67e22; margin: 0 0 20px 0; font-size: 1.5rem; text-transform: uppercase; letter-spacing: 1px; }
+        label { font-size: 0.85rem; color: #bdc3c7; margin-bottom: 8px; display: block; }
+        select { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: 1px solid #34495e; background: #ecf0f1; font-size: 14px; font-weight: 500; }
+        button { 
+            width: 100%; padding: 14px; background: #e67e22; color: white; border: none; 
+            border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; transition: all 0.3s ease;
+        }
+        button:hover { background: #d35400; transform: translateY(-1px); }
+        #details { margin-top: 30px; padding: 20px; background: rgba(0,0,0,0.3); border-radius: 8px; border-left: 4px solid #e67e22; }
+        .info-item { margin-bottom: 10px; font-size: 0.9rem; }
+        .info-label { color: #95a5a6; display: block; font-size: 0.75rem; text-transform: uppercase; }
+        .hint { margin-top: 15px; font-size: 0.8rem; color: #f1c40f; font-style: italic; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>Rastro</h2>
-        <select id="carSelect" style="width:100%; padding:10px;"><option>Carregando...</option></select>
-        <button onclick="drawTrack()" style="margin-top:10px;">VER RASTRO</button>
-        <div id="details" style="margin-top:20px;"></div>
+        <h2>Rastro Pro</h2>
+        <label>Competidor Selecionado:</label>
+        <select id="carSelect">
+            <option value="">Buscando pilotos...</option>
+        </select>
+        <button onclick="drawTrack()">GERAR MAPA DE CALOR</button>
+        
+        <div id="details">
+            <div id="infoContent">
+                <p>Selecione um carro e clique no botão acima para carregar a telemetria.</p>
+            </div>
+        </div>
+        <p class="hint"> Dica: Clique na linha vermelha no mapa para ver a velocidade naquele ponto.</p>
     </div>
+    
     <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
         const firebaseConfig = {
@@ -34,29 +56,63 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
+
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
         const map = L.map('map').setView([-12.26, -38.96], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let poly = L.polyline([], {color: 'red'}).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
 
+        let trackLayer = L.featureGroup().addTo(map);
+
+        // Carregar lista de competidores
         db.ref('competidores').on('value', snap => {
-            const s = document.getElementById('carSelect');
-            s.innerHTML = '<option value="">Selecione...</option>';
-            snap.forEach(c => s.innerHTML += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`);
+            const select = document.getElementById('carSelect');
+            const data = snap.val();
+            select.innerHTML = '<option value="">Selecione um piloto...</option>';
+            if (data) {
+                for (let id in data) {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = `Nº ${id} - ${data[id].nome}`;
+                    select.appendChild(opt);
+                }
+            }
         });
 
         async function drawTrack() {
             const id = document.getElementById('carSelect').value;
-            const snap = await db.ref('rastros/' + id).once('value');
-            const data = snap.val();
-            if(!data) return alert("Sem rastro.");
-            const path = Object.values(data).map(p => [p.lat, p.lng]);
-            poly.setLatLngs(path);
-            map.fitBounds(poly.getBounds());
-            document.getElementById('details').innerHTML = `Pontos: ${path.length}`;
-        }
-    </script>
-</body>
-</html>
+            if (!id) return alert("Selecione um piloto primeiro.");
+
+            const infoBox = document.getElementById('infoContent');
+            infoBox.innerHTML = "Processando rastro...";
+            trackLayer.clearLayers();
+
+            try {
+                const snap = await db.ref('rastros/' + id).once('value');
+                const data = snap.val();
+
+                if (!data) {
+                    infoBox.innerHTML = "Nenhum dado de GPS encontrado para este carro.";
+                    return;
+                }
+
+                const points = Object.values(data);
+                const latLngs = points.map(p => [p.lat, p.lng]);
+
+                // Desenha a linha principal
+                const polyline = L.polyline(latLngs, {
+                    color: '#e74c3c',
+                    weight: 6,
+                    opacity: 0.7,
+                    lineJoin: 'round'
+                }).addTo(trackLayer);
+
+                // Adiciona marcadores invisíveis ou pontos de clique para telemetria
+                points.forEach((p, index) => {
+                    const time = p.ts ? new Date(p.ts).toLocaleTimeString('pt-BR') : 'N/A';
+                    const marker = L.circleMarker([p.lat, p.lng], {
+                        radius: 8,
+                        fillColor: "#e6
