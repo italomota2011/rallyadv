@@ -1,30 +1,32 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Competidor</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Competidor - Rally</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; text-align: center; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 40px; border-radius: 20px; width: 85%; max-width: 400px; border: 1px solid #333; }
-        #speed { font-size: 5em; font-weight: bold; color: #4caf50; display: block; }
-        input { width: 100%; padding: 15px; margin: 20px 0; background: #222; border: 1px solid #444; color: white; border-radius: 10px; font-size: 20px; text-align: center; box-sizing: border-box; }
-        button { width: 100%; padding: 15px; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer; }
-        #status { margin-top: 15px; font-size: 14px; color: #ffc107; }
+        body { font-family: sans-serif; text-align: center; padding: 20px; }
+        input, button { width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; }
+        #status { color: green; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2 id="carLabel">RALLY TRACKER</h2>
-        <input type="number" id="carNumber" placeholder="Nº do Carro">
-        <button id="btn" onclick="start()">INICIAR RASTREIO</button>
-        <div id="data" style="display:none;">
-            <span id="speed">0</span><span>km/h</span>
-            <div id="status">Transmitindo via GPS...</div>
-        </div>
+
+    <h2>Registro de Competidor</h2>
+    <div id="setup">
+        <input type="number" id="carNumber" placeholder="Número do Carro (1-100)" min="1" max="100">
+        <input type="text" id="driverName" placeholder="Seu Nome">
+        <button onclick="startTracking()">Iniciar Rastreio</button>
     </div>
+
+    <div id="tracking" style="display:none;">
+        <h3>Rastreio Ativo!</h3>
+        <p>Carro: <span id="displayCar"></span></p>
+        <p id="status">Enviando localização...</p>
+        <p>Velocidade atual: <span id="speed">0</span> km/h</p>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
     <script>
         const firebaseConfig = {
@@ -39,22 +41,46 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        function start() {
-            const id = document.getElementById('carNumber').value;
-            if(!id) return alert("Digite o número!");
+        function startTracking() {
+            const carNum = document.getElementById('carNumber').value;
+            const name = document.getElementById('driverName').value;
 
-            document.getElementById('carNumber').style.display = 'none';
-            document.getElementById('btn').style.display = 'none';
-            document.getElementById('data').style.display = 'block';
-            document.getElementById('carLabel').innerText = "CARRO " + id;
+            if (!carNum || !name) return alert("Preencha tudo!");
 
+            // Verificar se carro já existe
+            db.ref('competidores/' + carNum).once('value', snapshot => {
+                if (snapshot.exists()) {
+                    alert("Este número de carro já está em uso!");
+                } else {
+                    document.getElementById('setup').style.display = 'none';
+                    document.getElementById('tracking').style.display = 'block';
+                    document.getElementById('displayCar').innerText = carNum;
+                    initGps(carNum, name);
+                }
+            });
+        }
+
+        function initGps(carNum, name) {
             navigator.geolocation.watchPosition(pos => {
-                const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
-                document.getElementById('speed').innerText = Math.round(speed);
-                const payload = { lat: pos.coords.latitude, lng: pos.coords.longitude, speed: speed, time: Date.now() };
-                db.ref('live_tracking/' + id).set(payload);
-                db.ref('history/' + id).push(payload);
-            }, e => alert("Erro GPS: " + e.message), { enableHighAccuracy: true });
+                const data = {
+                    carNumber: carNum,
+                    nome: name,
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    speed: (pos.coords.speed || 0) * 3.6, // m/s para km/h
+                    timestamp: Date.now()
+                };
+
+                // Enviar posição atual
+                db.ref('competidores/' + carNum).set(data);
+
+                // Salvar histórico para apuração posterior
+                db.ref('historico/' + carNum).push(data);
+
+                document.getElementById('speed').innerText = data.speed.toFixed(1);
+            }, 
+            err => console.error(err), 
+            { enableHighAccuracy: true });
         }
     </script>
 </body>
