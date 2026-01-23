@@ -1,19 +1,19 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <title>Admin - Rally Master</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
-        /* Garantindo que o mapa ocupe a tela toda */
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        body { display: flex; flex-direction: column; }
-        #map { flex-grow: 1; width: 100%; background: #ddd; } /* Fundo cinza caso falhe o tile */
-        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1001; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
+        body { display: flex; flex-direction: column; font-family: sans-serif; }
+        #map { flex-grow: 1; width: 100%; height: 100%; min-height: 400px; background: #eee; }
+        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 1001; }
         .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; }
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; background: #ecf0f1; }
-        button:hover { opacity: 0.8; }
+        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        input { padding: 8px; border-radius: 4px; border: none; }
     </style>
 </head>
 <body>
@@ -25,7 +25,7 @@
         <button onclick="runApuracao()" style="background:#e67e22; color:white;">Rodar Apuração</button>
         <button onclick="location.href='resultados.html'">Ranking</button>
         <button onclick="location.href='rastro.html'">Rastro</button>
-        <button onclick="resetSystem()" style="background:#c0392b; color:white;">Reset (261291)</button>
+        <button onclick="resetSystem()" style="background:#c0392b; color:white;">Reset</button>
     </div>
     <div id="map"></div>
 
@@ -36,6 +36,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -48,91 +49,90 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        // 1. Inicializa o mapa primeiro
-        const map = L.map('map').setView([-12.26, -38.96], 13);
-        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        // Globais
+        let map, drawnItems, drawControl;
         let isSat = false;
+        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
 
-        const drawnItems = new L.FeatureGroup().addTo(map);
+        // Inicialização Garantida
+        window.onload = function() {
+            map = L.map('map').setView([-12.26, -38.96], 13);
+            streets.addTo(map);
 
-        // 2. Configura os controles de desenho
-        const drawControl = new L.Control.Draw({ 
-            edit: { featureGroup: drawnItems }, 
-            draw: { 
-                marker: false, 
-                circlemarker: false, 
-                rectangle: false, // Removido como pedido
-                polyline: false,
-                circle: true,     // Para Waypoints
-                polygon: true     // Para Radares
-            } 
-        }).addTo(map);
+            drawnItems = new L.FeatureGroup().addTo(map);
 
-        // 3. Carregar dados do Firebase corrigindo a geometria dos círculos
-        db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) {
-                const geoData = snap.val();
-                L.geoJSON(geoData, {
-                    pointToLayer: (feature, latlng) => {
-                        if (feature.properties && feature.properties.type === 'circle') {
-                            return L.circle(latlng, { radius: feature.properties.radius });
-                        }
-                    },
-                    onEachFeature: (feature, layer) => {
-                        drawnItems.addLayer(layer);
-                    }
-                });
-            }
-        });
+            drawControl = new L.Control.Draw({ 
+                edit: { featureGroup: drawnItems }, 
+                draw: { 
+                    marker: false, circlemarker: false, rectangle: false, polyline: false,
+                    circle: true, polygon: true 
+                } 
+            }).addTo(map);
 
-        // 4. Gestão de Carros no Mapa
-        const carMarkers = {};
-        db.ref('posicoes').on('value', snap => {
-            snap.forEach(c => {
-                const id = c.key; const p = c.val();
-                if(carMarkers[id]) { 
-                    carMarkers[id].setLatLng([p.lat, p.lng]); 
-                } else { 
-                    carMarkers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] }) 
-                    }).addTo(map); 
+            loadSavedRoute();
+            watchCars();
+
+            map.on(L.Draw.Event.CREATED, (e) => {
+                const layer = e.layer;
+                if(e.layerType === 'polygon') {
+                    const v = prompt("Velocidade Máxima (KM/H):", "60");
+                    layer.feature = { type: 'Feature', properties: { velocidade: parseInt(v) || 60 } };
+                }
+                if(e.layerType === 'circle') {
+                    layer.feature = { type: 'Feature', properties: { type: 'circle', radius: layer.getRadius() } };
+                }
+                drawnItems.addLayer(layer);
+            });
+        };
+
+        function loadSavedRoute() {
+            db.ref('configuracoes/percurso').once('value', snap => {
+                if(snap.exists()) {
+                    L.geoJSON(snap.val(), {
+                        pointToLayer: (feat, latlng) => {
+                            if (feat.properties && feat.properties.type === 'circle') {
+                                return L.circle(latlng, { radius: feat.properties.radius });
+                            }
+                        },
+                        onEachFeature: (feat, layer) => { drawnItems.addLayer(layer); }
+                    });
                 }
             });
-        });
-
-        // 5. Eventos de Criação
-        map.on(L.Draw.Event.CREATED, e => {
-            const layer = e.layer;
-            if(e.layerType === 'polygon') {
-                const vel = prompt("Limite de Velocidade para este Radar (KM/H):", "60");
-                layer.feature = layer.feature || {type: 'Feature', properties: {}};
-                layer.feature.properties.velocidade = parseInt(vel);
-            }
-            if(e.layerType === 'circle') {
-                layer.feature = layer.feature || {type: 'Feature', properties: {}};
-                layer.feature.properties.type = 'circle';
-                layer.feature.properties.radius = layer.getRadius();
-            }
-            drawnItems.addLayer(layer);
-        });
-
-        // Funções de Menu
-        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
-
-        async function searchCity() {
-            const q = document.getElementById('cityInput').value;
-            if(!q) return;
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
-                const data = await res.json();
-                if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
-            } catch(e) { console.error("Erro na busca"); }
         }
 
-        function saveRoute() {
+        const carMarkers = {};
+        function watchCars() {
+            db.ref('posicoes').on('value', snap => {
+                snap.forEach(c => {
+                    const id = c.key; const p = c.val();
+                    if(carMarkers[id]) { carMarkers[id].setLatLng([p.lat, p.lng]); } 
+                    else { 
+                        carMarkers[id] = L.marker([p.lat, p.lng], { 
+                            icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] }) 
+                        }).addTo(map); 
+                    }
+                });
+            });
+        }
+
+        // Funções de Botão (Escopo Global)
+        window.toggleMap = function() {
+            if(isSat) { map.removeLayer(sat); streets.addTo(map); } 
+            else { map.removeLayer(streets); sat.addTo(map); }
+            isSat = !isSat;
+        };
+
+        window.searchCity = async function() {
+            const q = document.getElementById('cityInput').value;
+            if(!q) return;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
+        };
+
+        window.saveRoute = function() {
             const data = drawnItems.toGeoJSON();
-            // Injetar manualmente propriedades de círculo que o GeoJSON padrão ignora
             let i = 0;
             drawnItems.eachLayer(layer => {
                 if(layer instanceof L.Circle) {
@@ -141,56 +141,39 @@
                 }
                 i++;
             });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Trajeto Salvo!"));
-        }
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Salvo!"));
+        };
 
-        async function runApuracao() {
-            if(!confirm("Deseja processar as penalidades agora?")) return;
+        window.runApuracao = async function() {
+            if(!confirm("Iniciar apuração?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
 
-            if(!config || !rastros) return alert("Dados insuficientes para apuração.");
-
             for(let id in comps) {
-                let penalidadeTotal = 0;
-                const rastroData = Object.values(rastros[id] || {});
-                if(rastroData.length === 0) continue;
-
-                const rastroPts = rastroData.map(p => turf.point([p.lng, p.lat], { vel: p.vel }));
+                let penalidade = 0;
+                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], { vel: p.vel }));
+                if(rastroArr.length === 0) continue;
 
                 config.features.forEach(feat => {
                     if(feat.geometry.type === 'Polygon') {
-                        // Radar
-                        let excesso = false;
-                        rastroPts.forEach(pt => {
-                            if(turf.booleanPointInPolygon(pt, feat)) {
-                                if(pt.properties.vel > (feat.properties.velocidade || 60)) excesso = true;
-                            }
-                        });
-                        if(excesso) penalidadeTotal += 10000;
-                    } 
-                    else if(feat.properties.type === 'circle') {
-                        // Waypoint
-                        let passou = false;
+                        let excesso = rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
+                        if(excesso) penalidade += 10000;
+                    } else if(feat.properties.type === 'circle') {
                         const centro = feat.geometry.coordinates;
                         const raioKm = feat.properties.radius / 1000;
-                        rastroPts.forEach(pt => {
-                            if(turf.distance(pt, turf.point(centro)) <= raioKm) passou = true;
-                        });
-                        if(!passou) penalidadeTotal += 20000;
+                        let passou = rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
+                        if(!passou) penalidade += 20000;
                     }
                 });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidade });
             }
-            alert("Apuração finalizada!");
-        }
+            alert("Concluído!");
+        };
 
-        function resetSystem() { 
-            if(prompt("Senha de segurança:") === "261291") {
-                db.ref('/').remove().then(() => location.reload());
-            }
-        }
+        window.resetSystem = function() {
+            if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
+        };
     </script>
 </body>
 </html>
