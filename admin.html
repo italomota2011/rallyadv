@@ -57,9 +57,8 @@
             draw: { marker: true, circlemarker: false, circle: true, polygon: true, polyline: true } 
         }).addTo(map);
 
-        // Carregar percurso com verificação de segurança
         db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) {
+            if(snap.exists() && snap.val().features) {
                 L.geoJSON(snap.val(), { 
                     pointToLayer: (f, l) => {
                         if(f.properties && f.properties.type === 'circle') return L.circle(l, {radius: f.properties.radius});
@@ -76,11 +75,10 @@
         map.on(L.Draw.Event.CREATED, e => {
             const layer = e.layer;
             const type = e.layerType;
-            
             layer.feature = layer.feature || {type: "Feature", properties: {}};
 
             if(type === 'polygon' || type === 'circle') {
-                const vel = prompt("Limite de Velocidade para esta zona (km/h):", "60");
+                const vel = prompt("Limite de Velocidade (km/h):", "60");
                 layer.feature.properties.velocidade = parseInt(vel) || 0;
                 if(type === 'circle') {
                     layer.feature.properties.type = 'circle';
@@ -101,79 +99,4 @@
 
         function saveRoute() {
             const data = drawnItems.toGeoJSON();
-            data.features.forEach((f, i) => {
-                const layer = Object.values(drawnItems._layers)[i];
-                if(layer instanceof L.Circle) {
-                    f.properties.type = 'circle';
-                    f.properties.radius = layer.getRadius();
-                }
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso salvo!"));
-        }
-
-        async function runApuracao() {
-            if(!confirm("Iniciar apuração?")) return;
-            
-            try {
-                const configSnap = await db.ref('configuracoes/percurso').once('value');
-                const rastrosSnap = await db.ref('rastros').once('value');
-                const compsSnap = await db.ref('competidores').once('value');
-
-                if(!configSnap.exists() || !rastrosSnap.exists()) return alert("Dados insuficientes.");
-
-                const config = configSnap.val();
-                const rastros = rastrosSnap.val();
-                const comps = compsSnap.val();
-
-                for(let id in comps) {
-                    let penalidadeTotal = 0;
-                    const rastro = rastros[id];
-                    if(!rastro) continue;
-
-                    const rastroArray = Object.values(rastro);
-
-                    // Filtrar apenas áreas que possuem velocidade definida
-                    const zonasRadar = config.features.filter(f => f.properties && f.properties.velocidade > 0);
-
-                    zonasRadar.forEach(feat => {
-                        let violou = false;
-                        const limite = parseInt(feat.properties.velocidade);
-
-                        for(let p of rastroArray) {
-                            const pt = turf.point([p.lng, p.lat]);
-                            let inside = false;
-
-                            if(feat.geometry.type === 'Polygon') {
-                                inside = turf.booleanPointInPolygon(pt, feat);
-                            } else if(feat.properties.type === 'circle') {
-                                const center = turf.point(feat.geometry.coordinates);
-                                const distance = turf.distance(pt, center, {units: 'meters'});
-                                if(distance <= (feat.properties.radius || 0)) inside = true;
-                            }
-
-                            if(inside && parseFloat(p.vel) > limite) {
-                                violou = true;
-                                break; // Para de checar este rastro para esta zona
-                            }
-                        }
-
-                        if(violou) penalidadeTotal += 10000;
-                    });
-
-                    await db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
-                }
-                alert("Apuração concluída!");
-            } catch (err) {
-                console.error("Erro detalhado:", err);
-                alert("Erro na apuração. Veja o console.");
-            }
-        }
-
-        function resetSystem() {
-            if(prompt("Digite a senha de admin:") === "261291") {
-                db.ref('/').remove().then(() => location.reload());
-            }
-        }
-    </script>
-</body>
-</html>
+            data
