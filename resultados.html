@@ -7,45 +7,45 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .cat-card { background: white; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); padding: 15px; }
-        h1 { text-align: center; color: #2c3e50; }
-        h2 { border-bottom: 2px solid #e67e22; color: #e67e22; padding-bottom: 5px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; background: #eee; padding: 10px; }
-        td { padding: 10px; border-bottom: 1px solid #eee; }
-        .pts { font-weight: bold; color: #27ae60; }
+        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
     </style>
 </head>
 <body>
-    <h1>🏆 Classificação Oficial</h1>
-    <div id="results">Carregando...</div>
+    <h1>🏆 Classificação</h1>
+    <div id="results"></div>
 
     <script>
-        const firebaseConfig = { /* SEU CONFIG */ };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
 
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            if(!data) return document.getElementById('results').innerHTML = "Nenhum dado encontrado.";
-            
-            const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
             let html = "";
-
+            const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+            
             cats.forEach(c => {
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
                 list.sort((a,b) => b.pontos - a.pontos);
-
                 if(list.length > 0) {
-                    html += `<div class="cat-card"><h2>${c}</h2><table><tr><th>Pos</th><th>Nº</th><th>Nome</th><th>Pontos</th></tr>`;
-                    list.forEach((p, i) => {
-                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="pts">${p.pontos}</td></tr>`;
-                    });
+                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>Nº</th><th>Nome</th><th>Pontos</th></tr>`;
+                    list.forEach(p => html += `<tr><td>${p.id}</td><td>${p.nome}</td><td><b>${p.pontos}</b></td></tr>`);
                     html += `</table></div>`;
                 }
             });
-            document.getElementById('results').innerHTML = html;
+            document.getElementById('results').innerHTML = html || "Nenhum dado.";
         });
     </script>
 </body>
