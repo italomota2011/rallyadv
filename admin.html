@@ -1,66 +1,168 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Painel Admin - Rally Tracker</title>
+    <meta charset="UTF-8">
+    <title>Painel Rally Admin - Controle Total</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <style>
-        #map { height: 600px; width: 100%; }
-        .controls { padding: 10px; background: #f4f4f4; display: flex; gap: 10px; flex-wrap: wrap; }
+        body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #map { flex-grow: 1; }
+        .controls { padding: 15px; background: #222; color: white; display: flex; gap: 10px; align-items: center; z-index: 1000; flex-wrap: wrap; }
+        button { cursor: pointer; padding: 8px 15px; border: none; border-radius: 4px; font-weight: bold; }
+        .btn-apurar { background: #ffcc00; }
+        .btn-reset { background: #ff4444; color: white; }
+        .info-box { position: absolute; bottom: 20px; left: 20px; background: white; padding: 10px; z-index: 1000; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <input type="text" id="citySearch" placeholder="Buscar cidade...">
-        <button onclick="setRouteMode()">Definir Rota</button>
-        <button onclick="setRadarMode()">Criar Radar</button>
-        <button onclick="setWaypointMode()">Criar Waypoint</button>
-        <button onclick="processarProva()" style="background: #ffcc00;">Finalizar e Apurar</button>
-        <button onclick="resetarProva()" style="background: #ff4444; color: white;">Reiniciar Tudo</button>
-    </div>
-    <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<div class="controls">
+    <input type="text" id="citySearch" placeholder="Buscar cidade (Enter)" style="padding: 8px;">
+    <button onclick="buscarCidade()">Buscar</button>
+    <div style="border-left: 1px solid #555; height: 30px; margin: 0 10px;"></div>
+    <span>Limite Radar (km/h):</span>
+    <input type="number" id="velLimite" value="60" style="width: 50px; padding: 5px;">
+    <button class="btn-apurar" id="btnProcessar">FINALIZAR E APURAR PROVA</button>
+    <button class="btn-reset" id="btnReset">REINICIAR TUDO</button>
+</div>
 
-        const firebaseConfig = { /* SEU CONFIG AQUI */ };
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+<div id="map"></div>
 
-        // Inicializar Mapa
-        const map = L.map('map').setView([-23.55, -46.63], 13);
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 
-        L.control.layers({"Mapa": osm, "Satélite": satellite}).addTo(map);
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        let markers = {};
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
 
-        // Rastreio em Tempo Real
-        onValue(ref(db, 'competidores'), (snapshot) => {
-            const data = snapshot.val();
-            for (let id in data) {
-                const c = data[id];
-                if (markers[id]) {
-                    markers[id].setLatLng([c.lat, c.lng]);
-                } else {
-                    markers[id] = L.marker([c.lat, c.lng], {
-                        icon: L.divIcon({html: `<b>${id}</b>`, className: 'car-icon'})
-                    }).addTo(map).bindPopup(`Carro: ${id}<br>Vel: ${c.vel} km/h<br>Piloto: ${c.nome}`);
-                }
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // --- CONFIGURAÇÃO DO MAPA ---
+    const map = L.map('map').setView([-23.55, -46.63], 13);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    
+    L.control.layers({"Mapa": osm, "Satélite": satellite}).addTo(map);
+
+    // --- FERRAMENTAS DE DESENHO (Radares e Waypoints) ---
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: { polygon: false, circle: true, rectangle: true, polyline: true, marker: true }
+    }).addTo(map);
+
+    map.on(L.Draw.Event.CREATED, (e) => {
+        const type = e.layerType;
+        const layer = e.layer;
+        const id = Date.now();
+        
+        if (type === 'rectangle') {
+            const vel = document.getElementById('velLimite').value;
+            set(ref(db, `config/radares/${id}`), {
+                bounds: layer.getBounds(),
+                limite: parseInt(vel)
+            });
+        } else if (type === 'marker' || type === 'circle') {
+            set(ref(db, `config/waypoints/${id}`), {
+                lat: layer.getLatLng().lat,
+                lng: layer.getLatLng().lng,
+                raio: 30 // 30 metros de tolerância
+            });
+        }
+        drawnItems.addLayer(layer);
+    });
+
+    // --- RASTREAMENTO EM TEMPO REAL ---
+    let carMarkers = {};
+    onValue(ref(db, 'competidores'), (snapshot) => {
+        const data = snapshot.val();
+        for (let id in data) {
+            const c = data[id];
+            const pos = [c.lat, c.lng];
+            if (carMarkers[id]) {
+                carMarkers[id].setLatLng(pos).setPopupContent(`<b>Carro ${id}</b><br>Piloto: ${c.nome}<br>Vel: ${c.vel} km/h`);
+            } else {
+                carMarkers[id] = L.marker(pos, {
+                    icon: L.divIcon({
+                        className: 'custom-div-icon',
+                        html: `<div style="background:red; color:white; border-radius:50%; width:25px; height:25px; display:flex; align-items:center; justify-content:center; border:2px solid black;">${id}</div>`,
+                        iconSize: [25, 25]
+                    })
+                }).addTo(map).bindPopup(`Carro ${id}`);
             }
-        });
+        }
+    });
 
-        // Lógica de Apuração (Simplificada)
-        window.processarProva = async () => {
-            alert("Iniciando cruzamento de dados de GPS com áreas de radar e waypoints...");
-            // Aqui entraria o loop comparando historico/ com as coordenadas das áreas criadas
-        };
+    // --- BUSCA DE CIDADE ---
+    window.buscarCidade = async () => {
+        const query = document.getElementById('citySearch').value;
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
+        const data = await resp.json();
+        if (data.length > 0) map.setView([data[0].lat, data[0].lon], 12);
+    };
 
-        window.resetarProva = () => {
-            if(confirm("Apagar todos os dados?")) set(ref(db, '/'), { config: {}, competidores: {}, historico: {} });
-        };
-    </script>
+    // --- LÓGICA DE APURAÇÃO ---
+    document.getElementById('btnProcessar').onclick = async () => {
+        if (!confirm("Deseja encerrar a prova e calcular as penalidades?")) return;
+        
+        const snap = await get(ref(db));
+        const data = snap.val();
+        if (!data.historico || !data.competidores) return alert("Sem dados suficientes.");
+
+        const radares = data.config?.radares ? Object.values(data.config.radares) : [];
+        const waypoints = data.config?.waypoints ? Object.values(data.config.waypoints) : [];
+
+        for (let carroId in data.competidores) {
+            let penalidades = 0;
+            const rastro = Object.values(data.historico[carroId]);
+
+            // 1. Checar Velocidade nos Radares
+            radares.forEach(radar => {
+                const infracao = rastro.some(p => 
+                    p.lat <= radar.bounds._northEast.lat && p.lat >= radar.bounds._southWest.lat &&
+                    p.lng <= radar.bounds._northEast.lng && p.lng >= radar.bounds._southWest.lng &&
+                    p.vel > radar.limite
+                );
+                if (infracao) penalidades += 1000;
+            });
+
+            // 2. Checar se passou nos Waypoints
+            waypoints.forEach(wp => {
+                const passou = rastro.some(p => calcularDistancia(p, wp) < wp.raio);
+                if (!passou) penalidades += 1000;
+            });
+
+            const pontosFinais = 150000 - penalidades;
+            update(ref(db, `competidores/${carroId}`), { pontos: pontosFinais });
+        }
+        alert("Apuração finalizada!");
+    };
+
+    function calcularDistancia(p1, p2) {
+        const R = 6371e3;
+        const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+        const dLon = (p2.lng - p1.lng) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+    }
+
+    document.getElementById('btnReset').onclick = () => {
+        if (confirm("ISSO APAGARÁ TUDO. Tem certeza?")) {
+            remove(ref(db, '/')).then(() => location.reload());
+        }
+    };
+</script>
 </body>
 </html>
