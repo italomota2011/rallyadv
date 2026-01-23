@@ -3,19 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rally - Tracker</title>
+    <title>Rally - Competidor</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 90%; max-width: 400px; }
-        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #2c3e50; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h2 { color: #e67e22; text-align: center; margin-top: 0; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; color: #bdc3c7; }
+        input, select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 16px; box-sizing: border-box; }
+        input, select { background: #34495e; color: white; border: 1px solid #455a64; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
         button:hover { background: #d35400; }
-        .tracking-on { color: #2ecc71; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .status-box { text-align: center; display: none; }
+        .pulse { width: 15px; height: 15px; background: #2ecc71; border-radius: 50%; display: inline-block; margin-right: 10px; animation: blink 1.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div class="card" id="registro">
-        <h2 style="text-align: center; color: #
+
+<div class="card">
+    <div id="form-registro">
+        <h2>🏆 Registro Rally</h2>
+        <label>Nome do Piloto:</label>
+        <input type="text" id="nome" placeholder="Digite seu nome">
+        
+        <label>Categoria:</label>
+        <select id="categoria">
+            <option value="BAIANO 4x2">BAIANO 4x2</option>
+            <option value="BAIANO 4x4">BAIANO 4x4</option>
+            <option value="INICIANTE 4x2">INICIANTE 4x2</option>
+            <option value="INICIANTE 4x4">INICIANTE 4x4</option>
+            <option value="ANTIGOS">ANTIGOS</option>
+        </select>
+
+        <label>Número do Carro (1-100):</label>
+        <input type="number" id="carro" min="1" max="100" placeholder="Ex: 15">
+        
+        <button id="btnIniciar">INICIAR PROVA</button>
+    </div>
+
+    <div id="status-ativo" class="status-box">
+        <h2 id="exibirCarro">Carro 00</h2>
+        <p><span class="pulse"></span> Transmitindo GPS em tempo real</p>
+        <div style="font-size: 2em; margin: 20px 0;" id="exibirVel">0.0 km/h</div>
+        <p style="color: #bdc3c7;">Não feche esta página durante o percurso.</p>
+    </div>
+</div>
+
+<script>
+    // Configuração do Firebase (SEU BLOCO)
