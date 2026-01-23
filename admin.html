@@ -1,72 +1,122 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin - Controle Rally</title>
+    <title>Admin - Rally Master</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        #map { height: 80vh; width: 100%; }
-        .controles { padding: 10px; background: #eee; display: flex; gap: 10px; flex-wrap: wrap; }
-        .marker-id { background: black; color: white; border-radius: 50%; padding: 5px; border: 2px solid orange; font-weight: bold; }
+        body { margin: 0; font-family: sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        .toolbar { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 10px; border-radius: 8px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
+        .marker-id { background: #e67e22; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; }
+        button { cursor: pointer; padding: 8px; }
+        .btn-danger { background: #ff4757; color: white; border: none; border-radius: 4px; }
+        .btn-success { background: #2ed573; color: white; border: none; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div class="controles">
-        <button onclick="setModo('satelite')">Satélite</button>
-        <button onclick="setModo('ruas')">Ruas</button>
-        <button onclick="salvarConfig()">SALVAR PERCURSO/RADARES</button>
-        <button onclick="window.location.href='resultados.html'">Resultados</button>
-        <button onclick="reiniciarProva()" style="background:red; color:white;">REINICIAR PROVA</button>
+    <div class="toolbar">
+        <input type="text" id="citySearch" placeholder="Buscar cidade...">
+        <button onclick="buscarCidade()">🔍</button>
+        <button onclick="toggleMap()">🗺️ Alternar Mapa</button>
+        <button class="btn-success" onclick="salvarMapa()">💾 Salvar Percurso</button>
+        <button onclick="window.location.href='rastro.html'">🛤️ Rastro</button>
+        <button onclick="window.location.href='resultados.html'">🏆 Resultados</button>
+        <button class="btn-success" onclick="processarApuracao()">🏁 FINALIZAR PROVA</button>
+        <button class="btn-danger" onclick="reiniciarProva()">🧹 Reset</button>
     </div>
     <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-
     <script>
-        // Inicialização do Firebase e Mapas (Omitido por brevidade, use seu config)
+        const firebaseConfig = { /* SUAS_CONFIGURACOES_AQUI */ };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         const map = L.map('map').setView([-12.266, -38.966], 13);
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        let isSat = false;
 
         const drawnItems = new L.FeatureGroup().addTo(map);
         const drawControl = new L.Control.Draw({
             edit: { featureGroup: drawnItems },
-            draw: { polygon: true, polyline: true, circle: true }
+            draw: { circlemarker: false, marker: false }
         }).addTo(map);
 
         const carrosMarkers = {};
 
-        // Escuta posições em tempo real
-        db.ref('posicoes').on('value', snapshot => {
-            snapshot.forEach(child => {
-                const id = child.key;
-                const pos = child.val();
+        // Carregar percurso salvo
+        db.ref('configuracoes/percurso').once('value', snap => {
+            if(snap.exists()) L.geoJSON(snap.val(), {
+                onEachFeature: (f, l) => { 
+                    if(f.properties.radius) {
+                        L.circle(l.getLatLng(), {radius: f.properties.radius}).addTo(drawnItems);
+                    } else {
+                        drawnItems.addLayer(l);
+                    }
+                }
+            });
+        });
+
+        // Rastreio em Tempo Real
+        db.ref('posicoes').on('value', snap => {
+            snap.forEach(child => {
+                const id = child.key; const pos = child.val();
                 if(carrosMarkers[id]) {
                     carrosMarkers[id].setLatLng([pos.lat, pos.lng]);
                 } else {
                     const icon = L.divIcon({ className: 'marker-id', html: id });
                     carrosMarkers[id] = L.marker([pos.lat, pos.lng], {icon}).addTo(map)
-                        .bindPopup(`Carro: ${id}<br>Vel: ${pos.vel.toFixed(1)} km/h`);
+                        .bindPopup(`<b>Piloto Carro ${id}</b><br>Vel: ${pos.vel.toFixed(1)} km/h`);
                 }
             });
         });
 
-        function reiniciarProva() {
-            const senha = prompt("Digite a senha de segurança:");
-            if(senha === "261291") {
-                db.ref('/').remove();
-                location.reload();
-            }
+        map.on(L.Draw.Event.CREATED, (e) => {
+            const layer = e.layer;
+            if(e.layerType === 'polygon') layer.feature = {properties: {velocidade: prompt("Velocidade Máxima do Radar:")}};
+            if(e.layerType === 'circle') layer.feature = {properties: {type: 'circle', radius: layer.getRadius()}};
+            drawnItems.addLayer(layer);
+        });
+
+        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
+
+        async function buscarCidade() {
+            const city = document.getElementById('citySearch').value;
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`);
+            const data = await resp.json();
+            if(data.length > 0) map.setView([data[0].lat, data[0].lon], 13);
         }
-        
-        function salvarConfig() {
+
+        function salvarMapa() {
             const data = drawnItems.toGeoJSON();
+            // Ajuste manual para círculos que o GeoJSON padrão não suporta bem
+            data.features.forEach((f, i) => {
+                const layer = Object.values(drawnItems._layers)[i];
+                if(layer instanceof L.Circle) f.properties.radius = layer.getRadius();
+            });
             db.ref('configuracoes/percurso').set(data);
-            alert("Percurso Travado!");
+            alert("Configurações de prova salvas!");
         }
-    </script>
-</body>
-</html>
+
+        async function processarApuracao() {
+            if(!confirm("Deseja processar as penalidades agora?")) return;
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastros = (await db.ref('rastros').once('value')).val();
+            const competidores = (await db.ref('competidores').once('value')).val();
+
+            for(let id in competidores) {
+                let p_perdidos = 0;
+                const rastro = rastros[id];
+                if(!rastro) continue;
+
+                config.features.forEach(feat => {
+                    let violou = false;
+                    for(let rId in rastro) {
+                        const pt = turf.point([rastro[rId].lng, rastro[rId].lat]);
+                        if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat))
