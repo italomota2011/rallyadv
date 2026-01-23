@@ -1,61 +1,62 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>Ranking Rally</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; padding: 20px; }
-        .tabs { display: flex; gap: 20px; justify-content: center; }
-        .col { flex: 1; background: #262626; padding: 15px; border-radius: 8px; }
+        body { font-family: sans-serif; display: flex; justify-content: space-around; background: #f4f4f4; }
+        .col { width: 45%; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 10px; text-align: center; border-bottom: 1px solid #444; }
-        th { color: #f1c40f; }
-        h2 { text-align: center; color: #f1c40f; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background: #34495e; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
     </style>
 </head>
 <body>
-    <h2>🏆 LIDERANÇA DO RALLY</h2>
-    <div class="tabs">
-        <div class="col">
-            <h3>4x2</h3>
-            <table id="t42">
-                <thead><tr><th>Pos</th><th>Carro</th><th>Nome</th><th>Pontos</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-        <div class="col">
-            <h3>4x4</h3>
-            <table id="t44">
-                <thead><tr><th>Pos</th><th>Carro</th><th>Nome</th><th>Pontos</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<div class="col">
+    <h2>Categoria 4x4</h2>
+    <table id="t4x4">
+        <thead><tr><th>Pos</th><th>Carro</th><th>Piloto</th><th>Pontos</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
 
-    const firebaseConfig = { /* MESMO CONFIG AQUI */ };
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+<div class="col">
+    <h2>Categoria 4x2</h2>
+    <table id="t4x2">
+        <thead><tr><th>Pos</th><th>Carro</th><th>Piloto</th><th>Pontos</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
 
-    onValue(ref(db, 'competidores'), snap => {
-        const dados = snap.val();
-        if(!dados) return;
-        const lista = Object.entries(dados).map(([id, val]) => ({id, ...val}));
-        
-        preencher('4x2', 't42', lista);
-        preencher('4x4', 't44', lista);
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script>
+    const firebaseConfig = { /* MESMA CONFIG */ };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    db.ref('competidores').on('value', snap => {
+        const lista = [];
+        snap.forEach(c => { lista.push(c.val()); });
+
+        // Ordenar Decrescente (Quem tem mais pontos ganha)
+        lista.sort((a, b) => b.pontos - a.pontos);
+
+        render(lista.filter(c => c.categoria === '4x4'), 't4x4');
+        render(lista.filter(c => c.categoria === '4x2'), 't4x2');
     });
 
-    function preencher(cat, tabId, lista) {
-        const tbody = document.querySelector(`#${tabId} tbody`);
-        tbody.innerHTML = "";
-        const filtrada = lista.filter(c => c.categoria === cat).sort((a,b) => b.pontos - a.pontos);
-        filtrada.forEach((c, i) => {
-            tbody.innerHTML += `<tr><td>${i+1}º</td><td>${c.id}</td><td>${c.nome}</td><td>${c.pontos}</td></tr>`;
-        });
+    function render(dados, tableId) {
+        const tbody = document.querySelector(`#${tableId} tbody`);
+        tbody.innerHTML = dados.map((c, i) => `
+            <tr>
+                <td>${i+1}º</td>
+                <td>${c.numero}</td>
+                <td>${c.nome}</td>
+                <td>${c.pontos.toLocaleString()}</td>
+            </tr>
+        `).join('');
     }
 </script>
 </body>
