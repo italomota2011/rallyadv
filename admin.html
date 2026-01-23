@@ -1,122 +1,157 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin - Rally Master</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <title>Painel Admin - Rally</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; align-items: center; z-index: 1001; flex-wrap: wrap; }
+        #map { flex-grow: 1; z-index: 1; }
+        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 25px; }
+        button { padding: 8px 12px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-green { background: #27ae60; color: white; }
+        .btn-red { background: #c0392b; color: white; }
+        input { padding: 8px; border-radius: 4px; border: none; }
+    </style>
+</head>
+<body>
+    <div class="menu">
+        <input type="text" id="cityInput" placeholder="Cidade, UF">
+        <button onclick="searchCity()">🔍 Buscar</button>
+        <button onclick="toggleMap()">🗺️ Satélite/Mapa</button>
+        <button class="btn-green" onclick="saveRoute()">💾 Salvar Desenhos</button>
+        <button onclick="location.href='resultados.html'">🏆 Ranking</button>
+        <button onclick="location.href='rastro.html'">🛤️ Auditoria</button>
+        <button class="btn-green" onclick="runApuracao()">🏁 APURAÇÃO FINAL</button>
+        <button class="btn-red" onclick="resetSystem()">🧹 RESET TOTAL</button>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <style>
-        body { margin: 0; font-family: sans-serif; }
-        #map { height: 100vh; width: 100%; }
-        .toolbar { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 10px; border-radius: 8px; display: flex; gap: 5px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }
-        .marker-id { background: #e67e22; color: white; border-radius: 50%; width: 25px; height: 25px; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid white; }
-        button { cursor: pointer; padding: 8px; }
-        .btn-danger { background: #ff4757; color: white; border: none; border-radius: 4px; }
-        .btn-success { background: #2ed573; color: white; border: none; border-radius: 4px; }
-    </style>
-</head>
-<body>
-    <div class="toolbar">
-        <input type="text" id="citySearch" placeholder="Buscar cidade...">
-        <button onclick="buscarCidade()">🔍</button>
-        <button onclick="toggleMap()">🗺️ Alternar Mapa</button>
-        <button class="btn-success" onclick="salvarMapa()">💾 Salvar Percurso</button>
-        <button onclick="window.location.href='rastro.html'">🛤️ Rastro</button>
-        <button onclick="window.location.href='resultados.html'">🏆 Resultados</button>
-        <button class="btn-success" onclick="processarApuracao()">🏁 FINALIZAR PROVA</button>
-        <button class="btn-danger" onclick="reiniciarProva()">🧹 Reset</button>
-    </div>
-    <div id="map"></div>
 
     <script>
-        const firebaseConfig = { /* SUAS_CONFIGURACOES_AQUI */ };
+        const firebaseConfig = { /* SEU CONFIG AQUI */ };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const map = L.map('map').setView([-12.266, -38.966], 13);
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-        let isSat = false;
+        // Configuração do Mapa
+        const map = L.map('map').setView([-12.26, -38.96], 12);
+        const layers = {
+            streets: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map),
+            sat: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}')
+        };
+        let currentMode = 'streets';
 
         const drawnItems = new L.FeatureGroup().addTo(map);
         const drawControl = new L.Control.Draw({
             edit: { featureGroup: drawnItems },
-            draw: { circlemarker: false, marker: false }
+            draw: { marker: false, circlemarker: false }
         }).addTo(map);
 
-        const carrosMarkers = {};
-
-        // Carregar percurso salvo
+        // Carregar Percurso Salvo
         db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) L.geoJSON(snap.val(), {
-                onEachFeature: (f, l) => { 
-                    if(f.properties.radius) {
-                        L.circle(l.getLatLng(), {radius: f.properties.radius}).addTo(drawnItems);
-                    } else {
-                        drawnItems.addLayer(l);
-                    }
-                }
-            });
+            if(snap.exists()){
+                L.geoJSON(snap.val(), {
+                    pointToLayer: (f, latlng) => {
+                        if(f.properties.type === 'circle') return L.circle(latlng, {radius: f.properties.radius});
+                    },
+                    onEachFeature: (f, l) => drawnItems.addLayer(l)
+                });
+            }
         });
 
-        // Rastreio em Tempo Real
+        // Carros em tempo real
+        const carMarkers = {};
         db.ref('posicoes').on('value', snap => {
             snap.forEach(child => {
-                const id = child.key; const pos = child.val();
-                if(carrosMarkers[id]) {
-                    carrosMarkers[id].setLatLng([pos.lat, pos.lng]);
+                const id = child.key; const p = child.val();
+                if(carMarkers[id]) {
+                    carMarkers[id].setLatLng([p.lat, p.lng]).setPopupContent(`Carro ${id}<br>${p.vel.toFixed(1)} km/h`);
                 } else {
-                    const icon = L.divIcon({ className: 'marker-id', html: id });
-                    carrosMarkers[id] = L.marker([pos.lat, pos.lng], {icon}).addTo(map)
-                        .bindPopup(`<b>Piloto Carro ${id}</b><br>Vel: ${pos.vel.toFixed(1)} km/h`);
+                    const icon = L.divIcon({ className: 'marker-label', html: id, iconSize: [25, 25] });
+                    carMarkers[id] = L.marker([p.lat, p.lng], {icon}).addTo(map).bindPopup(`Carro ${id}`);
                 }
             });
         });
 
-        map.on(L.Draw.Event.CREATED, (e) => {
+        // Funções de Interface
+        function toggleMap() {
+            if(currentMode === 'streets') { map.removeLayer(layers.streets); layers.sat.addTo(map); currentMode = 'sat'; }
+            else { map.removeLayer(layers.sat); layers.streets.addTo(map); currentMode = 'streets'; }
+        }
+
+        async function searchCity() {
+            const q = document.getElementById('cityInput').value;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
+        }
+
+        map.on(L.Draw.Event.CREATED, e => {
             const layer = e.layer;
-            if(e.layerType === 'polygon') layer.feature = {properties: {velocidade: prompt("Velocidade Máxima do Radar:")}};
-            if(e.layerType === 'circle') layer.feature = {properties: {type: 'circle', radius: layer.getRadius()}};
+            if(e.layerType === 'polygon') layer.feature = { properties: { velocidade: prompt("Velocidade Máxima:") } };
+            if(e.layerType === 'circle') layer.feature = { properties: { type: 'circle', radius: layer.getRadius() } };
             drawnItems.addLayer(layer);
         });
 
-        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
-
-        async function buscarCidade() {
-            const city = document.getElementById('citySearch').value;
-            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`);
-            const data = await resp.json();
-            if(data.length > 0) map.setView([data[0].lat, data[0].lon], 13);
-        }
-
-        function salvarMapa() {
+        function saveRoute() {
             const data = drawnItems.toGeoJSON();
-            // Ajuste manual para círculos que o GeoJSON padrão não suporta bem
+            // Inserir propriedades faltantes nos círculos
             data.features.forEach((f, i) => {
                 const layer = Object.values(drawnItems._layers)[i];
-                if(layer instanceof L.Circle) f.properties.radius = layer.getRadius();
+                if(layer instanceof L.Circle) { f.properties.type = 'circle'; f.properties.radius = layer.getRadius(); }
             });
             db.ref('configuracoes/percurso').set(data);
-            alert("Configurações de prova salvas!");
+            alert("Percurso salvo!");
         }
 
-        async function processarApuracao() {
-            if(!confirm("Deseja processar as penalidades agora?")) return;
+        async function runApuracao() {
+            if(!confirm("Deseja calcular as penalidades de todos os carros?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
-            const competidores = (await db.ref('competidores').once('value')).val();
+            const comps = (await db.ref('competidores').once('value')).val();
 
-            for(let id in competidores) {
-                let p_perdidos = 0;
-                const rastro = rastros[id];
-                if(!rastro) continue;
+            for(let id in comps) {
+                let perdidos = 0;
+                const rastroCarro = rastros[id];
+                if(!rastroCarro) continue;
 
                 config.features.forEach(feat => {
-                    let violou = false;
-                    for(let rId in rastro) {
-                        const pt = turf.point([rastro[rId].lng, rastro[rId].lat]);
-                        if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat))
+                    let infracao = false;
+                    for(let k in rastroCarro) {
+                        const r = rastroCarro[k];
+                        const pt = turf.point([r.lng, r.lat]);
+                        
+                        if(feat.geometry.type === 'Polygon') {
+                            if(turf.booleanPointInPolygon(pt, feat) && r.vel > (feat.properties.velocidade || 100)) infracao = true;
+                        } else if(feat.properties.type === 'circle') {
+                            const dist = turf.distance(pt, turf.point(feat.geometry.coordinates), {units: 'meters'});
+                            if(dist <= feat.properties.radius) feat.properties.visited = true;
+                        }
+                    }
+                    if(infracao) perdidos += 10000;
+                });
+                // Penalizar Waypoints não visitados
+                config.features.forEach(feat => {
+                    if(feat.properties.type === 'circle' && !feat.properties.visited) perdidos += 10000;
+                });
+
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - perdidos });
+            }
+            alert("Apuração completa!");
+        }
+
+        function resetSystem() {
+            if(prompt("Senha:") === "261291") {
+                db.ref('/').remove(); location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
