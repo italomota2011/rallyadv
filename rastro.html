@@ -13,7 +13,7 @@
         select { background: #333; color: white; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:hover { background: #d35400; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 14px; }
+        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 14px; min-height: 50px; }
         .back-btn { background: #7f8c8d; margin-top: 10px; }
     </style>
 </head>
@@ -35,7 +35,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -48,26 +47,55 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        // Inicialização do Mapa
         const map = L.map('map').setView([-12.26, -38.96], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
-        // Camada para a linha do rastro definida globalmente
-        let poly = L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.7}).addTo(map);
+        let polyLine = null;
 
-        // Atualiza a lista de competidores no Select
         db.ref('competidores').on('value', snap => {
             const select = document.getElementById('carSelect');
             const data = snap.val();
-            
             let options = '<option value="">Selecione um carro...</option>';
             if (data) {
-                const ids = Object.keys(data).sort((a, b) => a - b);
-                ids.forEach(id => {
+                Object.keys(data).sort((a,b) => a-b).forEach(id => {
                     options += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
                 });
             }
             select.innerHTML = options;
         });
 
-        // Função principal corrigida para desenhar o trajeto
+        async function drawTrack() {
+            const id = document.getElementById('carSelect').value;
+            if(!id) return alert("Selecione um carro!");
+
+            try {
+                const snap = await db.ref('rastros/' + id).once('value');
+                const data = snap.val();
+                
+                if(!data) {
+                    alert("Nenhum dado de GPS para este carro.");
+                    return;
+                }
+
+                // CORREÇÃO: Converter rastro em array de lat/lng para Polyline
+                const pontos = Object.values(data).sort((a, b) => a.ts - b.ts);
+                const coords = pontos.map(p => [p.lat, p.lng]);
+
+                if(polyLine) map.removeLayer(polyLine);
+                
+                polyLine = L.polyline(coords, {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map);
+                map.fitBounds(polyLine.getBounds());
+
+                document.getElementById('details').innerHTML = `
+                    <b>Piloto:</b> Carro ${id}<br>
+                    <b>Pontos GPS:</b> ${pontos.length}<br>
+                    <b>Última Vel:</b> ${pontos[pontos.length-1].vel.toFixed(1)} km/h
+                `;
+            } catch(e) {
+                console.error(e);
+                alert("Erro ao carregar rastro: " + e.message);
+            }
+        }
+    </script>
+</body>
+</html>
