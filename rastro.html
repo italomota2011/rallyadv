@@ -2,119 +2,57 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastreamento em Tempo Real</title>
-    
+    <title>Rastro em Tempo Real</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        body { margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; font-family: sans-serif; }
-        #map { flex-grow: 1; }
-        #overlay {
-            position: absolute; top: 10px; left: 50px; z-index: 1000;
-            background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-        /* Estilo do Ícone Numerado */
-        .car-icon {
-            background-color: #2c3e50;
-            color: white;
-            border: 2px solid white;
-            border-radius: 50%;
-            text-align: center;
-            line-height: 30px;
-            font-weight: bold;
-            font-size: 12px;
-            width: 30px !important;
-            height: 30px !important;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-        }
+        body, #map { height: 100vh; margin: 0; }
+        .car-icon { background: #2c3e50; color: white; border: 2px solid #fff; border-radius: 50%; 
+                    text-align: center; line-height: 25px; font-weight: bold; width: 25px!important; height: 25px!important; }
     </style>
 </head>
 <body>
-
-<div id="overlay">
-    <strong>Status:</strong> <span id="carCount">0</span> Carros Online
-    <button onclick="window.location.href='admin.html'">Painel Admin</button>
-</div>
-
 <div id="map"></div>
-
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    // 1. FIREBASE CONFIG
-    const firebaseConfig = {
-        apiKey: "SUA_API_KEY",
-        authDomain: "SEU_PROJETO.firebaseapp.com",
-        databaseURL: "https://SEU_PROJETO.firebaseio.com",
-        projectId: "SEU_PROJETO",
-    };
+    const firebaseConfig = { apiKey: "SUA_API", databaseURL: "SUA_URL", projectId: "SEU_ID" };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 2. INICIALIZAR MAPA
     const map = L.map('map').setView([-23.5505, -46.6333], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    // Objeto para armazenar os marcadores ativos e não recriá-los do zero toda vez
-    const carMarkers = {};
+    const markers = {};
+    let focado = false;
 
-    // 3. CARREGAR CONFIGURAÇÃO (Percurso, Radares e Waypoints)
-    // Para que o administrador veja o rastro sobre o desenho da prova
-    db.ref('prova/configuracao/desenhos').once('value', snapshot => {
-        if (snapshot.exists()) {
-            L.geoJSON(snapshot.val(), {
-                style: function(feature) {
-                    if (feature.properties.speedLimit) return { color: "red", dashArray: "5, 5" };
-                    return { color: "#3498db" };
-                },
-                pointToLayer: function (feature, latlng) {
-                    if (feature.properties.radius) {
-                        return L.circle(latlng, { radius: feature.properties.radius, color: 'orange' });
-                    }
-                }
-            }).addTo(map);
-        }
+    // Carregar desenhos da prova
+    db.ref('prova/configuracao').once('value', s => {
+        if(s.exists()) L.geoJSON(s.val(), {
+            style: { color: 'blue', weight: 2 },
+            pointToLayer: (f, l) => f.properties.radius ? L.circle(l, {radius: f.properties.radius, color: 'orange'}) : null
+        }).addTo(map);
     });
 
-    // 4. ESCUTAR MUDANÇAS NOS CARROS EM TEMPO REAL
-    db.ref('prova/carros').on('value', snapshot => {
-        const carros = snapshot.val();
-        let count = 0;
-
-        for (let key in carros) {
-            const carro = carros[key];
-            
-            // Só exibe se o carro tiver coordenadas válidas (diferentes de 0)
-            if (carro.lat !== 0 && carro.lng !== 0) {
-                count++;
-                const pos = [carro.lat, carro.lng];
-
-                if (carMarkers[key]) {
-                    // Atualiza posição se o marcador já existir
-                    carMarkers[key].setLatLng(pos);
-                    carMarkers[key].setPopupContent(`
-                        <b>Carro ${carro.id}</b><br>
-                        Velocidade: ${carro.velocidade} km/h<br>
-                        Pontos: ${carro.pontos}
-                    `);
+    // Monitorar carros
+    db.ref('prova/carros').on('value', s => {
+        const data = s.val();
+        for(let id in data) {
+            const c = data[id];
+            if(c.lat && c.lng) {
+                if(!focado) { map.setView([c.lat, c.lng], 14); focado = true; }
+                if(!markers[id]) {
+                    markers[id] = L.marker([c.lat, c.lng], {
+                        icon: L.divIcon({ className: 'car-icon', html: c.id })
+                    }).addTo(map);
                 } else {
-                    // Cria novo marcador com ícone numerado
-                    const customIcon = L.divIcon({
-                        className: 'car-icon',
-                        html: `<span>${carro.id}</span>`
-                    });
-
-                    carMarkers[key] = L.marker(pos, { icon: customIcon })
-                        .addTo(map)
-                        .bindPopup(`Carro ${carro.id}`);
+                    markers[id].setLatLng([c.lat, c.lng]);
                 }
+                markers[id].bindPopup(`Carro ${c.id}<br>Vel: ${c.velocidade}km/h`);
             }
         }
-        document.getElementById('carCount').innerText = count;
     });
-
 </script>
 </body>
 </html>
