@@ -1,66 +1,120 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Rally - Competidor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rally Competidor - GPS</title>
+    
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f0f0; padding: 20px; }
-        .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #speed { font-size: 3em; font-weight: bold; color: #007bff; }
-        input { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box;}
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 90%; max-width: 400px; text-align: center; border: 1px solid #333; }
+        h2 { color: #ffc107; margin-bottom: 5px; }
+        .car-display { font-size: 1.2em; color: #aaa; margin-bottom: 20px; }
+        #speed { font-size: 5em; font-weight: bold; color: #28a745; margin: 10px 0; line-height: 1; }
+        .unit { font-size: 1.2em; color: #777; margin-bottom: 30px; }
+        input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
+        button { width: 100%; padding: 18px; background: #ffc107; color: black; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        #status-box { margin-top: 20px; padding: 10px; border-radius: 8px; font-size: 14px; background: #333; color: #ffc107; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>CARRO <span id="displayCar">--</span></h2>
-    <input type="number" id="carNumber" placeholder="Nº do Carro (1-100)">
-    <button id="btnStart" onclick="startRally()">INICIAR RASTREIO</button>
-    <hr>
-    <div>Velocidade Atual</div>
-    <div id="speed">0</div>
-    <div>km/h</div>
-    <p id="status" style="color: gray;">GPS Inativo</p>
+    <h2>RALLY TRACKER</h2>
+    <div class="car-display" id="carInfo">Aguardando identificação...</div>
+
+    <input type="number" id="carNumber" placeholder="Número do Carro (1-100)" min="1" max="100">
+    <button id="btnStart" onclick="startTracking()">INICIAR PROVA</button>
+
+    <div id="trackingArea" style="display:none;">
+        <div id="speed">0</div>
+        <div class="unit">km/h</div>
+        <div id="status-box">
+            <span id="dot" class="blink">●</span> <span id="statusText">GPS Ativo</span>
+        </div>
+    </div>
 </div>
 
 <script>
-    const firebaseConfig = { /* Sua Configuração */ };
+    // Sua Configuração do Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    function startRally() {
+    function startTracking() {
         const carId = document.getElementById('carNumber').value;
-        if(!carId || carId < 1 || carId > 100) return alert("Insira um número de 1 a 100");
 
-        document.getElementById('displayCar').innerText = carId;
-        document.getElementById('btnStart').disabled = true;
-        document.getElementById('btnStart').style.background = "#ccc";
-        document.getElementById('status').innerText = "Rastreando...";
+        if (!carId || carId < 1 || carId > 100) {
+            alert("Por favor, insira um número de carro válido (1 a 100).");
+            return;
+        }
 
-        if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(pos => {
-                const speedKmH = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
-                document.getElementById('speed').innerText = Math.round(speedKmH);
+        // Interface
+        document.getElementById('carNumber').style.display = 'none';
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('trackingArea').style.display = 'block';
+        document.getElementById('carInfo').innerText = "CARRO Nº " + carId;
 
-                const gpsData = {
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    speed: speedKmH,
-                    time: Date.now()
-                };
+        if ("geolocation" in navigator) {
+            // watchPosition é o comando que mantém o rastreio constante
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    // O navegador retorna velocidade em metros por segundo (m/s)
+                    // Multiplicamos por 3.6 para ter km/h
+                    const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+                    
+                    document.getElementById('speed').innerText = Math.round(speed);
+                    document.getElementById('statusText').innerText = "Transmitindo...";
+                    document.getElementById('status-box').style.color = "#28a745";
 
-                // Envia para o mapa em tempo real
-                db.ref('live_tracking/' + carId).set(gpsData);
-                // Salva no rastro (histórico)
-                db.ref('history/' + carId).push(gpsData);
+                    const gpsData = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        speed: speed,
+                        timestamp: Date.now()
+                    };
 
-            }, err => alert("Erro no GPS: " + err.message), 
-            { enableHighAccuracy: true, maximumAge: 1000 });
+                    // 1. Atualiza posição real para o Admin
+                    db.ref('live_tracking/' + carId).set(gpsData);
+
+                    // 2. Registra histórico para a apuração final
+                    db.ref('history/' + carId).push(gpsData);
+                },
+                (err) => {
+                    let msg = "Erro desconhecido";
+                    if(err.code == 1) msg = "Permissão do GPS negada pelo usuário.";
+                    if(err.code == 2) msg = "Sinal de GPS não encontrado.";
+                    if(err.code == 3) msg = "Tempo esgotado (Timeout).";
+                    
+                    document.getElementById('statusText').innerText = "Erro: GPS Offline";
+                    document.getElementById('status-box').style.color = "#dc3545";
+                    alert(msg);
+                },
+                {
+                    enableHighAccuracy: true, // Força o uso do GPS de alta precisão
+                    maximumAge: 1000,         // Não aceita posições em cache com mais de 1 seg
+                    timeout: 20000            // Aguarda até 20 segundos por sinal
+                }
+            );
+        } else {
+            alert("Seu celular não possui ou não suporta GPS no navegador.");
         }
     }
 </script>
+
 </body>
 </html>
