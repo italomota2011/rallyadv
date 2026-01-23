@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Analisador Final</title>
+    <title>Analisador de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
@@ -12,17 +12,16 @@
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 16px; }
         select { background: #333; color: white; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; line-height: 1.5; }
-        .radar-label { color: #3498db !important; font-weight: bold; font-size: 11px; text-shadow: 1px 1px #000; background: none !important; border: none !important; box-shadow: none !important; }
+        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; }
+        .radar-label { color: #3498db !important; font-weight: bold; background: none !important; border: none !important; box-shadow: none !important; }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <h2>🛰️ Analisador</h2>
-        <label>Competidor:</label>
-        <select id="carSelect"><option value="">A carregar...</option></select>
+        <select id="carSelect"><option value="">A carregar competidores...</option></select>
         <button onclick="drawTrack()">ANALISAR TRAJETO</button>
-        <div id="details">Selecione um carro para ver o rastro e radares.</div>
+        <div id="details">Selecione um carro para iniciar a análise.</div>
         <button style="background:#555; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
     <div id="map"></div>
@@ -35,121 +34,76 @@
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
+            projectId: "cronometro-rally"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
         const map = L.map('map').setView([-12.26, -38.96], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
         let trackLayer = L.layerGroup().addTo(map);
         let routeLayer = L.layerGroup().addTo(map);
-        let percursoOficial = null;
+        let percursoData = null;
 
-        // 1. CARREGAMENTO SEGURO DO PERCURSO
+        // CARREGA RADARES COM TRATAMENTO DE ERRO
         db.ref('configuracoes/percurso').on('value', snap => {
             const data = snap.val();
-            if(!data || !data.features) return;
-            percursoOficial = data;
+            if(!data) return;
+            percursoData = data;
             routeLayer.clearLayers();
-
-            data.features.forEach(feature => {
+            data.features.forEach(f => {
                 try {
-                    // Se for um círculo (propriedade customizada do Leaflet.draw)
-                    if (feature.properties && feature.properties.type === 'circle') {
-                        const coords = feature.geometry.coordinates;
-                        L.circle([coords[1], coords[0]], {
-                            radius: feature.properties.radius,
-                            color: "#3498db",
-                            fillOpacity: 0.1
-                        }).bindTooltip(`${feature.properties.velocidade || 60} km/h`, { 
-                            permanent: true, direction: 'center', className: 'radar-label' 
-                        }).addTo(routeLayer);
-                    } 
-                    // Se for Polígono comum
-                    else {
-                        L.geoJSON(feature, {
-                            style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
-                            onEachFeature: (f, l) => {
-                                if(f.properties && f.properties.velocidade) {
-                                    l.bindTooltip(`${f.properties.velocidade} km/h`, { 
-                                        permanent: true, direction: 'center', className: 'radar-label' 
-                                    });
-                                }
-                            }
-                        }).addTo(routeLayer);
+                    if(f.properties.type === 'circle') {
+                        L.circle([f.geometry.coordinates[1], f.geometry.coordinates[0]], {
+                            radius: f.properties.radius, color: '#3498db', fillOpacity: 0.1
+                        }).bindTooltip(`${f.properties.velocidade}km/h`, {permanent:true, className:'radar-label'}).addTo(routeLayer);
+                    } else {
+                        L.geoJSON(f, { style: {color:'#3498db', fillOpacity:0.1} }).bindTooltip(`${f.properties.velocidade}km/h`, {permanent:true, className:'radar-label'}).addTo(routeLayer);
                     }
-                } catch (e) {
-                    console.error("Erro ao desenhar radar individual:", e);
-                }
+                } catch(e) {}
             });
         });
 
-        // 2. LISTA DE COMPETIDORES
+        // LISTA COMPETIDORES
         db.ref('competidores').on('value', snap => {
-            const select = document.getElementById('carSelect');
-            let html = '<option value="">Selecione um carro...</option>';
-            snap.forEach(child => {
-                html += `<option value="${child.key}">Carro ${child.key} - ${child.val().nome}</option>`;
-            });
-            select.innerHTML = html;
+            let h = '<option value="">Selecione um carro...</option>';
+            snap.forEach(c => { h += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
+            document.getElementById('carSelect').innerHTML = h;
         });
 
-        // 3. ANÁLISE DE TRAJETO E PENALIDADES
         async function drawTrack() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
-
             const snap = await db.ref('rastros/' + id).once('value');
-            if(!snap.exists()) return alert("Sem dados de rastro.");
+            if(!snap.exists()) return alert("Sem rastro.");
 
             trackLayer.clearLayers();
-            const pontos = Object.values(snap.val()).sort((a, b) => a.ts - b.ts);
+            const pontos = Object.values(snap.val()).sort((a,b) => a.ts - b.ts);
             const coords = pontos.map(p => [p.lat, p.lng]);
-
-            // Desenha o caminho
             const poly = L.polyline(coords, {color: '#e67e22', weight: 4}).addTo(trackLayer);
             
             let infracoes = 0;
-            if(percursoOficial && percursoOficial.features) {
-                pontos.forEach(p => {
-                    const pt = turf.point([p.lng, p.lat]);
-                    percursoOficial.features.forEach(feat => {
-                        let dentro = false;
-                        
-                        if (feat.geometry.type === 'Polygon') {
-                            dentro = turf.booleanPointInPolygon(pt, feat);
-                        } else if (feat.properties.type === 'circle') {
-                            const center = [feat.geometry.coordinates[1], feat.geometry.coordinates[0]];
-                            const distance = map.distance([p.lat, p.lng], center);
-                            if (distance <= feat.properties.radius) dentro = true;
-                        }
-
-                        if(dentro) {
-                            const limite = parseFloat(feat.properties.velocidade) || 60;
-                            if(p.vel > limite) {
-                                infracoes++;
-                                L.circleMarker([p.lat, p.lng], {
-                                    radius: 5, fillColor: "red", color: "white", weight: 2, fillOpacity: 1
-                                }).bindPopup(`Excesso: ${p.vel.toFixed(1)} km/h`).addTo(trackLayer);
-                            }
-                        }
-                    });
+            pontos.forEach(p => {
+                const pt = turf.point([p.lng, p.lat]);
+                percursoData.features.forEach(feat => {
+                    let dentro = false;
+                    if(feat.properties.type === 'circle') {
+                        const dist = map.distance([p.lat, p.lng], [feat.geometry.coordinates[1], feat.geometry.coordinates[0]]);
+                        if(dist <= feat.properties.radius) dentro = true;
+                    } else {
+                        dentro = turf.booleanPointInPolygon(pt, feat);
+                    }
+                    if(dentro && p.vel > (parseFloat(feat.properties.velocidade) || 60)) {
+                        infracoes++;
+                        L.circleMarker([p.lat, p.lng], {radius:5, color:'red', fillOpacity:1}).addTo(trackLayer);
+                    }
                 });
-            }
+            });
 
             map.fitBounds(poly.getBounds());
-            document.getElementById('details').innerHTML = `
-                <b>Carro ${id}:</b><br>
-                Pontos de GPS: ${pontos.length}<br>
-                <b style="color:#ff4757">Infrações Detectadas: ${infracoes}</b>
-            `;
+            document.getElementById('details').innerHTML = `<b>Carro ${id}</b><br>Pontos GPS: ${pontos.length}<br><b style="color:red">Infrações: ${infracoes}</b>`;
         }
     </script>
 </body>
