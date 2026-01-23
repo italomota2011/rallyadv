@@ -14,6 +14,8 @@
         th { background: #f8f9fa; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
+        /* Estilo para destacar a posição */
+        .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
     </style>
 </head>
 <body>
@@ -30,46 +32,3 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
-
-        db.ref('competidores').on('value', snap => {
-            const data = snap.val();
-            let html = "";
-            const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-            
-            cats.forEach(c => {
-                let list = [];
-                for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
-                
-                // Ordena por maior pontuação
-                list.sort((a,b) => b.pontos - a.pontos);
-
-                if(list.length > 0) {
-                    html += `<div class="cat">
-                                <h2>${c}</h2>
-                                <table>
-                                    <tr>
-                                        <th>Nº</th>
-                                        <th>Piloto</th>
-                                        <th>Penalidades</th>
-                                        <th>Pontuação Final</th>
-                                    </tr>`;
-                    
-                    list.forEach(p => {
-                        const penalidade = 150000 - p.pontos;
-                        html += `<tr>
-                                    <td>${p.id}</td>
-                                    <td>${p.nome}</td>
-                                    <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
-                                    <td class="total">${p.pontos.toLocaleString('pt-BR')}</td>
-                                </tr>`;
-                    });
-                    html += `</table></div>`;
-                }
-            });
-            document.getElementById('results').innerHTML = html || "Nenhum competidor registrado.";
-        });
-    </script>
-</body>
-</html>
