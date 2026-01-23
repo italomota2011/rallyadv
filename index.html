@@ -1,78 +1,82 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPS Rally - Competidor</title>
+    <title>GPS Rally - Piloto</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; text-align: center; background: #eee; }
-        input, select, button { width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; border-radius: 8px; border: 1px solid #ccc; }
-        button { background: #28a745; color: white; font-weight: bold; border: none; }
-        #status { font-weight: bold; color: #d9534f; }
+        body { font-family: sans-serif; text-align: center; padding: 30px; background: #222; color: white; }
+        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 10px; border: none; font-size: 1.1em; }
+        button { background: #27ae60; color: white; font-weight: bold; }
+        #painel { display: none; margin-top: 20px; border-top: 2px solid #444; padding-top: 20px; }
+        .vel { font-size: 3em; color: #f1c40f; margin: 10px 0; }
     </style>
 </head>
 <body>
-    <h1>Painel do Piloto</h1>
-    <input type="text" id="nome" placeholder="Seu Nome">
-    <input type="number" id="carro" placeholder="Número do Carro (1-100)" min="1" max="100">
-    <select id="categoria">
-        <option value="4x2">Categoria 4x2</option>
-        <option value="4x4">Categoria 4x4</option>
-    </select>
-    <button id="btnConectar">INICIAR RASTREAMENTO</button>
-    <p id="status">Status: Desconectado</p>
-    <h2 id="displayVel">0 km/h</h2>
+    <h1>🏁 RALLY PILOTO</h1>
+    <div id="login">
+        <input type="text" id="nome" placeholder="Seu Nome">
+        <input type="number" id="carro" placeholder="Número do Carro (1-100)">
+        <select id="cat">
+            <option value="4x2">Categoria 4x2</option>
+            <option value="4x4">Categoria 4x4</option>
+        </select>
+        <button onclick="iniciar()">CONECTAR E INICIAR</button>
+    </div>
+
+    <div id="painel">
+        <p>Status: <span style="color: #2ecc71;">RASTREANDO</span></p>
+        <div class="vel" id="v">0 km/h</div>
+        <p>Carro: <span id="nCar"></span></p>
+    </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = { /* SEU CONFIG AQUI */ };
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    document.getElementById('btnConectar').onclick = function() {
-        const num = document.getElementById('carro').value;
+    window.iniciar = () => {
+        const id = document.getElementById('carro').value;
         const nome = document.getElementById('nome').value;
-        const cat = document.getElementById('categoria').value;
+        if(!id || !nome) return alert("Preencha tudo!");
 
-        if(!num || !nome) return alert("Preencha tudo!");
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('painel').style.display = 'block';
+        document.getElementById('nCar').innerText = id;
 
-        this.disabled = true;
-        this.innerText = "RASTREANDO...";
-        this.style.background = "#555";
-
-        navigator.geolocation.watchPosition((pos) => {
-            const velKmh = Math.round((pos.coords.speed || 0) * 3.6);
-            document.getElementById('displayVel').innerText = velKmh + " km/h";
-            document.getElementById('status').innerText = "Status: ONLINE";
-            document.getElementById('status').style.color = "green";
+        navigator.geolocation.watchPosition(p => {
+            const vKmh = Math.round((p.coords.speed || 0) * 3.6);
+            document.getElementById('v').innerText = vKmh + " km/h";
 
             const payload = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                vel: velKmh,
+                lat: p.coords.latitude,
+                lng: p.coords.longitude,
+                vel: vKmh,
                 nome: nome,
-                categoria: cat,
-                pontos: 150000,
-                ultimaAtualizacao: Date.now()
+                categoria: document.getElementById('cat').value,
+                pontos: 150000
             };
 
-            // 1. Localização Atual (para o mapa do admin)
-            update(ref(db, `competidores/${num}`), payload);
-            
-            // 2. Histórico (para apuração final)
-            push(ref(db, `historico/${num}`), {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-                vel: velKmh,
+            update(ref(db, `competidores/${id}`), payload);
+            push(ref(db, `historico/${id}`), {
+                lat: p.coords.latitude,
+                lng: p.coords.longitude,
+                vel: vKmh,
                 t: Date.now()
             });
-
-        }, (err) => alert("Erro no GPS: " + err.message), {
-            enableHighAccuracy: true,
-            maximumAge: 0
-        });
+        }, err => console.error(err), { enableHighAccuracy: true });
     };
 </script>
 </body>
