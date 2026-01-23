@@ -5,35 +5,41 @@
     <title>Admin - Rally Master</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    
     <style>
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-        #map { flex-grow: 1; width: 100%; }
-        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 1000; }
-        /* Ícone do Carro com Número */
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; overflow: hidden; }
+        .menu { background: #2c3e50; color: white; padding: 12px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 2000; box-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+        #map { flex-grow: 1; width: 100%; z-index: 1; }
+        
+        /* Ícone do Carro com Número Centralizado */
         .marker-label { 
             background: #e67e22; border: 2px solid white; border-radius: 50%; 
             color: white; font-weight: bold; text-align: center; 
-            line-height: 30px; width: 30px; height: 30px; font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            line-height: 30px; width: 30px; height: 30px; font-size: 13px;
+            box-shadow: 0 0 8px rgba(0,0,0,0.5);
+            display: block;
         }
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; transition: 0.2s; }
-        button:hover { opacity: 0.8; }
+
+        button { padding: 10px 14px; cursor: pointer; border-radius: 6px; border: none; font-weight: bold; transition: background 0.2s; }
         .btn-green { background: #27ae60; color: white; }
+        .btn-green:hover { background: #219150; }
         .btn-red { background: #c0392b; color: white; }
-        input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
+        input { padding: 10px; border-radius: 6px; border: 1px solid #ccc; outline: none; }
     </style>
 </head>
 <body>
+
     <div class="menu">
-        <input type="text" id="cityInput" placeholder="Cidade, UF...">
+        <input type="text" id="cityInput" placeholder="Buscar cidade/rua...">
         <button onclick="searchCity()">🔍 Buscar</button>
         <button onclick="toggleMap()">🗺️ Satélite</button>
-        <button class="btn-green" onclick="saveRoute()">💾 Salvar Trajeto</button>
-        <button class="btn-green" onclick="runApuracao()">🏁 CALCULAR PENALIDADES</button>
-        <button onclick="location.href='resultados.html'">🏆 Ranking</button>
+        <button class="btn-green" onclick="saveRoute()">💾 Salvar Percurso</button>
+        <button class="btn-green" onclick="runApuracao()">🏁 APURAÇÃO FINAL</button>
+        <button onclick="location.href='resultados.html'">🏆 Resultados</button>
         <button onclick="location.href='rastro.html'">🛤️ Auditoria</button>
-        <button class="btn-red" onclick="resetSystem()">🧹 RESET TOTAL</button>
+        <button class="btn-red" onclick="resetSystem()">🧹 Limpar Banco</button>
     </div>
+
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -43,6 +49,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // CONFIGURAÇÃO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -52,102 +59,5 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
 
-        const map = L.map('map').setView([-12.26, -38.96], 13);
-        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-        let isSat = false;
-
-        const drawnItems = new L.FeatureGroup().addTo(map);
-        
-        // CONFIGURAÇÃO DO DRAW (Removido Retângulo e Marker)
-        const drawControl = new L.Control.Draw({
-            edit: { featureGroup: drawnItems },
-            draw: {
-                rectangle: false,
-                marker: false,
-                circlemarker: false,
-                circle: { shapeOptions: { color: '#3498db' } },
-                polygon: { shapeOptions: { color: '#e74c3c' } }
-            }
-        }).addTo(map);
-
-        db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) L.geoJSON(snap.val(), { 
-                pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
-                onEachFeature: (f, l) => {
-                    if(f.properties.velocidade) l.bindPopup("Radar: " + f.properties.velocidade + " km/h");
-                    drawnItems.addLayer(l);
-                }
-            });
-        });
-
-        const carMarkers = {};
-        db.ref('posicoes').on('value', snap => {
-            snap.forEach(c => {
-                const id = c.key; const p = c.val();
-                if(carMarkers[id]) {
-                    carMarkers[id].setLatLng([p.lat, p.lng]);
-                } else {
-                    const icon = L.divIcon({ className: 'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] });
-                    carMarkers[id] = L.marker([p.lat, p.lng], {icon}).addTo(map);
-                }
-            });
-        });
-
-        map.on(L.Draw.Event.CREATED, e => {
-            const layer = e.layer;
-            if(e.layerType === 'polygon') {
-                const vel = prompt("Radar Detectado! Qual a velocidade MÁXIMA permitida neste polígono? (km/h)");
-                if(!vel) return;
-                layer.feature = { type: "Feature", properties: { velocidade: parseInt(vel) } };
-                layer.bindPopup("Radar: " + vel + " km/h").openPopup();
-            }
-            if(e.layerType === 'circle') {
-                layer.feature = { type: "Feature", properties: { type: 'circle', radius: layer.getRadius() } };
-            }
-            drawnItems.addLayer(layer);
-        });
-
-        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
-
-        async function searchCity() {
-            const q = document.getElementById('cityInput').value;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
-        }
-
-        function saveRoute() {
-            const data = drawnItems.toGeoJSON();
-            data.features.forEach((f, i) => {
-                const layer = Object.values(drawnItems._layers)[i];
-                if(layer instanceof L.Circle) { f.properties.type = 'circle'; f.properties.radius = layer.getRadius(); }
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Trajeto e Radares salvos com sucesso!"));
-        }
-
-        async function runApuracao() {
-            if(!confirm("Deseja processar os rastros e aplicar penalidades agora?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-
-            for(let id in comps) {
-                let perdidos = 0;
-                const rastro = rastros[id];
-                if(!rastro) continue;
-
-                config.features.forEach(feat => {
-                    let violou = false;
-                    for(let k in rastro) {
-                        const pt = turf.point([rastro[k].lng, rastro[k].lat]);
-                        if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat)) {
-                            if(rastro[k].vel > (feat.properties.velocidade || 60)) violou = true;
-                        }
-                    }
-                    if(violou) perdidos += 10000;
-                });
-                db.ref(`competidores/${id}`).
+        const app = firebase.initializeApp(
