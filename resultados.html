@@ -2,57 +2,93 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Oficial</title>
+    <title>Rally - Resultados</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
-        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #333; color: white; }
-        tr:nth-child(even) { background: #fafafa; }
-        .posicao { font-weight: bold; color: #e67e22; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f4f4; padding: 20px; }
+        .container { max-width: 900px; margin: auto; }
+        .categoria-section { background: white; border-radius: 8px; padding: 20px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #2c3e50; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .pontos-final { font-weight: bold; color: #27ae60; }
+        .pontos-perdidos { color: #c0392b; }
     </style>
 </head>
 <body>
-    <h1>Ranking de Competição</h1>
-    <div id="container"></div>
+    <div class="container">
+        <h1>🏆 Ranking Geral</h1>
+        <div id="resultados-container">Carregando resultados...</div>
+    </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script>
-        // Configuração Firebase idêntica...
-        const firebaseConfig = { /* ... */ };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
         firebase.initializeApp(firebaseConfig);
-        
-        firebase.database().ref('competidores').on('value', snap => {
-            const data = snap.val();
-            let categorias = {};
-            
-            for(let id in data) {
-                let c = data[id];
-                c.carro = id;
-                if(!categorias[c.categoria]) categorias[c.categoria] = [];
-                categorias[c.categoria].push(c);
-            }
+        const db = firebase.database();
 
-            let html = "";
-            for(let cat in categorias) {
-                categorias[cat].sort((a,b) => b.pontos - a.pontos);
-                html += `<div class="card"><h2>${cat}</h2><table>
-                    <tr><th>Pos</th><th>Carro</th><th>Piloto</th><th>Pontos</th></tr>`;
-                
-                categorias[cat].forEach((p, i) => {
-                    html += `<tr>
-                        <td class="posicao">${i+1}º</td>
-                        <td>#${p.carro}</td>
-                        <td>${p.nome}</td>
-                        <td>${p.pontos.toLocaleString()}</td>
-                    </tr>`;
+        function carregarResultados() {
+            db.ref('competidores').on('value', snapshot => {
+                const dados = snapshot.val();
+                if (!dados) return;
+
+                const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+                let html = '';
+
+                categorias.forEach(cat => {
+                    let competidoresCat = [];
+                    for (let id in dados) {
+                        if (dados[id].categoria === cat) {
+                            competidoresCat.push({ id, ...dados[id] });
+                        }
+                    }
+
+                    // Ordenar por maior pontuação
+                    competidoresCat.sort((a, b) => b.pontos - a.pontos);
+
+                    if (competidoresCat.length > 0) {
+                        html += `<div class="categoria-section">
+                            <h2>${cat}</h2>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Pos</th>
+                                        <th>Nº</th>
+                                        <th>Piloto</th>
+                                        <th>Perdidos</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                        
+                        competidoresCat.forEach((comp, index) => {
+                            const perdidos = 150000 - comp.pontos;
+                            html += `<tr>
+                                <td>${index + 1}º</td>
+                                <td>${comp.id}</td>
+                                <td>${comp.nome}</td>
+                                <td class="pontos-perdidos">-${perdidos}</td>
+                                <td class="pontos-final">${comp.pontos}</td>
+                            </tr>`;
+                        });
+
+                        html += `</tbody></table></div>`;
+                    }
                 });
-                html += `</table></div>`;
-            }
-            document.getElementById('container').innerHTML = html;
-        });
+                document.getElementById('resultados-container').innerHTML = html;
+            });
+        }
+        carregarResultados();
     </script>
 </body>
 </html>
