@@ -9,7 +9,6 @@
         body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
         #map { flex-grow: 1; width: 100%; }
         .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1000; }
-        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
         button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; transition: 0.2s; }
         button:hover { opacity: 0.8; }
         input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
@@ -58,7 +57,6 @@
             draw: { marker: true, circlemarker: false, circle: true, polygon: true, polyline: true } 
         }).addTo(map);
 
-        // Carregar percurso salvo
         db.ref('configuracoes/percurso').once('value', snap => {
             if(snap.exists()) {
                 L.geoJSON(snap.val(), { 
@@ -81,16 +79,11 @@
             if(type === 'polygon' || type === 'circle') {
                 const vel = prompt("Limite de Velocidade para esta zona (km/h):", "60");
                 layer.feature = layer.feature || {type: "Feature", properties: {}};
-                layer.feature.properties.velocidade = parseInt(vel);
+                layer.feature.properties.velocidade = parseInt(vel) || 0;
                 if(type === 'circle') {
                     layer.feature.properties.type = 'circle';
                     layer.feature.properties.radius = layer.getRadius();
                 }
-            }
-            if(type === 'marker') {
-                const nome = prompt("Nome do Waypoint:");
-                layer.feature = layer.feature || {type: "Feature", properties: {}};
-                layer.feature.properties.name = nome;
             }
             drawnItems.addLayer(layer);
         });
@@ -106,7 +99,6 @@
 
         function saveRoute() {
             const data = drawnItems.toGeoJSON();
-            // Preservar raios de círculos no GeoJSON
             data.features.forEach((f, i) => {
                 const layer = Object.values(drawnItems._layers)[i];
                 if(layer instanceof L.Circle) {
@@ -114,44 +106,67 @@
                     f.properties.radius = layer.getRadius();
                 }
             });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso salvo com sucesso!"));
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso salvo!"));
         }
 
         async function runApuracao() {
-            if(!confirm("Iniciar apuração final? Isso atualizará os pontos de todos.")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
+            if(!confirm("Iniciar apuração? Isso recalculará os pontos de todos.")) return;
+            
+            try {
+                const config = (await db.ref('configuracoes/percurso').once('value')).val();
+                const rastros = (await db.ref('rastros').once('value')).val();
+                const comps = (await db.ref('competidores').once('value')).val();
 
-            if(!config || !rastros) return alert("Dados insuficientes para apuração.");
+                if(!config || !rastros) return alert("Dados insuficientes.");
 
-            for(let id in comps) {
-                let penalidadeTotal = 0;
-                const rastro = rastros[id];
-                if(!rastro) continue;
+                for(let id in comps) {
+                    let penalidadeTotal = 0;
+                    const rastro = rastros[id];
+                    if(!rastro) continue;
 
-                config.features.forEach(feat => {
-                    let violou = false;
-                    const limite = feat.properties.velocidade || 999;
+                    // Converter rastro em array de pontos Turf
+                    const rastroArray = Object.values(rastro);
 
-                    for(let k in rastro) {
-                        const pt = turf.point([rastro[k].lng, rastro[k].lat]);
-                        let inside = false;
+                    config.features.forEach(feat => {
+                        const limite = parseInt(feat.properties.velocidade);
+                        if(!limite) return; // Pula se não for radar (ex: waypoint comum)
 
-                        if(feat.geometry.type === 'Polygon') inside = turf.booleanPointInPolygon(pt, feat);
-                        if(feat.properties.type === 'circle') {
-                            const center = turf.point(feat.geometry.coordinates);
-                            const distance = turf.distance(pt, center, {units: 'meters'});
-                            if(distance <= feat.properties.radius) inside = true;
+                        let violou = false;
+
+                        rastroArray.forEach(p => {
+                            if(violou) return; // Se já violou este radar, não precisa checar o resto deste rastro
+
+                            const pt = turf.point([p.lng, p.lat]);
+                            let inside = false;
+
+                            if(feat.geometry.type === 'Polygon') {
+                                inside = turf.booleanPointInPolygon(pt, feat);
+                            } else if(feat.properties.type === 'circle') {
+                                const center = turf.point(feat.geometry.coordinates);
+                                const distance = turf.distance(pt, center, {units: 'meters'});
+                                if(distance <= feat.properties.radius) inside = true;
+                            }
+
+                            // Se estiver dentro e a velocidade do rastro for maior que o limite
+                            if(inside && parseFloat(p.vel) > limite) {
+                                violou = true;
+                            }
+                        });
+
+                        if(violou) {
+                            penalidadeTotal += 10000;
+                            console.log(`Carro ${id} violou radar de ${limite}km/h`);
                         }
+                    });
 
-                        if(inside && rastro[k].vel > limite) violou = true;
-                    }
-                    if(violou) penalidadeTotal += 10000;
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
+                    // Atualizar no Firebase: Base de 150.000 pontos
+                    await db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
+                }
+                alert("Apuração concluída com sucesso!");
+            } catch (err) {
+                console.error(err);
+                alert("Erro durante a apuração. Verifique o console.");
             }
-            alert("Apuração concluída!");
         }
 
         function resetSystem() {
