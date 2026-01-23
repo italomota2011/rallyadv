@@ -2,29 +2,41 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Visualização</title>
+    <title>Rastro Rally - Analisador de Prova</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; z-index: 1000; }
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; }
         #map { flex-grow: 1; }
-        h2 { color: #e67e22; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; }
+        h2 { color: #e67e22; margin-top: 0; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 16px; }
+        select { background: #333; color: white; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; }
+        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; line-height: 1.5; }
+        .radar-label { color: #3498db; font-weight: bold; font-size: 11px; text-shadow: 1px 1px #000; }
+        .infraction-dot { border: 2px solid white; border-radius: 50%; background: #ff4757; box-shadow: 0 0 10px #ff4757; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>🛰️ Rastro GPS</h2>
+        <h2>🛰️ Analisador</h2>
+        <label>Competidor:</label>
         <select id="carSelect"><option value="">Carregando...</option></select>
-        <button onclick="drawTrack()">VER TRAJETO</button>
-        <div id="details">Selecione um carro.</div>
-        <button style="background:#555; margin-top:10px;" onclick="location.href='admin.html'">VOLTAR</button>
+        <button onclick="drawTrack()">ANALISAR TRAJETO</button>
+        
+        <div id="details">
+            <b>Legenda:</b><br>
+            🟦 Polígonos: Radares<br>
+            🟠 Linha: Rastro do Carro<br>
+            🔴 Pontos: Infrações detectadas
+        </div>
+        
+        <button style="background:#555; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
@@ -41,31 +53,4 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        const map = L.map('map').setView([-12.26, -38.96], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let currentTrack = null;
-
-        db.ref('competidores').on('value', snap => {
-            let html = '<option value="">Selecione...</option>';
-            snap.forEach(c => { html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
-            document.getElementById('carSelect').innerHTML = html;
-        });
-
-        async function drawTrack() {
-            const id = document.getElementById('carSelect').value;
-            if(!id) return;
-            const snap = await db.ref('rastros/' + id).once('value');
-            if(!snap.exists()) return alert("Sem rastro.");
-            
-            const pontos = Object.values(snap.val()).sort((a,b) => a.ts - b.ts);
-            const coords = pontos.map(p => [p.lat, p.lng]);
-            
-            if(currentTrack) map.removeLayer(currentTrack);
-            currentTrack = L.polyline(coords, {color: '#e67e22', weight: 4}).addTo(map);
-            map.fitBounds(currentTrack.getBounds());
-            
-            document.getElementById('details').innerHTML = `<b>Pontos:</b> ${pontos.length}<br><b>Vel. Máx:</b> ${Math.max(...pontos.map(p=>p.vel)).toFixed(1)} km/h`;
-        }
-    </script>
-</body>
-</html>
+        const map = L.map('map').setView([-12.26, -38.
