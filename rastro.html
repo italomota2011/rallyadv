@@ -1,45 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Histórico de Rastro</title>
+    <title>Rastro Real-Time</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        .nav { padding: 10px; background: #333; color: white; display: flex; gap: 10px; }
-        #map { flex-grow: 1; width: 100%; background: #ddd; }
-    </style>
+    <style>#map { height: 100vh; width: 100%; }</style>
 </head>
 <body>
-    <div class="nav">
-        <input type="number" id="carNum" placeholder="Nº do Carro">
-        <button onclick="carregarRastro()">Ver Rastro</button>
-    </div>
     <div id="map"></div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        const firebaseConfig = { /* Sua Config */ };
+        const firebaseConfig = { /* SEU CONFIG */ };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-
         const map = L.map('map').setView([-23.55, -46.63], 12);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        window.carregarRastro = async () => {
-            const num = document.getElementById('carNum').value;
-            const snap = await get(ref(db, `historico/${num}`));
-            
-            if(!snap.exists()) return alert("Sem dados.");
+        const markers = {};
 
-            const pontos = Object.values(snap.val());
-            const coords = pontos.map(p => [p.lat, p.lng]);
-            
-            L.polyline(coords, {color: 'red', weight: 4}).addTo(map);
-            map.fitBounds(coords);
-        };
+        onValue(ref(db, 'competidores'), (snap) => {
+            const carros = snap.val();
+            for(let id in carros) {
+                const c = carros[id];
+                const pos = [c.lat, c.lng];
+                
+                if(!markers[id]) {
+                    const icon = L.divIcon({
+                        html: `<div style="background:red; color:white; border-radius:50%; width:25px; text-align:center; border:2px solid white;">${id}</div>`,
+                        className: ''
+                    });
+                    markers[id] = L.marker(pos, {icon}).addTo(map).bindPopup(`Vel: ${c.velocidade} km/h`);
+                } else {
+                    markers[id].setLatLng(pos).getPopup().setContent(`Vel: ${c.velocidade} km/h`);
+                }
+            }
+        });
     </script>
 </body>
 </html>
