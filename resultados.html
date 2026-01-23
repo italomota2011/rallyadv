@@ -14,6 +14,8 @@
         th { background: #f8f9fa; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
+        /* Estilo opcional para a coluna de posição */
+        .pos { font-weight: bold; width: 50px; color: #7f8c8d; } 
     </style>
 </head>
 <body>
@@ -42,7 +44,7 @@
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
                 
-                // Ordena por maior pontuação
+                // Ordena por maior pontuação (do maior para o menor)
                 list.sort((a,b) => b.pontos - a.pontos);
 
                 if(list.length > 0) {
@@ -50,16 +52,17 @@
                                 <h2>${c}</h2>
                                 <table>
                                     <tr>
-                                                                                <th>Nº</th>
+                                        <th>POS</th> <th>Nº</th>
                                         <th>Piloto</th>
                                         <th>Penalidades</th>
                                         <th>Pontuação Final</th>
                                     </tr>`;
                     
-                    list.forEach(p => {
+                    // O segundo parâmetro "index" nos dá a posição no array (começando em 0)
+                    list.forEach((p, index) => {
                         const penalidade = 150000 - p.pontos;
                         html += `<tr>
-                                    <td>${p.id}</td>
+                                    <td class="pos">${index + 1}º</td> <td>${p.id}</td>
                                     <td>${p.nome}</td>
                                     <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
                                     <td class="total">${p.pontos.toLocaleString('pt-BR')}</td>
@@ -73,5 +76,3 @@
     </script>
 </body>
 </html>
-
-
