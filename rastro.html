@@ -2,45 +2,46 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rastro Rally - Monitoramento</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        /* Garante que o mapa ocupe toda a tela e não fique branco */
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-        #map { height: 100vh; width: 100vw; background: #e5e3df; }
+        /* FORÇAR ALTURA TOTAL */
+        html, body { 
+            margin: 0; padding: 0; height: 100% !important; width: 100% !important; 
+            overflow: hidden; background-color: #333; 
+        }
+        
+        #map { 
+            position: absolute; top: 0; bottom: 0; right: 0; left: 0;
+            width: 100%; height: 100%; z-index: 1;
+        }
         
         #control-panel {
-            position: absolute; top: 20px; left: 70px; z-index: 1000;
-            background: white; padding: 15px; border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2); width: 220px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            position: absolute; top: 20px; left: 20px; z-index: 1000;
+            background: white; padding: 15px; border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5); width: 200px;
+            font-family: Arial, sans-serif;
         }
 
         .car-icon { 
             background: #2980b9; color: white; border: 2px solid white; 
             border-radius: 50%; text-align: center; line-height: 26px; 
-            font-weight: bold; font-size: 11px; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            font-weight: bold; font-size: 11px;
         }
-
-        select { width: 100%; padding: 8px; margin-top: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        button { width: 100%; margin-top: 8px; padding: 6px; cursor: pointer; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; }
-        hr { margin: 15px 0; border: 0; border-top: 1px solid #eee; }
     </style>
 </head>
 <body>
 
 <div id="control-panel">
-    <strong style="color: #2c3e50;">📊 Painel de Rastro</strong><br>
-    <small>Carros Online: <span id="count" style="font-weight: bold; color: #27ae60;">0</span></small>
+    <strong>Monitoramento</strong><br>
+    Carros: <span id="count">0</span>
     <hr>
-    <label style="font-size: 13px;">Rastrear Trajeto:</label>
-    <select id="carSelector" onchange="exibirTrajeto()">
-        <option value="">Selecione um carro...</option>
+    <select id="carSelector" onchange="exibirTrajeto()" style="width:100%; padding:5px;">
+        <option value="">Rastrear Carro...</option>
     </select>
-    <button onclick="limparTrajeto()">Limpar Linha</button>
+    <button onclick="location.reload()" style="margin-top:10px; width:100%;">Recarregar Mapa</button>
 </div>
 
 <div id="map"></div>
@@ -50,26 +51,73 @@
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    // Configuração Completa (Evita erro de Parse)
+    // Configuração Oficial
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         authDomain: "cronometro-rally.firebaseapp.com",
         databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        storageBucket: "cronometro-rally.firebasestorage.app",
-        messagingSenderId: "341731891354",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
+        projectId: "cronometro-rally"
     };
 
-    // Inicialização segura
-    try {
-        firebase.initializeApp(firebaseConfig);
-    } catch (e) {
-        console.error("Erro ao inicializar Firebase:", e);
-    }
+    // Inicialização
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // Inicializar Mapa
-    const map = L.map('map').setView([-23.5505, -46.6333], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+    // INICIALIZAÇÃO DO MAPA COM DELAY (Para garantir que o CSS carregou)
+    let map, markers = {}, trajetoLinha;
+
+    function initMap() {
+        map = L.map('map').setView([-23.5505, -46.6333], 12);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
+        trajetoLinha = L.polyline([], {color: '#e67e22', weight: 5}).addTo(map);
+
+        // Força o mapa a recalcular o tamanho após 500ms
+        setTimeout(() => { map.invalidateSize(); }, 500);
+
+        iniciarMonitoramento();
+        preencherSeletor();
+    }
+
+    function preencherSeletor() {
+        const sel = document.getElementById('carSelector');
+        for(let i=1; i<=100; i++) {
+            let opt = document.createElement('option');
+            opt.value = i; opt.innerText = "Carro " + i;
+            sel.appendChild(opt);
+        }
+    }
+
+    function iniciarMonitoramento() {
+        db.ref('prova/carros').on('value', snapshot => {
+            const data = snapshot.val();
+            if(!data) return;
+            
+            let count = 0;
+            for(let key in data) {
+                const c = data[key];
+                if(c.lat && c.lng) {
+                    count++;
+                    if(markers[key]) {
+                        markers[key].setLatLng([c.lat, c.lng]);
+                    } else {
+                        markers[key] = L.marker([c.lat, c.lng], {
+                            icon: L.divIcon({ className: 'car-icon', html: c.id, iconSize: [26, 26] })
+                        }).addTo(map);
+                    }
+                }
+            }
+            document.getElementById('count').innerText = count;
+        });
+    }
+
+    function exibirTrajeto() {
+        const id = document.getElementById('carSelector').value;
+        if(!id) return;
+        db.ref(`prova/carros/carro_${id}/historico`).limitToLast(100).once('value', snap => {
+            const pts = [];
+            snap.forEach(c => { pts.push([c.val().lat, c.val().lng]); });
+            trajeto
