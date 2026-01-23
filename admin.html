@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
         body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #map { flex-grow: 1; width: 100%; }
+        #map { flex-grow: 1; width: 100%; height: 100%; }
         .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1000; }
         .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
         button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
@@ -45,23 +45,43 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
+        // Inicialização do Mapa
         const map = L.map('map').setView([-12.26, -38.96], 13);
         const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
         let isSat = false;
 
         const drawnItems = new L.FeatureGroup().addTo(map);
-        // Desativado Retângulo conforme solicitado
+        
+        // Configuração do Draw (Sem retângulo)
         const drawControl = new L.Control.Draw({ 
             edit: { featureGroup: drawnItems }, 
             draw: { marker: false, circlemarker: false, rectangle: false, polyline: false }
         }).addTo(map);
 
+        // Carregar percurso salvo com verificação de tipo de geometria
         db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) L.geoJSON(snap.val(), { 
-                pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
-                onEachFeature: (f, l) => {
-                    if(f.properties && f.properties.type === 'circle') {
-                        L.circle(f.geometry.coordinates.reverse(), {radius: f.properties.radius}).addTo(drawnItems);
-                    } else {
-                        drawnItems.addLayer
+            if(snap.exists()) {
+                const data = snap.val();
+                L.geoJSON(data, {
+                    style: function (feature) { return { color: '#3498db' }; },
+                    pointToLayer: function (feature, latlng) {
+                        if (feature.properties && feature.properties.type === 'circle') {
+                            return L.circle(latlng, { radius: feature.properties.radius });
+                        }
+                        return null;
+                    },
+                    onEachFeature: function (feature, layer) {
+                        drawnItems.addLayer(layer);
+                    }
+                });
+            }
+        });
+
+        // Atualização dos carros em tempo real
+        const carMarkers = {};
+        db.ref('posicoes').on('value', snap => {
+            snap.forEach(c => {
+                const id = c.key; const p = c.val();
+                if(carMarkers[id]) { 
+                    carMarkers[id].set
