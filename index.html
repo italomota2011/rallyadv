@@ -7,15 +7,13 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        /* Fundo alterado para branco e textos para cores escuras */
-        body { font-family: sans-serif; background: #ffffff; color: #333; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #f9f9f9; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border-top: 5px solid #e67e22; }
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
         .logo-box { text-align: center; margin-bottom: 20px; }
         .logo-img { height: 70px; object-fit: contain; }
-        input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; background: #fff; color: #333; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; color: white; }
+        input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
         .tracking { text-align: center; display: none; }
-        #viewVel { color: #2c3e50; }
     </style>
 </head>
 <body>
@@ -38,7 +36,7 @@
             <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
             <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
             <p>KM/H</p>
-            <p style="color:#27ae60; font-weight: bold;">● TRANSMITINDO GPS</p>
+            <p style="color:#2ecc71;">● TRANSMITINDO GPS</p>
         </div>
     </div>
 
@@ -60,7 +58,6 @@
             const nome = document.getElementById('nome').value;
             const cat = document.getElementById('categoria').value;
             if(!num || !nome) return alert("Preencha tudo!");
-            
             const snap = await db.ref('competidores/' + num).once('value');
             if(snap.exists()) return alert("Carro já cadastrado!");
 
