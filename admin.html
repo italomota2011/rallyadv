@@ -2,30 +2,50 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Rally Admin - Controle Total</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Rally - Controle de Prova</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    
     <style>
-        body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #map { flex-grow: 1; }
-        .controls { padding: 15px; background: #222; color: white; display: flex; gap: 10px; align-items: center; z-index: 1000; flex-wrap: wrap; }
-        button { cursor: pointer; padding: 8px 15px; border: none; border-radius: 4px; font-weight: bold; }
-        .btn-apurar { background: #ffcc00; }
-        .btn-reset { background: #ff4444; color: white; }
-        .info-box { position: absolute; bottom: 20px; left: 20px; background: white; padding: 10px; z-index: 1000; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        
+        .header-admin { height: 70px; background: #1a1a1a; color: white; display: flex; align-items: center; padding: 0 20px; gap: 15px; z-index: 1001; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        
+        #map { flex: 1; width: 100%; background: #242424; }
+        
+        input, button, select { padding: 8px 12px; border-radius: 4px; border: none; }
+        button { cursor: pointer; font-weight: bold; transition: 0.3s; }
+        
+        .btn-apurar { background: #f1c40f; color: #000; }
+        .btn-apurar:hover { background: #d4ac0d; }
+        .btn-reset { background: #e74c3c; color: white; }
+        .btn-reset:hover { background: #c0392b; }
+        
+        .custom-marker {
+            background: #e74c3c; color: white; border-radius: 50%;
+            width: 30px; height: 30px; display: flex;
+            align-items: center; justify-content: center;
+            font-weight: bold; border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
     </style>
 </head>
 <body>
 
-<div class="controls">
-    <input type="text" id="citySearch" placeholder="Buscar cidade (Enter)" style="padding: 8px;">
-    <button onclick="buscarCidade()">Buscar</button>
-    <div style="border-left: 1px solid #555; height: 30px; margin: 0 10px;"></div>
-    <span>Limite Radar (km/h):</span>
-    <input type="number" id="velLimite" value="60" style="width: 50px; padding: 5px;">
-    <button class="btn-apurar" id="btnProcessar">FINALIZAR E APURAR PROVA</button>
-    <button class="btn-reset" id="btnReset">REINICIAR TUDO</button>
-</div>
+<header class="header-admin">
+    <h3 style="color: #f1c40f; margin-right: 20px;">RALLY TRACKER</h3>
+    <input type="text" id="cityInput" placeholder="Buscar cidade...">
+    <button onclick="buscarCidade()">Ir</button>
+    
+    <div style="margin-left: auto; display: flex; gap: 10px; align-items: center;">
+        <span>Radar (km/h):</span>
+        <input type="number" id="velMax" value="60" style="width: 60px;">
+        <button class="btn-apurar" id="btnFinalizar">FINALIZAR E APURAR</button>
+        <button class="btn-reset" id="btnReiniciar">REINICIAR</button>
+    </div>
+</header>
 
 <div id="map"></div>
 
@@ -34,7 +54,7 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { getDatabase, ref, set, onValue, get, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
@@ -49,119 +69,124 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // --- CONFIGURAÇÃO DO MAPA ---
-    const map = L.map('map').setView([-23.55, -46.63], 13);
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-    
-    L.control.layers({"Mapa": osm, "Satélite": satellite}).addTo(map);
+    // --- INICIALIZAÇÃO DO MAPA ---
+    const map = L.map('map').setView([-23.55, -46.63], 10);
 
-    // --- FERRAMENTAS DE DESENHO (Radares e Waypoints) ---
-    const drawnItems = new L.FeatureGroup().addTo(map);
+    const padrao = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    const satelite = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 19 });
+
+    L.control.layers({ "Mapa": padrao, "Satélite": satelite }).addTo(map);
+
+    // --- DESENHO DE RADARES E WAYPOINTS ---
+    const camadasEditaveis = new L.FeatureGroup().addTo(map);
     const drawControl = new L.Control.Draw({
-        edit: { featureGroup: drawnItems },
+        edit: { featureGroup: camadasEditaveis },
         draw: { polygon: false, circle: true, rectangle: true, polyline: true, marker: true }
-    }).addTo(map);
+    });
+    map.addControl(drawControl);
 
     map.on(L.Draw.Event.CREATED, (e) => {
-        const type = e.layerType;
         const layer = e.layer;
         const id = Date.now();
-        
-        if (type === 'rectangle') {
-            const vel = document.getElementById('velLimite').value;
+        const tipo = e.layerType;
+
+        if (tipo === 'rectangle') {
+            const limite = document.getElementById('velMax').value;
             set(ref(db, `config/radares/${id}`), {
-                bounds: layer.getBounds(),
-                limite: parseInt(vel)
+                bounds: {
+                    north: layer.getBounds().getNorthEast().lat,
+                    east: layer.getBounds().getNorthEast().lng,
+                    south: layer.getBounds().getSouthWest().lat,
+                    west: layer.getBounds().getSouthWest().lng
+                },
+                limite: parseInt(limite)
             });
-        } else if (type === 'marker' || type === 'circle') {
+        } else if (tipo === 'marker' || tipo === 'circle') {
             set(ref(db, `config/waypoints/${id}`), {
                 lat: layer.getLatLng().lat,
                 lng: layer.getLatLng().lng,
-                raio: 30 // 30 metros de tolerância
+                raio: 50 // metros
             });
         }
-        drawnItems.addLayer(layer);
+        camadasEditaveis.addLayer(layer);
     });
 
     // --- RASTREAMENTO EM TEMPO REAL ---
-    let carMarkers = {};
+    let markersCarros = {};
     onValue(ref(db, 'competidores'), (snapshot) => {
         const data = snapshot.val();
+        if(!data) return;
+        
         for (let id in data) {
             const c = data[id];
-            const pos = [c.lat, c.lng];
-            if (carMarkers[id]) {
-                carMarkers[id].setLatLng(pos).setPopupContent(`<b>Carro ${id}</b><br>Piloto: ${c.nome}<br>Vel: ${c.vel} km/h`);
+            const coords = [c.lat, c.lng];
+            
+            if (markersCarros[id]) {
+                markersCarros[id].setLatLng(coords).setPopupContent(`<b>Carro ${id}</b><br>Piloto: ${c.nome}<br>Vel: ${c.vel} km/h`);
             } else {
-                carMarkers[id] = L.marker(pos, {
+                markersCarros[id] = L.marker(coords, {
                     icon: L.divIcon({
-                        className: 'custom-div-icon',
-                        html: `<div style="background:red; color:white; border-radius:50%; width:25px; height:25px; display:flex; align-items:center; justify-content:center; border:2px solid black;">${id}</div>`,
-                        iconSize: [25, 25]
+                        className: '',
+                        html: `<div class="custom-marker">${id}</div>`,
+                        iconSize: [30, 30]
                     })
                 }).addTo(map).bindPopup(`Carro ${id}`);
             }
         }
     });
 
-    // --- BUSCA DE CIDADE ---
-    window.buscarCidade = async () => {
-        const query = document.getElementById('citySearch').value;
-        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}`);
-        const data = await resp.json();
-        if (data.length > 0) map.setView([data[0].lat, data[0].lon], 12);
-    };
-
-    // --- LÓGICA DE APURAÇÃO ---
-    document.getElementById('btnProcessar').onclick = async () => {
-        if (!confirm("Deseja encerrar a prova e calcular as penalidades?")) return;
-        
+    // --- APURAÇÃO ---
+    document.getElementById('btnFinalizar').onclick = async () => {
         const snap = await get(ref(db));
-        const data = snap.val();
-        if (!data.historico || !data.competidores) return alert("Sem dados suficientes.");
+        const dados = snap.val();
+        if (!dados.historico || !dados.competidores) return alert("Dados insuficientes.");
 
-        const radares = data.config?.radares ? Object.values(data.config.radares) : [];
-        const waypoints = data.config?.waypoints ? Object.values(data.config.waypoints) : [];
+        const radares = dados.config?.radares ? Object.values(dados.config.radares) : [];
+        const waypoints = dados.config?.waypoints ? Object.values(dados.config.waypoints) : [];
 
-        for (let carroId in data.competidores) {
-            let penalidades = 0;
-            const rastro = Object.values(data.historico[carroId]);
+        for (let carId in dados.competidores) {
+            let penalidade = 0;
+            const trilha = Object.values(dados.historico[carId]);
 
-            // 1. Checar Velocidade nos Radares
-            radares.forEach(radar => {
-                const infracao = rastro.some(p => 
-                    p.lat <= radar.bounds._northEast.lat && p.lat >= radar.bounds._southWest.lat &&
-                    p.lng <= radar.bounds._northEast.lng && p.lng >= radar.bounds._southWest.lng &&
-                    p.vel > radar.limite
+            // Valida Radar
+            radares.forEach(r => {
+                const infracao = trilha.some(p => 
+                    p.lat <= r.bounds.north && p.lat >= r.bounds.south &&
+                    p.lng <= r.bounds.east && p.lng >= r.bounds.west &&
+                    p.vel > r.limite
                 );
-                if (infracao) penalidades += 1000;
+                if (infracao) penalidade += 1000;
             });
 
-            // 2. Checar se passou nos Waypoints
+            // Valida Waypoint
             waypoints.forEach(wp => {
-                const passou = rastro.some(p => calcularDistancia(p, wp) < wp.raio);
-                if (!passou) penalidades += 1000;
+                const passou = trilha.some(p => calcularDist(p.lat, p.lng, wp.lat, wp.lng) < wp.raio);
+                if (!passou) penalidade += 1000;
             });
 
-            const pontosFinais = 150000 - penalidades;
-            update(ref(db, `competidores/${carroId}`), { pontos: pontosFinais });
+            const total = 150000 - penalidade;
+            update(ref(db, `competidores/${carId}`), { pontos: total });
         }
-        alert("Apuração finalizada!");
+        alert("Apuração Concluída!");
     };
 
-    function calcularDistancia(p1, p2) {
-        const R = 6371e3;
-        const dLat = (p2.lat - p1.lat) * Math.PI / 180;
-        const dLon = (p2.lng - p1.lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    function calcularDist(lat1, lon1, lat2, lon2) {
+        const R = 6371000;
+        const dLat = (lat2-lat1) * Math.PI / 180;
+        const dLon = (lon2-lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
         return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
 
-    document.getElementById('btnReset').onclick = () => {
-        if (confirm("ISSO APAGARÁ TUDO. Tem certeza?")) {
-            remove(ref(db, '/')).then(() => location.reload());
-        }
+    window.buscarCidade = async () => {
+        const city = document.getElementById('cityInput').value;
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`);
+        const json = await resp.json();
+        if(json.length > 0) map.setView([json[0].lat, json[0].lon], 12);
+    };
+
+    document.getElementById('btnReiniciar').onclick = () => {
+        if(confirm("Deseja apagar TUDO?")) remove(ref(db, '/')).then(() => location.reload());
     };
 </script>
 </body>
