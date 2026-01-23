@@ -9,7 +9,6 @@
         body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
         #map { flex-grow: 1; width: 100%; }
         .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1000; }
-        /* Ícone do carro corrigido */
         .marker-label { 
             background: #e67e22; 
             border: 2px solid white; 
@@ -63,89 +62,4 @@
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
         let isSat = false;
 
-        const drawnItems = new L.FeatureGroup().addTo(map);
-        const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false }}).addTo(map);
-
-        db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) L.geoJSON(snap.val(), { 
-                pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
-                onEachFeature: (f, l) => drawnItems.addLayer(l) 
-            });
-        });
-
-        const carMarkers = {};
-        db.ref('posicoes').on('value', snap => {
-            snap.forEach(c => {
-                const id = c.key; const p = c.val();
-                if(carMarkers[id]) {
-                    carMarkers[id].setLatLng([p.lat, p.lng]);
-                } else {
-                    carMarkers[id] = L.marker([p.lat, p.lng], {
-                        icon: L.divIcon({
-                            className:'marker-label', 
-                            html: id,
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15]
-                        })
-                    }).addTo(map);
-                }
-            });
-        });
-
-        map.on(L.Draw.Event.CREATED, e => {
-            const layer = e.layer;
-            if(e.layerType === 'polygon') layer.feature = { properties: { velocidade: prompt("Limite Velocidade:") }};
-            if(e.layerType === 'circle') layer.feature = { properties: { type: 'circle', radius: layer.getRadius() }};
-            drawnItems.addLayer(layer);
-        });
-
-        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
-
-        async function searchCity() {
-            const q = document.getElementById('cityInput').value;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
-        }
-
-        function saveRoute() {
-            const data = drawnItems.toGeoJSON();
-            data.features.forEach((f, i) => {
-                const layer = Object.values(drawnItems._layers)[i];
-                if(layer instanceof L.Circle) { f.properties.type = 'circle'; f.properties.radius = layer.getRadius(); }
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Salvo!"));
-        }
-
-        async function runApuracao() {
-            if(!confirm("Iniciar apuração final?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-
-            for(let id in comps) {
-                let perdidos = 0;
-                const rastro = rastros[id];
-                if(!rastro) continue;
-
-                config.features.forEach(feat => {
-                    let violou = false;
-                    for(let k in rastro) {
-                        const pt = turf.point([rastro[k].lng, rastro[k].lat]);
-                        if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat)) {
-                            if(rastro[k].vel > (feat.properties.velocidade || 60)) violou = true;
-                        }
-                    }
-                    if(violou) perdidos += 10000;
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - perdidos });
-            }
-            alert("Feito!");
-        }
-
-        function resetSystem() {
-            if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
-        }
-    </script>
-</body>
-</html>
+        const drawnItems = new L.Feature
