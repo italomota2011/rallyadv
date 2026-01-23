@@ -1,71 +1,27 @@
 <!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <title>Simulador de GPS - 100 Carros</title>
+<html>
+<body>
+    <h2>Simulando 100 carros...</h2>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; background: #ecf0f1; }
-        .status-box { background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .active { color: #27ae60; font-weight: bold; }
-    </style>
-</head>
-<body>
+    <script>
+        const firebaseConfig = { apiKey: "SUA_API", databaseURL: "SUA_URL", projectId: "SEU_ID" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-<div class="status-box">
-    <h2>Simulador Ativo</h2>
-    <p>Enviando dados de 100 carros para o Firebase...</p>
-    <p>Status: <span class="active" id="status">Transmitindo</span></p>
-    <p>Intervalo: 2 segundos</p>
-</div>
-
-<script>
-    // CONFIGURAÇÃO FIREBASE (Use as mesmas do Admin)
-    const firebaseConfig = {
-        apiKey: "SUA_API_KEY",
-        authDomain: "SEU_PROJETO.firebaseapp.com",
-        databaseURL: "https://SEU_PROJETO.firebaseio.com",
-        projectId: "SEU_PROJETO",
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // Ponto central inicial (Ex: São Paulo)
-    let centerLat = -23.5505;
-    let centerLng = -46.6333;
-
-    function simularMovimento() {
-        for (let i = 1; i <= 100; i++) {
-            // Gera um movimento aleatório pequeno
-            let novaLat = centerLat + (Math.random() - 0.5) * 0.01;
-            let novaLng = centerLng + (Math.random() - 0.5) * 0.01;
-            let vel = Math.floor(Math.random() * 100); // Velocidade entre 0 e 100 km/h
-
-            const carroRef = db.ref(`prova/carros/carro_${i}`);
-
-            // 1. Atualiza posição atual (para o mapa de Rastro)
-            carroRef.update({
-                lat: novaLat,
-                lng: novaLng,
-                velocidade: vel
-            });
-
-            // 2. Alimenta o histórico (para a página de Resultados)
-            // Usamos push() para criar uma lista de pontos percorridos
-            carroRef.child('historico').push({
-                lat: novaLat,
-                lng: novaLng,
-                velocidade: vel,
-                timestamp: Date.now()
-            });
+        function mover() {
+            for(let i=1; i<=100; i++) {
+                const lat = -23.5505 + (Math.random() * 0.02);
+                const lng = -46.6333 + (Math.random() * 0.02);
+                const vel = Math.floor(Math.random() * 100);
+                
+                const ref = db.ref(`prova/carros/carro_${i}`);
+                ref.update({ id: i, lat, lng, velocidade: vel });
+                // Salva no histórico para apuração posterior
+                ref.child('historico').push({ lat, lng, vel, t: Date.now() });
+            }
         }
-        console.log("Posições de 100 carros atualizadas.");
-    }
-
-    // Inicia a simulação a cada 2 segundos
-    setInterval(simularMovimento, 2000);
-
-</script>
+        setInterval(mover, 3000);
+    </script>
 </body>
 </html>
