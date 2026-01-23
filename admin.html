@@ -2,52 +2,18 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Painel Admin Rally - Estável</title>
+    <title>Painel Admin Rally - Oficial</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; background: #1a202c; overflow: hidden; font-family: sans-serif; }
-        
-        /* Menu Superior */
-        #toolbar { 
-            height: 60px; 
-            background: #2d3748; 
-            display: flex; 
-            align-items: center; 
-            padding: 0 15px; 
-            gap: 10px; 
-            z-index: 9999; 
-            position: relative; 
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
-        }
-
-        /* Área do Mapa */
-        #map { 
-            height: calc(100vh - 60px); 
-            width: 100%; 
-            background: #a0aec0; 
-        }
-
-        button { 
-            padding: 8px 12px; 
-            background: #4a5568; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-weight: bold; 
-            font-size: 12px; 
-        }
-        
+        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
+        #map { height: calc(100vh - 60px); width: 100%; background: #a0aec0; }
+        button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
         button:hover { background: #718096; }
         input { padding: 8px; border-radius: 4px; border: none; background: #1a202c; color: white; }
-
-        .marker-label { 
-            background: #ed8936; border: 2px solid white; border-radius: 50%; 
-            color: white; font-weight: bold; text-align: center; line-height: 26px; 
-            width: 30px; height: 30px; font-size: 12px; 
-        }
+        .marker-label { background: #ed8936; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 26px; width: 30px; height: 30px; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -55,10 +21,10 @@
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Cidade...">
         <button onclick="buscar()">🔍 Buscar</button>
-        <button onclick="alternarMapa()" id="btnSat">🛰️ Satélite</button>
-        <div style="flex-grow: 1;"></div>
-        <button onclick="salvar()" style="background: #38a169;">💾 Salvar</button>
-        <button onclick="apurar()" style="background: #dd6b20;">🏁 Apurar</button>
+        <button onclick="toggleSatelite()" id="btnSat" style="background: #4a5568;">🛰️ Satélite</button>
+        
+        <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
+        <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
         <button onclick="window.location.href='resultados.html'">📊 Ranking</button>
         <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
     </div>
@@ -72,7 +38,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // CONFIGURAÇÃO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -82,24 +47,114 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
+
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
-
-        // VARIÁVEIS GLOBAIS
         let map, drawnItems;
-        let isSat = false;
 
-        // Criamos as camadas mas NÃO as adicionamos ainda
-        const layerRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        const layerSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        // Camadas definidas fora para alternância rápida
+        const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        let isSatelite = false;
 
-        // INICIALIZAÇÃO (Só ocorre quando a página termina de carregar)
         window.onload = function() {
-            // 1. Criar o mapa focado em Feira de Santana (conforme seu contexto)
+            // Inicializa o mapa com a camada de ruas padrão
             map = L.map('map').setView([-12.26, -38.96], 13);
-            
-            // 2. Adicionar camada inicial (Ruas)
-            layerRuas.addTo(map);
+            camadaRuas.addTo(map);
 
-            // 3. Preparar camada de desenhos
-            drawnItems
+            drawnItems = new L.FeatureGroup().addTo(map);
+
+            const drawControl = new L.Control.Draw({
+                edit: { featureGroup: drawnItems },
+                draw: {
+                    polyline: true,
+                    polygon: true,
+                    circle: true,
+                    rectangle: false,
+                    marker: false,
+                    circlemarker: false
+                }
+            });
+            map.addControl(drawControl);
+
+            map.on(L.Draw.Event.CREATED, (e) => {
+                const layer = e.layer;
+                layer.feature = layer.feature || { type: "Feature", properties: {} };
+
+                if (e.layerType === 'polygon') {
+                    const v = prompt("Velocidade Radar (KM/H):", "60");
+                    layer.feature.properties.velocidade = parseInt(v) || 60;
+                }
+                if (e.layerType === 'circle') {
+                    layer.feature.properties.type = 'circle';
+                    layer.feature.properties.radius = layer.getRadius();
+                }
+                drawnItems.addLayer(layer);
+            });
+
+            carregarTrajeto();
+            rastrearCarros();
+        };
+
+        // FUNÇÃO PARA ALTERNAR SATÉLITE
+        window.toggleSatelite = function() {
+            if (!isSatelite) {
+                map.removeLayer(camadaRuas);
+                camadaSat.addTo(map);
+                document.getElementById('btnSat').innerText = "🗺️ Mapa";
+                isSatelite = true;
+            } else {
+                map.removeLayer(camadaSat);
+                camadaRuas.addTo(map);
+                document.getElementById('btnSat').innerText = "🛰️ Satélite";
+                isSatelite = false;
+            }
+        };
+
+        window.buscar = async function() {
+            const q = document.getElementById('cityInput').value;
+            if(!q) return;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+        };
+
+        window.salvar = function() {
+            const data = { type: "FeatureCollection", features: [] };
+            drawnItems.eachLayer(layer => {
+                const gj = layer.toGeoJSON();
+                gj.properties = gj.properties || {};
+                if (layer instanceof L.Circle) {
+                    gj.properties.type = 'circle';
+                    gj.properties.radius = layer.getRadius();
+                } else if (layer instanceof L.Polygon) {
+                    if(!gj.properties.velocidade) gj.properties.velocidade = 60;
+                }
+                data.features.push(gj);
+            });
+            db.ref('configuracoes/percurso').set(data).then(() => alert("✅ Trajeto e Penalidades salvos!"));
+        };
+
+        function carregarTrajeto() {
+            db.ref('configuracoes/percurso').once('value', snap => {
+                if(snap.exists()) {
+                    L.geoJSON(snap.val(), {
+                        pointToLayer: (f, latlng) => {
+                            if (f.properties && f.properties.type === 'circle') {
+                                return L.circle(latlng, { radius: f.properties.radius });
+                            }
+                        },
+                        onEachFeature: (f, l) => { drawnItems.addLayer(l); }
+                    });
+                }
+            });
+        }
+
+        function rastrearCarros() {
+            const markers = {};
+            db.ref('posicoes').on('value', snap => {
+                snap.forEach(c => {
+                    const id = c.key; const p = c.val();
+                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
+                    else markers[id] = L.marker([p.lat, p.lng], { 
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] })
