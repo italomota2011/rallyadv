@@ -7,18 +7,16 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .cat-box { background: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        h2 { color: #e67e22; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; }
         table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; background: #f8f9fa; padding: 12px; }
-        td { padding: 12px; border-bottom: 1px solid #eee; }
-        .pontos { font-weight: bold; color: #2c3e50; }
+        td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .penalidade { color: #c0392b; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>🏆 Classificação Rally</h1>
-    <div id="ranking">Carregando...</div>
-
+    <h1>🏆 Classificação Oficial</h1>
+    <div id="results">Carregando...</div>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
@@ -29,26 +27,22 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
             let html = "";
-            const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-            
-            categorias.forEach(cat => {
-                let comps = [];
-                for(let id in data) if(data[id].categoria === cat) comps.push({id, ...data[id]});
-                comps.sort((a,b) => b.pontos - a.pontos);
-
-                if(comps.length > 0) {
-                    html += `<div class="cat-box"><h2>${cat}</h2><table><tr><th>POS</th><th>Nº</th><th>PILOTO</th><th>PONTOS</th></tr>`;
-                    comps.forEach((p, i) => {
-                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="pontos">${p.pontos}</td></tr>`;
+            ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"].forEach(c => {
+                let list = [];
+                for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
+                list.sort((a,b) => b.pontos - a.pontos);
+                if(list.length > 0) {
+                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>POS</th><th>Nº</th><th>Piloto</th><th>Penalidade</th><th>Total</th></tr>`;
+                    list.forEach((p, i) => {
+                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">-${150000 - p.pontos}</td><td>${p.pontos}</td></tr>`;
                     });
                     html += `</table></div>`;
                 }
             });
-            document.getElementById('ranking').innerHTML = html || "Aguardando dados...";
+            document.getElementById('results').innerHTML = html || "Sem dados.";
         });
     </script>
 </body>
