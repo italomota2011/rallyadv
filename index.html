@@ -18,7 +18,7 @@
     <div class="card">
         <div id="setup">
             <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto (Apenas letras)" oninput="this.value = this.value.replace(/[0-9]/g, '')">
+            <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
@@ -40,8 +40,6 @@
             authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
         const app = firebase.initializeApp(firebaseConfig);
@@ -52,44 +50,20 @@
             const nomeRaw = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
             const num = parseInt(numRaw);
-
-            // 1. Validação de campos vazios
-            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-
-            // 2. Validação: Nome apenas letras (Regex aceita acentos e espaços)
-            const regexLetras = /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/;
-            if(!regexLetras.test(nomeRaw)) {
-                return alert("O nome deve conter apenas letras!");
-            }
-
-            // 3. Validação: Número entre 1 e 100 e não zero
-            if(num < 1 || num > 100) {
-                return alert("O número do carro deve ser entre 1 e 100!");
-            }
+            if(!nomeRaw || !numRaw) return alert("Preencha tudo!");
+            if(num < 1 || num > 100) return alert("Nº entre 1-100!");
 
             try {
-                // Busca competidores existentes para validar duplicidade
-                const snapshot = await db.ref('competidores').once('value');
-                const existentes = snapshot.val() || {};
-
-                for(let id in existentes) {
-                    // 4. Validação: Nome não pode se repetir
-                    if(existentes[id].nome.toLowerCase() === nomeRaw.toLowerCase()) {
-                        return alert("Este nome de piloto já está cadastrado!");
-                    }
-                    // 5. Validação: Número não pode se repetir
-                    if(id == num) {
-                        return alert("Este número de carro já está em uso!");
-                    }
+                const snap = await db.ref('competidores').once('value');
+                const exist = snap.val() || {};
+                for(let id in exist) {
+                    if(exist[id].nome.toLowerCase() === nomeRaw.toLowerCase()) return alert("Piloto já cadastrado!");
+                    if(id == num) return alert("Nº em uso!");
                 }
-
-                // Cadastro aprovado
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat, pontos: 150000 });
-                
                 document.getElementById('setup').style.display = 'none';
                 document.getElementById('ativo').style.display = 'block';
                 document.getElementById('viewCarro').innerText = "Carro " + num;
-
                 navigator.geolocation.watchPosition(pos => {
                     const vel = (pos.coords.speed || 0) * 3.6;
                     document.getElementById('viewVel').innerText = vel.toFixed(1);
@@ -97,10 +71,7 @@
                     db.ref('posicoes/' + num).set(coord);
                     db.ref('rastros/' + num).push(coord);
                 }, null, { enableHighAccuracy: true });
-
-            } catch (e) {
-                alert("Erro ao validar dados. Verifique sua conexão.");
-            }
+            } catch (e) { alert("Erro de conexão."); }
         };
     </script>
 </body>
