@@ -2,30 +2,31 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Tempo Real</title>
+    <title>Rastro Rally - Monitoramento</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
+        body, html { margin: 0; height: 100%; width: 100%; font-family: sans-serif; }
         #map { height: 100vh; width: 100%; }
-        #info-box {
+        #control-panel {
             position: absolute; top: 10px; left: 50px; z-index: 1000;
-            background: rgba(255, 255, 255, 0.9); padding: 15px;
-            border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-            font-family: sans-serif;
+            background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            display: flex; flex-direction: column; gap: 10px;
         }
-        /* Ícone redondo com número do carro */
-        .car-icon {
-            background: #2980b9; color: white; border: 2px solid white;
-            border-radius: 50%; text-align: center; line-height: 26px;
-            font-weight: bold; font-size: 11px; width: 26px !important; height: 26px !important;
-        }
+        .car-icon { background: #2980b9; color: white; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 26px; font-weight: bold; font-size: 11px; }
+        select { padding: 8px; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-<div id="info-box">
-    <strong>Monitoramento Rally</strong><br>
-    Carros Online: <span id="count">0</span>
+<div id="control-panel">
+    <strong>Monitoramento de Frota</strong>
+    <span>Carros Online: <span id="count">0</span></span>
+    <hr>
+    <label>Ver Trajeto Histórico:</label>
+    <select id="carSelector" onchange="exibirTrajeto()">
+        <option value="">Selecione um carro...</option>
+    </select>
+    <button onclick="limparTrajeto()" style="font-size: 0.8em; cursor:pointer;">Limpar Trajeto</button>
 </div>
 
 <div id="map"></div>
@@ -35,7 +36,6 @@
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    // 1. Sua Configuração Exata
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         authDomain: "cronometro-rally.firebaseapp.com",
@@ -46,60 +46,66 @@
         appId: "1:341731891354:web:d0c34265be68015e98a723"
     };
 
-    // 2. Inicialização
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // 3. Configuração do Mapa
-    const map = L.map('map').setView([-23.5505, -46.6333], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    const map = L.map('map').setView([-23.5505, -46.6333], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
     const markers = {};
-    let focado = false;
+    const trajetoLinha = L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.8}).addTo(map);
 
-    // 4. Ouvir dados do Firebase
-    db.ref('prova/carros').on('value', (snapshot) => {
+    // Preencher seletor
+    const sel = document.getElementById('carSelector');
+    for(let i=1; i<=100; i++) {
+        let opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = "Carro " + i;
+        sel.appendChild(opt);
+    }
+
+    // Monitoramento Real-time
+    db.ref('prova/carros').on('value', snapshot => {
         const data = snapshot.val();
-        if (!data) return;
-
-        let total = 0;
-        
-        for (let key in data) {
+        if(!data) return;
+        let online = 0;
+        for(let key in data) {
             const c = data[key];
-            if (c.lat && c.lng) {
-                total++;
-                const pos = [c.lat, c.lng];
-
-                // Centraliza o mapa no primeiro carro que aparecer
-                if (!focado) {
-                    map.setView(pos, 13);
-                    focado = true;
-                }
-
-                if (markers[key]) {
-                    // Atualiza marcador existente
-                    markers[key].setLatLng(pos);
-                    markers[key].getPopup().setContent(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
+            if(c.lat && c.lng) {
+                online++;
+                if(markers[key]) {
+                    markers[key].setLatLng([c.lat, c.lng]);
                 } else {
-                    // Cria novo marcador com ícone numerado
-                    const icon = L.divIcon({
-                        className: 'car-icon',
-                        html: c.id
-                    });
-
-                    markers[key] = L.marker(pos, { icon: icon })
-                        .addTo(map)
-                        .bindPopup(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
+                    markers[key] = L.marker([c.lat, c.lng], {
+                        icon: L.divIcon({ className: 'car-icon', html: c.id })
+                    }).addTo(map).bindPopup(`Carro ${c.id}`);
                 }
             }
         }
-        document.getElementById('count').innerText = total;
-    }, (error) => {
-        console.error("Erro ao ler Firebase:", error);
+        document.getElementById('count').innerText = online;
     });
-</script>
 
+    // Função para exibir a "cauda" do histórico do carro no mapa
+    function exibirTrajeto() {
+        const carId = document.getElementById('carSelector').value;
+        if(!carId) return limparTrajeto();
+
+        db.ref(`prova/carros/carro_${carId}/historico`).limitToLast(50).once('value', snap => {
+            const pontos = [];
+            snap.forEach(child => {
+                const p = child.val();
+                pontos.push([p.lat, p.lng]);
+            });
+            if(pontos.length > 0) {
+                trajetoLinha.setLatLngs(pontos);
+                map.panTo(pontos[pontos.length - 1]);
+            }
+        });
+    }
+
+    function limparTrajeto() {
+        trajetoLinha.setLatLngs([]);
+    }
+</script>
 </body>
 </html>
