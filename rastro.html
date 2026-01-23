@@ -2,35 +2,33 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Auditoria</title>
+    <title>Auditoria de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; }
-        #map { flex-grow: 1; background: #242424; }
-        h2 { color: #e67e22; margin-top: 0; font-size: 18px; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
-        select { background: #333; color: white; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; font-size: 13px; line-height: 1.6; border-left: 4px solid #e67e22; }
-        .infracao { color: #ff4d4d; font-weight: bold; display: block; margin-top: 5px; }
-        .ok { color: #2ecc71; font-weight: bold; }
+        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; }
+        #sidebar { width: 350px; background: #2d3748; padding: 20px; display: flex; flex-direction: column; box-shadow: 4px 0 15px rgba(0,0,0,0.3); z-index: 1000; }
+        #map { flex-grow: 1; }
+        h2 { color: #f6ad55; margin-top: 0; border-bottom: 2px solid #4a5568; padding-bottom: 10px; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: none; font-weight: bold; }
+        select { background: #1a202c; color: white; cursor: pointer; }
+        button { background: #ed8936; color: white; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #dd6b20; }
+        #details { margin-top: 20px; background: #1a202c; padding: 15px; border-radius: 8px; flex-grow: 1; overflow-y: auto; font-size: 13px; border-left: 4px solid #ed8936; }
+        .infracao { color: #fc8181; font-weight: bold; display: block; margin-bottom: 8px; padding: 5px; background: rgba(252, 129, 129, 0.1); border-radius: 4px; }
+        .ok { color: #68d391; display: block; margin-bottom: 5px; }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
-        <h2>🧐 Auditoria de Rastro</h2>
-        <p style="font-size: 12px; color: #888;">Selecione um carro para ver o trajeto e possíveis infrações.</p>
+        <h2>🧐 Auditoria</h2>
+        <label>Selecione o Competidor:</label>
+        <select id="carSelect"><option>Carregando...</option></select>
         
-        <select id="carSelect">
-            <option value="">Carregando competidores...</option>
-        </select>
-        
-        <button onclick="drawTrack()">🔍 Visualizar Trajeto</button>
-        <button onclick="window.location.href='admin.html'" style="background: #444;">⬅️ Voltar ao Admin</button>
+        <button onclick="visualizarRastro()">🔍 Analisar Rastro</button>
+        <button onclick="window.location.href='admin.html'" style="background: #4a5568;">⬅️ Voltar ao Painel</button>
 
-        <div id="details">Selecione um veículo para ver os detalhes da prova.</div>
+        <div id="details">Selecione um carro para processar o relatório de pista.</div>
     </div>
 
     <div id="map"></div>
@@ -50,56 +48,85 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        let map, poly, percursoLayer;
+        let map, rastroPoly, camadaPercurso;
 
         window.onload = function() {
             map = L.map('map').setView([-12.26, -38.96], 13);
-            
             const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-            
-            L.control.layers({"Mapa": ruas, "Satélite": satelite}).addTo(map);
+            const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+            L.control.layers({"Mapa": ruas, "Satélite": sat}).addTo(map);
 
-            poly = L.polyline([], {color: '#805ad5', weight: 4, opacity: 0.8}).addTo(map);
-            percursoLayer = L.geoJSON(null, {
-                style: (f) => ({ color: f.geometry.type === 'Polygon' ? '#ff4d4d' : '#3182ce', fillOpacity: 0.2 }),
+            rastroPoly = L.polyline([], {color: '#b794f4', weight: 5, opacity: 0.8}).addTo(map);
+            camadaPercurso = L.geoJSON(null, {
+                style: (f) => ({ color: f.geometry.type === 'Polygon' ? '#f56565' : '#4299e1', fillOpacity: 0.3 }),
                 pointToLayer: (f, latlng) => f.properties.type === 'circle' ? L.circle(latlng, {radius: f.properties.radius, color: '#ed8936'}) : null
             }).addTo(map);
 
-            carregarCompetidores();
+            carregarLista();
         };
 
-        function carregarCompetidores() {
+        function carregarLista() {
             db.ref('competidores').on('value', snap => {
                 const select = document.getElementById('carSelect');
-                let html = '<option value="">Selecione o Carro</option>';
+                select.innerHTML = '<option value="">Escolha um piloto</option>';
                 snap.forEach(c => {
-                    html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`;
+                    select.innerHTML += `<option value="${c.key}">ID: ${c.key} - ${c.val().nome}</option>`;
                 });
-                select.innerHTML = html;
             });
         }
 
-        async function drawTrack() {
+        async function visualizarRastro() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
 
             const percursoSnap = await db.ref('configuracoes/percurso').once('value');
             const rastroSnap = await db.ref('rastros/' + id).once('value');
             
-            if(!percursoSnap.exists()) return alert("Trajeto oficial não definido no Admin.");
+            if(!percursoSnap.exists()) return alert("Defina o trajeto no Admin primeiro!");
             
-            const percurso = percursoSnap.val();
-            percursoLayer.clearLayers();
-            percursoLayer.addData(percurso);
+            // Desenha Percurso Oficial
+            camadaPercurso.clearLayers();
+            camadaPercurso.addData(percursoSnap.val());
 
-            if(!rastroSnap.exists()) {
-                poly.setLatLngs([]);
-                document.getElementById('details').innerHTML = "Nenhum rastro encontrado para este carro.";
-                return;
+            // Desenha Rastro do Piloto
+            if(rastroSnap.exists()) {
+                const dados = Object.values(rastroSnap.val());
+                const coords = dados.map(p => [p.lat, p.lng]);
+                rastroPoly.setLatLngs(coords);
+                map.fitBounds(rastroPoly.getBounds());
+                processarLog(dados, percursoSnap.val());
+            } else {
+                alert("Nenhum dado de rastro para este piloto.");
             }
+        }
 
-            const
+        function processarLog(rastro, percurso) {
+            const painel = document.getElementById('details');
+            let relatorio = "<strong>Relatório de Invasão:</strong><br><br>";
+            const pts = rastro.map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
+
+            percurso.features.forEach((feat, i) => {
+                const nome = feat.geometry.type === 'Polygon' ? `Radar ${i+1}` : `Waypoint ${i+1}`;
+                
+                if(feat.geometry.type === 'Polygon') {
+                    const limite = feat.properties.velocidade || 60;
+                    const excesso = pts.find(p => turf.booleanPointInPolygon(p, feat) && p.properties.vel > limite);
+                    relatorio += excesso ? 
+                        `<span class="infracao">❌ ${nome}: Excesso (${excesso.properties.vel.toFixed(1)} km/h)</span>` : 
+                        `<span class="ok">✅ ${nome}: Velocidade OK</span>`;
+                } else {
+                    const centro = turf.point(feat.geometry.coordinates);
+                    const passou = pts.some(p => turf.distance(p, centro) <= (feat.properties.radius/1000));
+                    relatorio += passou ? 
+                        `<span class="ok">✅ ${nome}: Validado</span>` : 
+                        `<span class="infracao">❌ ${nome}: Não visitado</span>`;
+                }
+            });
+            painel.innerHTML = relatorio;
+        }
+    </script>
+</body>
+</html>
