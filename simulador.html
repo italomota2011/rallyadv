@@ -1,27 +1,65 @@
 <!DOCTYPE html>
 <html>
+<head>
+    <title>Rastro em Tempo Real</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, #map { height: 100vh; margin: 0; }
+        #status-box { position: absolute; top: 10px; left: 50px; z-index: 1000; background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .car-icon { background: #e67e22; color: white; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 24px; font-weight: bold; font-size: 10px; }
+    </style>
+</head>
 <body>
-    <h2>Simulando 100 carros...</h2>
+    <div id="status-box">Status: <span id="count">0</span> Carros Online</div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+
     <script>
-        const firebaseConfig = { apiKey: "SUA_API", databaseURL: "SUA_URL", projectId: "SEU_ID" };
+        // COLOQUE AS MESMAS CREDENCIAIS AQUI
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY_AQUI",
+            databaseURL: "SUA_URL_DO_FIREBASE_AQUI",
+            projectId: "SEU_PROJECT_ID"
+        };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        function mover() {
-            for(let i=1; i<=100; i++) {
-                const lat = -23.5505 + (Math.random() * 0.02);
-                const lng = -46.6333 + (Math.random() * 0.02);
-                const vel = Math.floor(Math.random() * 100);
-                
-                const ref = db.ref(`prova/carros/carro_${i}`);
-                ref.update({ id: i, lat, lng, velocidade: vel });
-                // Salva no histórico para apuração posterior
-                ref.child('historico').push({ lat, lng, vel, t: Date.now() });
+        const map = L.map('map').setView([-23.5505, -46.6333], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        const markers = {};
+
+        // Escuta o nó "prova/carros"
+        db.ref('prova/carros').on('value', snapshot => {
+            const carros = snapshot.val();
+            if (!carros) return;
+
+            let totalOnline = 0;
+            for (let key in carros) {
+                const c = carros[key];
+                if (c.lat && c.lng) {
+                    totalOnline++;
+                    const pos = [c.lat, c.lng];
+
+                    if (markers[key]) {
+                        markers[key].setLatLng(pos);
+                    } else {
+                        markers[key] = L.marker(pos, {
+                            icon: L.divIcon({ 
+                                className: 'car-icon', 
+                                html: c.id, 
+                                iconSize: [24, 24] 
+                            })
+                        }).addTo(map);
+                    }
+                    markers[key].bindPopup(`Carro ${c.id}<br>Velocidade: ${c.velocidade} km/h`);
+                }
             }
-        }
-        setInterval(mover, 3000);
+            document.getElementById('count').innerText = totalOnline;
+        });
     </script>
 </body>
 </html>
