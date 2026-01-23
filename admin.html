@@ -51,13 +51,22 @@
         let isSat = false;
 
         const drawnItems = new L.FeatureGroup().addTo(map);
-        const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false }}).addTo(map);
+        const drawControl = new L.Control.Draw({ 
+            edit: { featureGroup: drawnItems }, 
+            draw: { marker: false, circlemarker: false }
+        }).addTo(map);
 
+        // CORREÇÃO: Verificação de GeoJSON válido antes de carregar
         db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists()) L.geoJSON(snap.val(), { 
-                pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
-                onEachFeature: (f, l) => drawnItems.addLayer(l) 
-            });
+            const data = snap.val();
+            if(data && data.features && data.features.length > 0) { 
+                try {
+                    L.geoJSON(data, { 
+                        pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
+                        onEachFeature: (f, l) => drawnItems.addLayer(l) 
+                    });
+                } catch(e) { console.error("Erro ao carregar mapa salvo:", e); }
+            }
         });
 
         const carMarkers = {};
@@ -112,7 +121,6 @@
                 let perdidos = 0;
                 if(!rastros[id]) continue;
 
-                // Ordenação cronológica para garantir análise correta
                 const rastroOrdenado = Object.values(rastros[id]).sort((a, b) => a.ts - b.ts);
 
                 config.features.forEach(feat => {
