@@ -21,8 +21,6 @@
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Cidade...">
         <button onclick="buscar()">🔍 Buscar</button>
-        <button onclick="toggleSatelite()" id="btnSat" style="background: #4a5568;">🛰️ Satélite</button>
-        
         <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
         <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
         <button onclick="window.location.href='resultados.html'">📊 Ranking</button>
@@ -52,18 +50,14 @@
         const db = firebase.database(app);
         let map, drawnItems;
 
-        // Camadas definidas fora para alternância rápida
-        const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-        let isSatelite = false;
-
         window.onload = function() {
-            // Inicializa o mapa com a camada de ruas padrão
+            // Inicializa o mapa
             map = L.map('map').setView([-12.26, -38.96], 13);
-            camadaRuas.addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
             drawnItems = new L.FeatureGroup().addTo(map);
 
+            // Adiciona ferramentas de desenho
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
                 draw: {
@@ -77,6 +71,7 @@
             });
             map.addControl(drawControl);
 
+            // Captura criação de desenhos
             map.on(L.Draw.Event.CREATED, (e) => {
                 const layer = e.layer;
                 layer.feature = layer.feature || { type: "Feature", properties: {} };
@@ -94,21 +89,6 @@
 
             carregarTrajeto();
             rastrearCarros();
-        };
-
-        // FUNÇÃO PARA ALTERNAR SATÉLITE
-        window.toggleSatelite = function() {
-            if (!isSatelite) {
-                map.removeLayer(camadaRuas);
-                camadaSat.addTo(map);
-                document.getElementById('btnSat').innerText = "🗺️ Mapa";
-                isSatelite = true;
-            } else {
-                map.removeLayer(camadaSat);
-                camadaRuas.addTo(map);
-                document.getElementById('btnSat').innerText = "🛰️ Satélite";
-                isSatelite = false;
-            }
         };
 
         window.buscar = async function() {
@@ -157,4 +137,47 @@
                     const id = c.key; const p = c.val();
                     if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
                     else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] })
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
+                    }).addTo(map);
+                });
+            });
+        }
+
+        window.apurar = async function() {
+            if(!confirm("Iniciar cálculo de penalidades?")) return;
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastros = (await db.ref('rastros').once('value')).val();
+            const comps = (await db.ref('competidores').once('value')).val();
+
+            if(!config || !rastros) return alert("Erro: Sem percurso ou rastros.");
+
+            for(let id in comps) {
+                let penalidades = 0;
+                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
+                if(rastroArr.length === 0) continue;
+
+                config.features.forEach(feat => {
+                    // Radar (Polígono)
+                    if(feat.geometry.type === 'Polygon') {
+                        const excesso = rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
+                        if(excesso) penalidades += 10000;
+                    } 
+                    // Waypoint (Círculo)
+                    else if(feat.properties && feat.properties.type === 'circle') {
+                        const centro = feat.geometry.coordinates;
+                        const raioKm = feat.properties.radius / 1000;
+                        const passou = rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
+                        if(!passou) penalidades += 20000;
+                    }
+                });
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidades });
+            }
+            alert("✅ Apuração finalizada!");
+        };
+
+        window.resetar = function() {
+            if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
+        };
+    </script>
+</body>
+</html>
