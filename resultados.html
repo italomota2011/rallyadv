@@ -6,16 +6,21 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 20px; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        .cat-box { background: white; margin-bottom: 30px; border-radius: 10px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-left: 8px solid #e67e22; }
+        h2 { color: #e67e22; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; background: #f8f9fa; padding: 12px; color: #7f8c8d; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .perdidos { color: #e74c3c; font-weight: bold; }
+        .total { color: #27ae60; font-weight: bold; font-size: 1.1em; }
+        .pos { font-weight: bold; background: #34495e; color: white; padding: 4px 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <h1>🏆 Classificação</h1>
-    <div id="results"></div>
+    <h1>🏆 Classificação Oficial</h1>
+    <div id="results">Carregando classificação...</div>
 
     <script>
         const firebaseConfig = {
@@ -33,19 +38,41 @@
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
             let html = "";
-            const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+            const categories = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
             
-            cats.forEach(c => {
+            categories.forEach(c => {
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
+                
+                // Ordenar por maior pontuação
                 list.sort((a,b) => b.pontos - a.pontos);
+
                 if(list.length > 0) {
-                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>Nº</th><th>Nome</th><th>Pontos</th></tr>`;
-                    list.forEach(p => html += `<tr><td>${p.id}</td><td>${p.nome}</td><td><b>${p.pontos}</b></td></tr>`);
+                    html += `<div class="cat-box">
+                        <h2>${c}</h2>
+                        <table>
+                            <tr>
+                                <th>Pos</th>
+                                <th>Carro</th>
+                                <th>Piloto</th>
+                                <th>Penalidades</th>
+                                <th>Pontuação Total</th>
+                            </tr>`;
+                    
+                    list.forEach((p, index) => {
+                        const pontosPerdidos = 150000 - p.pontos;
+                        html += `<tr>
+                            <td><span class="pos">${index + 1}º</span></td>
+                            <td><b>${p.id}</b></td>
+                            <td>${p.nome}</td>
+                            <td class="perdidos">-${pontosPerdidos.toLocaleString()}</td>
+                            <td class="total">${p.pontos.toLocaleString()}</td>
+                        </tr>`;
+                    });
                     html += `</table></div>`;
                 }
             });
-            document.getElementById('results').innerHTML = html || "Nenhum dado.";
+            document.getElementById('results').innerHTML = html || "Aguardando início da prova...";
         });
     </script>
 </body>
