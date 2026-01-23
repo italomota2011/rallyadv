@@ -5,8 +5,11 @@
     <title>Ranking Rally</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
     <style>
         body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; }
@@ -14,10 +17,31 @@
         th { background: #f8f9fa; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
+        .pos { font-weight: bold; color: #e67e22; width: 40px; }
+        
+        button { 
+            padding: 10px 20px; 
+            background: #27ae60; 
+            color: white; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold;
+        }
+        button:hover { background: #219150; }
+
+        /* Ajuste para o PDF não cortar o conteúdo */
+        @media print {
+            #btnExport { display: none; }
+        }
     </style>
 </head>
 <body>
-    <h1>🏆 Classificação Oficial</h1>
+    <div class="header-actions">
+        <h1>🏆 Classificação Oficial</h1>
+        <button id="btnExport" onclick="exportarPDF()">Exportar PDF</button>
+    </div>
+
     <div id="results">Carregando...</div>
 
     <script>
@@ -42,7 +66,7 @@
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
                 
-                // Ordena por maior pontuação
+                // Ordena por maior pontuação (Descendente)
                 list.sort((a,b) => b.pontos - a.pontos);
 
                 if(list.length > 0) {
@@ -50,26 +74,16 @@
                                 <h2>${c}</h2>
                                 <table>
                                     <tr>
+                                        <th class="pos">POS</th>
                                         <th>Nº</th>
                                         <th>Piloto</th>
                                         <th>Penalidades</th>
                                         <th>Pontuação Final</th>
                                     </tr>`;
                     
-                    list.forEach(p => {
+                    list.forEach((p, index) => {
                         const penalidade = 150000 - p.pontos;
                         html += `<tr>
+                                    <td class="pos">${index + 1}º</td>
                                     <td>${p.id}</td>
-                                    <td>${p.nome}</td>
-                                    <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
-                                    <td class="total">${p.pontos.toLocaleString('pt-BR')}</td>
-                                </tr>`;
-                    });
-                    html += `</table></div>`;
-                }
-            });
-            document.getElementById('results').innerHTML = html || "Nenhum competidor registrado.";
-        });
-    </script>
-</body>
-</html>
+                                    <td>${p.nome
