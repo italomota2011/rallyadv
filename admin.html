@@ -8,7 +8,7 @@
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; background: #1a202c; overflow: hidden; font-family: sans-serif; }
-        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 -15px; gap: 10px; z-index: 9999; position: relative; padding-left: 15px; }
+        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
         #map { height: calc(100vh - 60px); width: 100%; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
         button:hover { background: #718096; }
@@ -21,9 +21,13 @@
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Cidade...">
         <button onclick="buscar()">🔍 Buscar</button>
+        
         <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
         <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
-        <button onclick="window.location.href='resultados.html'">📊 Ranking</button>
+        
+        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Ver Rastro</button>
+        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Ranking</button>
+        
         <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
     </div>
 
@@ -51,22 +55,17 @@
         let map, drawnItems;
 
         window.onload = function() {
-            // 1. Definir as camadas
             const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
             const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
 
-            // 2. Inicializar o mapa (Versão que você confirmou que funciona)
             map = L.map('map', {
                 center: [-12.26, -38.96],
                 zoom: 13,
-                layers: [ruas] // Começa com ruas
+                layers: [ruas]
             });
 
-            // 3. Adicionar o seletor de mapa no canto superior direito (Maneira oficial do Leaflet)
-            const baseMaps = {
-                "Mapa": ruas,
-                "Satélite": satelite
-            };
+            // Controle de camadas (Mapa/Satélite) no canto superior direito
+            const baseMaps = { "Mapa": ruas, "Satélite": satelite };
             L.control.layers(baseMaps).addTo(map);
 
             drawnItems = new L.FeatureGroup().addTo(map);
@@ -98,15 +97,12 @@
             rastrearCarros();
         };
 
-        // Funções de apoio
         window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
             if(!q) return;
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-                const data = await res.json();
-                if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
-            } catch(e) { console.error(e); }
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
         };
 
         window.salvar = function() {
@@ -127,61 +123,4 @@
 
         function carregarTrajeto() {
             db.ref('configuracoes/percurso').once('value', snap => {
-                if(snap.exists()) {
-                    L.geoJSON(snap.val(), {
-                        pointToLayer: (f, latlng) => {
-                            if (f.properties && f.properties.type === 'circle') {
-                                return L.circle(latlng, { radius: f.properties.radius });
-                            }
-                        },
-                        onEachFeature: (f, l) => { drawnItems.addLayer(l); }
-                    });
-                }
-            });
-        }
-
-        function rastrearCarros() {
-            const markers = {};
-            db.ref('posicoes').on('value', snap => {
-                snap.forEach(c => {
-                    const id = c.key; const p = c.val();
-                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
-                });
-            });
-        }
-
-        window.apurar = async function() {
-            if(!confirm("Iniciar cálculo?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-            if(!config || !rastros) return alert("Sem dados.");
-
-            for(let id in comps) {
-                let pen = 0;
-                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
-                if(rastroArr.length === 0) continue;
-
-                config.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        if(rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60))) pen += 10000;
-                    } else if(feat.properties && feat.properties.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raio = feat.properties.radius / 1000;
-                        if(!rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raio)) pen += 20000;
-                    }
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - pen });
-            }
-            alert("✅ Finalizado!");
-        };
-
-        window.resetar = function() {
-            if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
-        };
-    </script>
-</body>
-</html>
+                if(
