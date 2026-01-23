@@ -8,12 +8,11 @@
     <style>
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; }
         body { display: flex; flex-direction: column; font-family: sans-serif; }
-        #map { flex-grow: 1; width: 100%; height: 100%; min-height: 400px; background: #eee; }
+        #map { flex-grow: 1; width: 100%; height: 100%; background: #eee; }
         .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 1001; }
         .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; }
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; transition: 0.2s; }
-        button:hover { opacity: 0.9; }
-        input { padding: 8px; border-radius: 4px; border: none; }
+        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
+        input { padding: 8px; border-radius: 4px; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
@@ -36,7 +35,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -49,29 +47,28 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        // Globais
         let map, drawnItems, drawControl;
         let isSat = false;
         const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
 
-        // Inicialização Garantida
-        window.onload = function() {
+        // Função de Inicialização
+        function init() {
             map = L.map('map').setView([-12.26, -38.96], 13);
             streets.addTo(map);
-
             drawnItems = new L.FeatureGroup().addTo(map);
 
             drawControl = new L.Control.Draw({ 
                 edit: { featureGroup: drawnItems }, 
                 draw: { 
-                    marker: false, circlemarker: false, rectangle: false, polyline: false,
-                    circle: true, polygon: true 
+                    polyline: true,   // REATIVADO: Botão de desenhar trajeto (linha)
+                    polygon: true,    // Para Radares
+                    circle: true,     // Para Waypoints
+                    rectangle: false, // CONTINUA OCULTO como pedido
+                    marker: false, 
+                    circlemarker: false 
                 } 
             }).addTo(map);
-
-            loadSavedRoute();
-            watchCars();
 
             map.on(L.Draw.Event.CREATED, (e) => {
                 const layer = e.layer;
@@ -84,65 +81,58 @@
                 }
                 drawnItems.addLayer(layer);
             });
-        };
 
-        function loadSavedRoute() {
+            loadRoute();
+            watchCars();
+        }
+
+        window.searchCity = async function() {
+            const q = document.getElementById('cityInput').value;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
+        }
+
+        window.toggleMap = function() {
+            isSat ? map.removeLayer(sat) : sat.addTo(map);
+            isSat = !isSat;
+        }
+
+        window.saveRoute = function() {
+            const data = drawnItems.toGeoJSON();
+            // Preservar o raio dos círculos no salvamento
+            drawnItems.eachLayer((layer, index) => {
+                if(layer instanceof L.Circle) {
+                    data.features[index].properties.type = 'circle';
+                    data.features[index].properties.radius = layer.getRadius();
+                }
+            });
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Trajeto e Waypoints salvos!"));
+        }
+
+        function loadRoute() {
             db.ref('configuracoes/percurso').once('value', snap => {
                 if(snap.exists()) {
                     L.geoJSON(snap.val(), {
-                        pointToLayer: (feat, latlng) => {
-                            if (feat.properties && feat.properties.type === 'circle') {
-                                return L.circle(latlng, { radius: feat.properties.radius });
-                            }
-                        },
-                        onEachFeature: (feat, layer) => { drawnItems.addLayer(layer); }
+                        pointToLayer: (f, latlng) => f.properties.type === 'circle' ? L.circle(latlng, {radius: f.properties.radius}) : null,
+                        onEachFeature: (f, l) => drawnItems.addLayer(l)
                     });
                 }
             });
         }
 
-        const carMarkers = {};
         function watchCars() {
+            const carMarkers = {};
             db.ref('posicoes').on('value', snap => {
                 snap.forEach(c => {
                     const id = c.key; const p = c.val();
-                    if(carMarkers[id]) { carMarkers[id].setLatLng([p.lat, p.lng]); } 
-                    else { 
-                        carMarkers[id] = L.marker([p.lat, p.lng], { 
-                            icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] }) 
-                        }).addTo(map); 
-                    }
+                    if(carMarkers[id]) carMarkers[id].setLatLng([p.lat, p.lng]);
+                    else carMarkers[id] = L.marker([p.lat, p.lng], { 
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30] }) 
+                    }).addTo(map);
                 });
             });
         }
-
-        // Funções de Botão (Escopo Global)
-        window.toggleMap = function() {
-            if(isSat) { map.removeLayer(sat); streets.addTo(map); } 
-            else { map.removeLayer(streets); sat.addTo(map); }
-            isSat = !isSat;
-        };
-
-        window.searchCity = async function() {
-            const q = document.getElementById('cityInput').value;
-            if(!q) return;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
-        };
-
-        window.saveRoute = function() {
-            const data = drawnItems.toGeoJSON();
-            let i = 0;
-            drawnItems.eachLayer(layer => {
-                if(layer instanceof L.Circle) {
-                    data.features[i].properties.type = 'circle';
-                    data.features[i].properties.radius = layer.getRadius();
-                }
-                i++;
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Salvo!"));
-        };
 
         window.runApuracao = async function() {
             if(!confirm("Iniciar apuração?")) return;
@@ -152,28 +142,31 @@
 
             for(let id in comps) {
                 let penalidade = 0;
-                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], { vel: p.vel }));
-                if(rastroArr.length === 0) continue;
+                const rastroPts = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], { vel: p.vel }));
+                if(rastroPts.length === 0) continue;
 
                 config.features.forEach(feat => {
                     if(feat.geometry.type === 'Polygon') {
-                        let excesso = rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
+                        let excesso = rastroPts.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
                         if(excesso) penalidade += 10000;
-                    } else if(feat.properties.type === 'circle') {
+                    } else if(feat.properties && feat.properties.type === 'circle') {
                         const centro = feat.geometry.coordinates;
                         const raioKm = feat.properties.radius / 1000;
-                        let passou = rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
+                        let passou = rastroPts.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
                         if(!passou) penalidade += 20000;
                     }
                 });
                 db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidade });
             }
-            alert("Concluído!");
-        };
+            alert("Apuração finalizada!");
+        }
 
         window.resetSystem = function() {
             if(prompt("Senha:") === "261291") db.ref('/').remove().then(() => location.reload());
-        };
+        }
+
+        // Inicia tudo
+        window.onload = init;
     </script>
 </body>
 </html>
