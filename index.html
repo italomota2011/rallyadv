@@ -2,119 +2,60 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rally Competidor - GPS</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Competidor</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        .card { background: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 90%; max-width: 400px; text-align: center; border: 1px solid #333; }
-        h2 { color: #ffc107; margin-bottom: 5px; }
-        .car-display { font-size: 1.2em; color: #aaa; margin-bottom: 20px; }
-        #speed { font-size: 5em; font-weight: bold; color: #28a745; margin: 10px 0; line-height: 1; }
-        .unit { font-size: 1.2em; color: #777; margin-bottom: 30px; }
-        input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
-        button { width: 100%; padding: 18px; background: #ffc107; color: black; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:disabled { background: #444; color: #888; cursor: not-allowed; }
-        #status-box { margin-top: 20px; padding: 10px; border-radius: 8px; font-size: 14px; background: #333; color: #ffc107; }
-        .blink { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0.2; } }
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 40px; border-radius: 20px; width: 85%; max-width: 400px; border: 1px solid #333; }
+        #speed { font-size: 5em; font-weight: bold; color: #4caf50; display: block; }
+        input { width: 100%; padding: 15px; margin: 20px 0; background: #222; border: 1px solid #444; color: white; border-radius: 10px; font-size: 20px; text-align: center; box-sizing: border-box; }
+        button { width: 100%; padding: 15px; background: #ffc107; border: none; border-radius: 10px; font-weight: bold; font-size: 18px; cursor: pointer; }
+        #status { margin-top: 15px; font-size: 14px; color: #ffc107; }
     </style>
 </head>
 <body>
-
-<div class="card">
-    <h2>RALLY TRACKER</h2>
-    <div class="car-display" id="carInfo">Aguardando identificação...</div>
-
-    <input type="number" id="carNumber" placeholder="Número do Carro (1-100)" min="1" max="100">
-    <button id="btnStart" onclick="startTracking()">INICIAR PROVA</button>
-
-    <div id="trackingArea" style="display:none;">
-        <div id="speed">0</div>
-        <div class="unit">km/h</div>
-        <div id="status-box">
-            <span id="dot" class="blink">●</span> <span id="statusText">GPS Ativo</span>
+    <div class="card">
+        <h2 id="carLabel">RALLY TRACKER</h2>
+        <input type="number" id="carNumber" placeholder="Nº do Carro">
+        <button id="btn" onclick="start()">INICIAR RASTREIO</button>
+        <div id="data" style="display:none;">
+            <span id="speed">0</span><span>km/h</span>
+            <div id="status">Transmitindo via GPS...</div>
         </div>
     </div>
-</div>
 
-<script>
-    // Sua Configuração do Firebase
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        storageBucket: "cronometro-rally.firebasestorage.app",
-        messagingSenderId: "341731891354",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-    function startTracking() {
-        const carId = document.getElementById('carNumber').value;
+        function start() {
+            const id = document.getElementById('carNumber').value;
+            if(!id) return alert("Digite o número!");
 
-        if (!carId || carId < 1 || carId > 100) {
-            alert("Por favor, insira um número de carro válido (1 a 100).");
-            return;
+            document.getElementById('carNumber').style.display = 'none';
+            document.getElementById('btn').style.display = 'none';
+            document.getElementById('data').style.display = 'block';
+            document.getElementById('carLabel').innerText = "CARRO " + id;
+
+            navigator.geolocation.watchPosition(pos => {
+                const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+                document.getElementById('speed').innerText = Math.round(speed);
+                const payload = { lat: pos.coords.latitude, lng: pos.coords.longitude, speed: speed, time: Date.now() };
+                db.ref('live_tracking/' + id).set(payload);
+                db.ref('history/' + id).push(payload);
+            }, e => alert("Erro GPS: " + e.message), { enableHighAccuracy: true });
         }
-
-        // Interface
-        document.getElementById('carNumber').style.display = 'none';
-        document.getElementById('btnStart').style.display = 'none';
-        document.getElementById('trackingArea').style.display = 'block';
-        document.getElementById('carInfo').innerText = "CARRO Nº " + carId;
-
-        if ("geolocation" in navigator) {
-            // watchPosition é o comando que mantém o rastreio constante
-            navigator.geolocation.watchPosition(
-                (pos) => {
-                    // O navegador retorna velocidade em metros por segundo (m/s)
-                    // Multiplicamos por 3.6 para ter km/h
-                    const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
-                    
-                    document.getElementById('speed').innerText = Math.round(speed);
-                    document.getElementById('statusText').innerText = "Transmitindo...";
-                    document.getElementById('status-box').style.color = "#28a745";
-
-                    const gpsData = {
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                        speed: speed,
-                        timestamp: Date.now()
-                    };
-
-                    // 1. Atualiza posição real para o Admin
-                    db.ref('live_tracking/' + carId).set(gpsData);
-
-                    // 2. Registra histórico para a apuração final
-                    db.ref('history/' + carId).push(gpsData);
-                },
-                (err) => {
-                    let msg = "Erro desconhecido";
-                    if(err.code == 1) msg = "Permissão do GPS negada pelo usuário.";
-                    if(err.code == 2) msg = "Sinal de GPS não encontrado.";
-                    if(err.code == 3) msg = "Tempo esgotado (Timeout).";
-                    
-                    document.getElementById('statusText').innerText = "Erro: GPS Offline";
-                    document.getElementById('status-box').style.color = "#dc3545";
-                    alert(msg);
-                },
-                {
-                    enableHighAccuracy: true, // Força o uso do GPS de alta precisão
-                    maximumAge: 1000,         // Não aceita posições em cache com mais de 1 seg
-                    timeout: 20000            // Aguarda até 20 segundos por sinal
-                }
-            );
-        } else {
-            alert("Seu celular não possui ou não suporta GPS no navegador.");
-        }
-    }
-</script>
-
+    </script>
 </body>
 </html>
