@@ -24,7 +24,7 @@
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="number" id="carro" placeholder="Nº do Carro (1-100)" min="1" max="100">
+            <input type="number" id="carro" placeholder="Nº do Carro" min="1" max="100">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
         <div id="ativo" class="tracking">
@@ -50,20 +50,14 @@
             const nomeRaw = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
             const num = parseInt(numRaw);
-            if(!nomeRaw || !numRaw) return alert("Preencha tudo!");
-            if(num < 1 || num > 100) return alert("Nº entre 1-100!");
-
+            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
+            
             try {
-                const snap = await db.ref('competidores').once('value');
-                const exist = snap.val() || {};
-                for(let id in exist) {
-                    if(exist[id].nome.toLowerCase() === nomeRaw.toLowerCase()) return alert("Piloto já cadastrado!");
-                    if(id == num) return alert("Nº em uso!");
-                }
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat, pontos: 150000 });
                 document.getElementById('setup').style.display = 'none';
                 document.getElementById('ativo').style.display = 'block';
                 document.getElementById('viewCarro').innerText = "Carro " + num;
+                
                 navigator.geolocation.watchPosition(pos => {
                     const vel = (pos.coords.speed || 0) * 3.6;
                     document.getElementById('viewVel').innerText = vel.toFixed(1);
@@ -71,7 +65,7 @@
                     db.ref('posicoes/' + num).set(coord);
                     db.ref('rastros/' + num).push(coord);
                 }, null, { enableHighAccuracy: true });
-            } catch (e) { alert("Erro de conexão."); }
+            } catch (e) { alert("Erro ao iniciar."); }
         };
     </script>
 </body>
