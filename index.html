@@ -11,20 +11,28 @@
         .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
+        button:disabled { background: #555; cursor: not-allowed; }
         .tracking { text-align: center; display: none; }
+        .error-msg { color: #ff4d4d; font-size: 12px; margin-top: -10px; margin-bottom: 10px; display: none; }
     </style>
 </head>
 <body>
     <div class="card">
         <div id="setup">
             <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto">
+            
+            <input type="text" id="nome" placeholder="Nome do Piloto (Apenas letras)" autocomplete="off">
+            <div id="errNome" class="error-msg">Use apenas letras no nome.</div>
+
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
+
+            <input type="number" id="carro" placeholder="Nº do Carro (1-100)" min="1" max="100">
+            <div id="errCarro" class="error-msg">Número deve ser entre 1 e 100.</div>
+
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
         <div id="ativo" class="tracking">
@@ -48,25 +56,24 @@
         const db = firebase.database(app);
 
         document.getElementById('btnIniciar').onclick = async function() {
-            const num = document.getElementById('carro').value;
-            const nome = document.getElementById('nome').value;
+            const inputNome = document.getElementById('nome');
+            const inputCarro = document.getElementById('carro');
+            
+            const nome = inputNome.value.trim();
+            const num = parseInt(inputCarro.value);
             const cat = document.getElementById('categoria').value;
 
-            if(!nome || !num) return alert("Preencha tudo!");
+            // Reset de erros
+            document.getElementById('errNome').style.display = 'none';
+            document.getElementById('errCarro').style.display = 'none';
 
-            await db.ref('competidores/' + num).set({ nome, categoria: cat, pontos: 150000 });
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
-            document.getElementById('viewCarro').innerText = "Carro " + num;
+            // Validação de Nome (Apenas letras e espaços)
+            const regexLetras = /^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/;
+            if (!regexLetras.test(nome)) {
+                document.getElementById('errNome').style.display = 'block';
+                return;
+            }
 
-            navigator.geolocation.watchPosition(pos => {
-                const vel = (pos.coords.speed || 0) * 3.6;
-                document.getElementById('viewVel').innerText = vel.toFixed(1);
-                const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel, ts: Date.now() };
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-            }, null, { enableHighAccuracy: true });
-        };
-    </script>
-</body>
-</html>
+            // Validação de Número (1 a 100)
+            if (isNaN(num) || num < 1 || num > 100) {
+                document.getElementById('errCarro').style.
