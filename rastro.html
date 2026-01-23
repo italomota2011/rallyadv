@@ -1,42 +1,98 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Auditoria Pro - Rally</title>
+    <title>Auditoria de Rastro</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1a202c; color: white; }
-        #sidebar { width: 380px; background: #2d3748; padding: 20px; display: flex; flex-direction: column; box-shadow: 4px 0 15px rgba(0,0,0,0.5); z-index: 1000; overflow: hidden; }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #1a202c; color: white; }
+        #side { width: 350px; background: #2d3748; padding: 20px; overflow-y: auto; }
         #map { flex-grow: 1; }
-        
-        h2 { color: #f6ad55; margin: 0 0 15px 0; font-size: 20px; border-bottom: 2px solid #4a5568; padding-bottom: 10px; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: none; font-weight: bold; }
-        select { background: #1a202c; color: white; cursor: pointer; border: 1px solid #4a5568; }
-        
-        #details { margin-top: 15px; flex-grow: 1; overflow-y: auto; background: #1a202c; border-radius: 8px; padding: 10px; font-size: 12px; }
-        
-        .card-infracao { 
-            background: #2d3748; padding: 10px; border-radius: 5px; margin-bottom: 8px; 
-            border-left: 5px solid #4a5568; 
-        }
-        .card-infracao.perigo { border-left-color: #f56565; background: rgba(245, 101, 101, 0.1); }
-        .card-infracao.sucesso { border-left-color: #48bb78; background: rgba(72, 187, 120, 0.1); }
-        
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; text-transform: uppercase; font-weight: bold; }
-        .badge-radar { background: #f56565; color: white; }
-        .badge-wp { background: #4299e1; color: white; }
-
-        .legenda { font-size: 11px; margin-top: 10px; color: #a0aec0; display: flex; gap: 10px; }
-        .legenda span { display: flex; align-items: center; gap: 4px; }
+        select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-weight: bold; cursor: pointer; }
+        .item { background: #1a202c; padding: 10px; margin-top: 10px; border-radius: 5px; border-left: 5px solid #4a5568; }
+        .perigo { border-left-color: #f56565; color: #f56565; }
+        .sucesso { border-left-color: #48bb78; color: #48bb78; }
     </style>
 </head>
 <body>
-
-    <div id="sidebar">
-        <h2>🧐 Auditoria Detalhada</h2>
-        
-        <label>Competidor:</label>
+    <div id="side">
+        <h3>🔍 Auditoria</h3>
         <select id="carSelect"><option>Carregando pilotos...</option></select>
-        
-        <button onclick="analisarCompleto()" style="background: #ed8936; color: white;">🔍 Processar Auditoria</button>
-        <button onclick="window.location.href='admin.html'" style="background: #4a5568; color: white; font-size: 11px;">⬅️
+        <button onclick="analisar()" style="background: #ed8936;">Ver Trajeto</button>
+        <button onclick="window.location.href='admin.html'" style="background: #4a5568;">Voltar</button>
+        <div id="log"></div>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let map, trackGroup, percursoLayer;
+
+        window.onload = () => {
+            map = L.map('map').setView([-12.26, -38.96], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            
+            trackGroup = L.featureGroup().addTo(map);
+            percursoLayer = L.geoJSON(null, {
+                style: (f) => ({ color: f.geometry.type === 'Polygon' ? '#f56565' : '#4299e1', fillOpacity: 0.2 }),
+                pointToLayer: (f, latlng) => L.circle(latlng, {radius: f.properties.radius, color: '#ed8936'})
+            }).addTo(map);
+
+            // Carrega lista de competidores
+            db.ref('competidores').on('value', snap => {
+                const s = document.getElementById('carSelect');
+                s.innerHTML = '<option value="">Selecione um Piloto</option>';
+                snap.forEach(c => s.innerHTML += `<option value="${c.key}">${c.key} - ${c.val().nome}</option>`);
+            });
+        };
+
+        async function analisar() {
+            const id = document.getElementById('carSelect').value;
+            if(!id) return;
+
+            const percurso = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastro = (await db.ref('rastros/' + id).once('value')).val();
+            
+            if(!percurso || !rastro) return alert("Dados insuficientes!");
+
+            trackGroup.clearLayers();
+            percursoLayer.clearLayers();
+            percursoLayer.addData(percurso);
+
+            const rastroArr = Object.values(rastro);
+            let logHtml = "<strong>Relatório:</strong><br>";
+
+            // Desenha rastro ponto a ponto com cores
+            for(let i=0; i < rastroArr.length - 1; i++) {
+                const p1 = rastroArr[i];
+                const p2 = rastroArr[i+1];
+                let cor = "#48bb78"; // Verde
+
+                // Verifica se o ponto 1 está em excesso dentro de algum radar
+                const pt = turf.point([p1.lng, p1.lat], {vel: p1.vel});
+                percurso.features.forEach(feat => {
+                    if(feat.geometry.type === 'Polygon') {
+                        const limite = feat.properties.velocidade || 60;
+                        if(turf.booleanPointInPolygon(pt, feat) && p1.vel > limite) cor = "#f56565"; // Vermelho
+                    }
+                });
+
+                L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], {color: cor, weight: 4}).addTo(trackGroup);
+            }
+            map.fitBounds(trackGroup.getBounds());
+            document.getElementById('log').innerHTML = "Trajeto carregado. Verifique as cores no mapa.";
+        }
+    </script>
+</body>
+</html>
