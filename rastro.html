@@ -3,43 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rastro Rally - Telemetria Pro</title>
+    <title>Rastro Rally - Diagnóstico e Play</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: 'Segoe UI', sans-serif; background: #1a1a1a; overflow: hidden; }
-        #sidebar { width: 320px; background: #2c3e50; color: white; padding: 25px; box-shadow: 4px 0 15px rgba(0,0,0,0.5); z-index: 1000; display: flex; flex-direction: column; overflow-y: auto; }
-        #map { flex-grow: 1; height: 100%; background: #242424; }
-        h2 { color: #e67e22; margin: 0 0 20px 0; font-size: 1.4rem; text-transform: uppercase; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
-        label { font-size: 0.8rem; color: #bdc3c7; margin-bottom: 5px; display: block; }
-        select { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; background: #ecf0f1; font-size: 14px; color: #2c3e50; font-weight: bold; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; color: white; }
-        .btn-draw { background: #e67e22; grid-column: span 2; }
-        .btn-play { background: #27ae60; }
-        .btn-stop { background: #c0392b; }
-        button:hover { opacity: 0.8; transform: translateY(-1px); }
-        #details { padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; border-left: 4px solid #e67e22; }
-        .info-item { margin-bottom: 10px; font-size: 0.9rem; }
-        .info-label { color: #95a5a6; display: block; font-size: 0.7rem; text-transform: uppercase; }
-        /* Estilo do marcador do carro no Play */
-        .car-icon { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 24px; box-shadow: 0 0 10px rgba(230,126,34,0.8); }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: sans-serif; background: #1a1a1a; color: white; }
+        
+        #sidebar { 
+            width: 320px; 
+            background: #2c3e50; 
+            padding: 20px; 
+            z-index: 1001; 
+            display: flex; 
+            flex-direction: column;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* GARANTIA DO MAPA: Altura e largura explícitas */
+        #map { 
+            flex-grow: 1; 
+            height: 100vh !important; 
+            width: 100%; 
+            background: #242424; 
+        }
+
+        h2 { color: #e67e22; margin-top: 0; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
+        
+        select, button { 
+            width: 100%; 
+            padding: 12px; 
+            margin-bottom: 10px; 
+            border-radius: 5px; 
+            border: none; 
+            font-size: 14px;
+        }
+
+        select { background: #ecf0f1; color: #2c3e50; font-weight: bold; }
+        
+        .btn-draw { background: #e67e22; color: white; cursor: pointer; font-weight: bold; }
+        .controls-row { display: flex; gap: 5px; }
+        .btn-play { background: #27ae60; color: white; flex: 1; cursor: pointer; }
+        .btn-stop { background: #c0392b; color: white; flex: 1; cursor: pointer; }
+        
+        #details { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background: rgba(0,0,0,0.2); 
+            border-radius: 5px; 
+            font-size: 0.9rem;
+            border-left: 4px solid #e67e22;
+        }
+
+        .car-marker {
+            background: #e67e22;
+            border: 2px solid white;
+            border-radius: 50%;
+            color: white;
+            text-align: center;
+            font-weight: bold;
+            line-height: 24px;
+        }
     </style>
 </head>
 <body>
+
     <div id="sidebar">
-        <h2>Rastro Pro</h2>
-        <label>Selecione o Competidor:</label>
-        <select id="carSelect"><option>Carregando pilotos...</option></select>
+        <h2>Rastro Rally</h2>
         
-        <div class="controls">
-            <button class="btn-draw" onclick="drawTrack()">CARREGAR RASTRO</button>
-            <button class="btn-play" onclick="startPlayback()">PLAY</button>
-            <button class="btn-stop" onclick="stopPlayback()">STOP</button>
+        <label style="font-size: 12px; color: #bdc3c7;">Piloto:</label>
+        <select id="carSelect">
+            <option value="">Aguardando Firebase...</option>
+        </select>
+        
+        <button class="btn-draw" id="btnLoad">CARREGAR TRAJETO</button>
+        
+        <div class="controls-row">
+            <button class="btn-play" id="btnPlay">PLAY</button>
+            <button class="btn-stop" id="btnStop">STOP</button>
         </div>
         
         <div id="details">
-            <div id="infoContent">Selecione um carro para ver a telemetria.</div>
+            <div id="status">Status: Pronto</div>
+            <div id="telemetria" style="margin-top:10px;"></div>
         </div>
     </div>
-    
-    <div id="map
+
+    <div id="map"></div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // 1. Configuração (Conforme seus arquivos)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+
+        // Variáveis globais
+        let map, db, trackGroup, playbackMarker, playbackInterval;
+        let currentPath = [];
+
+        // 2. Inicialização Segura
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                // Inicializa Firebase
+                const app = firebase.initializeApp(firebaseConfig);
+                db = firebase.database(app);
+
+                // Inicializa Mapa
+                map =
