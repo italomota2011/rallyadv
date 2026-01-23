@@ -1,87 +1,84 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Competidor - Rally</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rally Competidor</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: sans-serif; text-align: center; padding: 20px; }
-        input, button { width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; }
+        body { font-family: sans-serif; padding: 20px; text-align: center; }
+        input, select, button { width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; }
         #status { color: green; font-weight: bold; }
     </style>
 </head>
 <body>
-
-    <h2>Registro de Competidor</h2>
+    <h2>Rally - GPS Competidor</h2>
     <div id="setup">
+        <input type="text" id="driverName" placeholder="Nome do Piloto">
         <input type="number" id="carNumber" placeholder="Número do Carro (1-100)" min="1" max="100">
-        <input type="text" id="driverName" placeholder="Seu Nome">
-        <button onclick="startTracking()">Iniciar Rastreio</button>
+        <select id="category">
+            <option value="4x2">Categoria 4x2</option>
+            <option value="4x4">Categoria 4x4</option>
+        </select>
+        <button onclick="startTracking()">Iniciar Transmissão</button>
     </div>
 
     <div id="tracking" style="display:none;">
-        <h3>Rastreio Ativo!</h3>
-        <p>Carro: <span id="displayCar"></span></p>
-        <p id="status">Enviando localização...</p>
-        <p>Velocidade atual: <span id="speed">0</span> km/h</p>
+        <h3>Enviando Dados...</h3>
+        <p id="displaySpeed">0 km/h</p>
+        <div id="status">Conectado ao GPS</div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally"
+    };
 
-        function startTracking() {
-            const carNum = document.getElementById('carNumber').value;
-            const name = document.getElementById('driverName').value;
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-            if (!carNum || !name) return alert("Preencha tudo!");
+    window.startTracking = () => {
+        const carNum = document.getElementById('carNumber').value;
+        const name = document.getElementById('driverName').value;
+        const cat = document.getElementById('category').value;
 
-            // Verificar se carro já existe
-            db.ref('competidores/' + carNum).once('value', snapshot => {
-                if (snapshot.exists()) {
-                    alert("Este número de carro já está em uso!");
-                } else {
-                    document.getElementById('setup').style.display = 'none';
-                    document.getElementById('tracking').style.display = 'block';
-                    document.getElementById('displayCar').innerText = carNum;
-                    initGps(carNum, name);
-                }
+        if(!carNum || !name) return alert("Preencha todos os campos");
+
+        // Verifica se carro já existe
+        onValue(ref(db, `cars/${carNum}`), (snapshot) => {
+            if(snapshot.exists() && !window.isTracking) {
+                alert("Este número de carro já está em uso!");
+            } else {
+                proceed(carNum, name, cat);
+            }
+        }, { onlyOnce: true });
+    };
+
+    function proceed(id, name, category) {
+        window.isTracking = true;
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('tracking').style.display = 'block';
+
+        navigator.geolocation.watchPosition((pos) => {
+            const speedKmH = pos.coords.speed ? (pos.coords.speed * 3.6).toFixed(1) : 0;
+            document.getElementById('displaySpeed').innerText = speedKmH + " km/h";
+
+            set(ref(db, `cars/${id}`), {
+                name: name,
+                category: category,
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                speed: speedKmH,
+                timestamp: Date.now()
             });
-        }
-
-        function initGps(carNum, name) {
-            navigator.geolocation.watchPosition(pos => {
-                const data = {
-                    carNumber: carNum,
-                    nome: name,
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                    speed: (pos.coords.speed || 0) * 3.6, // m/s para km/h
-                    timestamp: Date.now()
-                };
-
-                // Enviar posição atual
-                db.ref('competidores/' + carNum).set(data);
-
-                // Salvar histórico para apuração posterior
-                db.ref('historico/' + carNum).push(data);
-
-                document.getElementById('speed').innerText = data.speed.toFixed(1);
-            }, 
-            err => console.error(err), 
-            { enableHighAccuracy: true });
-        }
-    </script>
+        }, (err) => console.error(err), {
+            enableHighAccuracy: true
+        });
+    }
+</script>
 </body>
 </html>
