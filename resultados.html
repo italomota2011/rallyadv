@@ -2,46 +2,39 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking - Rally</title>
-    <style>
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background: #333; color: white; }
-    </style>
+    <title>Análise de Rastro</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <style>#map { height: 90vh; }</style>
 </head>
 <body>
-    <h2>Ranking Geral</h2>
-    <div id="tabelas"></div>
+    <input type="number" id="carroBusca" placeholder="Nº do Carro">
+    <button onclick="verRastro()">Ver Histórico</button>
+    <div id="map"></div>
 
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script>
         const firebaseConfig = { /* ... mesma config ... */ };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        let map = L.map('map').setView([-12.26, -38.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        db.ref('competidores').on('value', snapshot => {
-            let html = "";
-            let categorias = {};
-            
-            snapshot.forEach(c => {
-                const val = c.val();
-                val.id = c.key;
-                if(!categorias[val.categoria]) categorias[val.categoria] = [];
-                categorias[val.categoria].push(val);
-            });
-
-            for(let cat in categorias) {
-                html += `<h3>Categoria: ${cat}</h3><table><tr><th>Carro</th><th>Nome</th><th>Pontos Perdidos</th><th>Total</th></tr>`;
-                categorias[cat].sort((a,b) => b.pontos - a.pontos);
-                categorias[cat].forEach(p => {
-                    let perdidos = 150000 - p.pontos;
-                    html += `<tr><td>${p.id}</td><td>${p.nome}</td><td>${perdidos}</td><td>${p.pontos}</td></tr>`;
+        function verRastro() {
+            let num = document.getElementById('carroBusca').value;
+            db.ref('rastros/' + num).once('value', snapshot => {
+                let pontos = [];
+                snapshot.forEach(p => {
+                    let d = p.val();
+                    pontos.push([d.lat, d.lng]);
+                    L.circleMarker([d.lat, d.lng], {radius: 3, color: d.vel > 80 ? 'red' : 'blue'}).addTo(map)
+                        .bindPopup(`Vel: ${d.vel} km/h`);
                 });
-                html += `</table>`;
-            }
-            document.getElementById('tabelas').innerHTML = html;
-        });
+                L.polyline(pontos, {color: 'black'}).addTo(map);
+                map.fitBounds(pontos);
+            });
+        }
     </script>
 </body>
 </html>
