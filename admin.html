@@ -2,87 +2,47 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Admin - Rally Tracker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rally Competidor - GPS</title>
     
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <style>
-        /* GARANTE QUE O MAPA APAREÇA */
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        #map {
-            flex-grow: 1; /* Ocupa todo o espaço restante */
-            width: 100%;
-            background: #e5e3df; /* Cor de fundo caso o mapa demore a carregar */
-        }
-
-        .panel { 
-            padding: 15px; 
-            background: #1a1a1a; 
-            color: white; 
-            display: flex; 
-            gap: 10px; 
-            align-items: center;
-            z-index: 1000;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
-        }
-
-        .results-area { 
-            height: 150px; 
-            overflow-y: auto; 
-            background: #ffffff; 
-            padding: 10px; 
-            font-family: monospace;
-            font-size: 12px; 
-            border-top: 3px solid #ffc107;
-            color: #333;
-        }
-
-        button { 
-            padding: 10px 15px; 
-            cursor: pointer; 
-            border-radius: 4px; 
-            border: none; 
-            font-weight: bold; 
-            transition: 0.3s;
-        }
-
-        .btn-save { background: #28a745; color: white; }
-        .btn-save:hover { background: #218838; }
-        .btn-calc { background: #dc3545; color: white; }
-        .btn-calc:hover { background: #c82333; }
+        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 90%; max-width: 400px; text-align: center; border: 1px solid #333; }
+        h2 { color: #ffc107; margin-bottom: 5px; }
+        .car-display { font-size: 1.2em; color: #aaa; margin-bottom: 20px; }
+        #speed { font-size: 5em; font-weight: bold; color: #28a745; margin: 10px 0; line-height: 1; }
+        .unit { font-size: 1.2em; color: #777; margin-bottom: 30px; }
+        input { width: 100%; padding: 15px; margin-bottom: 15px; border-radius: 10px; border: 1px solid #444; background: #222; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
+        button { width: 100%; padding: 18px; background: #ffc107; color: black; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        #status-box { margin-top: 20px; padding: 10px; border-radius: 8px; font-size: 14px; background: #333; color: #ffc107; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.2; } }
     </style>
 </head>
 <body>
 
-<div class="panel">
-    <strong>RALLY ADMIN</strong>
-    <button class="btn-save" onclick="saveConfig()">1. Salvar Configuração</button>
-    <button class="btn-calc" onclick="processRankings()">2. Processar Apuração</button>
-    <span id="status" style="margin-left: auto; color: #00ff00;">● Sistema Online</span>
+<div class="card">
+    <h2>RALLY TRACKER</h2>
+    <div class="car-display" id="carInfo">Aguardando identificação...</div>
+
+    <input type="number" id="carNumber" placeholder="Número do Carro (1-100)" min="1" max="100">
+    <button id="btnStart" onclick="startTracking()">INICIAR PROVA</button>
+
+    <div id="trackingArea" style="display:none;">
+        <div id="speed">0</div>
+        <div class="unit">km/h</div>
+        <div id="status-box">
+            <span id="dot" class="blink">●</span> <span id="statusText">GPS Ativo</span>
+        </div>
+    </div>
 </div>
-
-<div id="map"></div>
-
-<div id="results" class="results-area">
-    Console de Apuração: Aguardando comando...
-</div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
 <script>
-    // Configuração do Firebase
+    // Sua Configuração do Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         authDomain: "cronometro-rally.firebaseapp.com",
@@ -95,126 +55,66 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    let map;
-    let drawnItems;
-    let carMarkers = {};
+    function startTracking() {
+        const carId = document.getElementById('carNumber').value;
 
-    // INICIALIZAÇÃO DO MAPA
-    function initMap() {
-        map = L.map('map').setView([-23.55, -46.63], 13);
-
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
-
-        drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
-
-        const drawControl = new L.Control.Draw({
-            draw: {
-                polygon: false,
-                rectangle: false,
-                circlemarker: false,
-                marker: false,
-                polyline: { shapeOptions: { color: '#f357a1' } },
-                circle: { shapeOptions: { color: '#2563eb' } }
-            },
-            edit: { featureGroup: drawnItems }
-        });
-        map.addControl(drawControl);
-
-        // Ao criar um círculo (Radar ou Waypoint)
-        map.on(L.Draw.Event.CREATED, (e) => {
-            const layer = e.layer;
-            if(e.layerType === 'circle') {
-                const limit = prompt("Limite de Velocidade (km/h)?\n(Digite 0 para Waypoint comum)");
-                layer.options.speedLimit = parseFloat(limit) || 0;
-                layer.bindPopup(layer.options.speedLimit > 0 ? `Radar: ${layer.options.speedLimit}km/h` : "Waypoint").openPopup();
-            }
-            drawnItems.addLayer(layer);
-        });
-
-        // Força o mapa a se ajustar ao tamanho da tela
-        setTimeout(() => { map.invalidateSize(); }, 500);
-    }
-
-    // Monitoramento em Tempo Real
-    db.ref('live_tracking').on('value', snapshot => {
-        const cars = snapshot.val();
-        for(let id in cars) {
-            const {lat, lng, speed} = cars[id];
-            if(carMarkers[id]) {
-                carMarkers[id].setLatLng([lat, lng])
-                             .setPopupContent(`<b>Carro ${id}</b><br>Velocidade: ${speed.toFixed(1)} km/h`);
-            } else {
-                carMarkers[id] = L.marker([lat, lng]).addTo(map)
-                                  .bindPopup(`Carro ${id}`).openPopup();
-            }
+        if (!carId || carId < 1 || carId > 100) {
+            alert("Por favor, insira um número de carro válido (1 a 100).");
+            return;
         }
-    });
 
-    function saveConfig() {
-        const config = [];
-        drawnItems.eachLayer(layer => {
-            if (layer instanceof L.Circle) {
-                config.push({
-                    latlng: layer.getLatLng(),
-                    radius: layer.getRadius(),
-                    speedLimit: layer.options.speedLimit || 0
-                });
-            }
-        });
-        db.ref('race_config').set(config).then(() => alert("Configuração salva!"));
-    }
+        // Interface
+        document.getElementById('carNumber').style.display = 'none';
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('trackingArea').style.display = 'block';
+        document.getElementById('carInfo').innerText = "CARRO Nº " + carId;
 
-    async function processRankings() {
-        const configSnap = await db.ref('race_config').once('value');
-        const historySnap = await db.ref('history').once('value');
-        const config = configSnap.val();
-        const history = historySnap.val();
+        if ("geolocation" in navigator) {
+            // watchPosition é o comando que mantém o rastreio constante
+            navigator.geolocation.watchPosition(
+                (pos) => {
+                    // O navegador retorna velocidade em metros por segundo (m/s)
+                    // Multiplicamos por 3.6 para ter km/h
+                    const speed = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+                    
+                    document.getElementById('speed').innerText = Math.round(speed);
+                    document.getElementById('statusText').innerText = "Transmitindo...";
+                    document.getElementById('status-box').style.color = "#28a745";
 
-        if(!config) return alert("Desenhe os Waypoints/Radares primeiro!");
-        if(!history) return alert("Nenhum dado de competidor encontrado!");
+                    const gpsData = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        speed: speed,
+                        timestamp: Date.now()
+                    };
 
-        let finalScores = {};
-        const logDiv = document.getElementById('results');
-        logDiv.innerHTML = "<strong>Iniciando Apuração...</strong><br>";
+                    // 1. Atualiza posição real para o Admin
+                    db.ref('live_tracking/' + carId).set(gpsData);
 
-        for (let carId in history) {
-            let score = 1000;
-            let penalties = [];
-            const carData = Object.values(history[carId]);
-
-            config.forEach((point, idx) => {
-                let passed = false;
-                let speedExceeded = false;
-
-                carData.forEach(pos => {
-                    const dist = map.distance([pos.lat, pos.lng], [point.latlng.lat, point.latlng.lng]);
-                    if (dist <= point.radius) {
-                        passed = true;
-                        if (point.speedLimit > 0 && pos.speed > point.speedLimit) {
-                            speedExceeded = true;
-                        }
-                    }
-                });
-
-                if (!passed) {
-                    score -= 10;
-                    penalties.push(`Pulou WP ${idx+1}`);
-                } else if (speedExceeded) {
-                    score -= 10;
-                    penalties.push(`Velocidade no Radar ${idx+1}`);
+                    // 2. Registra histórico para a apuração final
+                    db.ref('history/' + carId).push(gpsData);
+                },
+                (err) => {
+                    let msg = "Erro desconhecido";
+                    if(err.code == 1) msg = "Permissão do GPS negada pelo usuário.";
+                    if(err.code == 2) msg = "Sinal de GPS não encontrado.";
+                    if(err.code == 3) msg = "Tempo esgotado (Timeout).";
+                    
+                    document.getElementById('statusText').innerText = "Erro: GPS Offline";
+                    document.getElementById('status-box').style.color = "#dc3545";
+                    alert(msg);
+                },
+                {
+                    enableHighAccuracy: true, // Força o uso do GPS de alta precisão
+                    maximumAge: 1000,         // Não aceita posições em cache com mais de 1 seg
+                    timeout: 20000            // Aguarda até 20 segundos por sinal
                 }
-            });
-
-            finalScores[carId] = { score, penalties };
-            logDiv.innerHTML += `Carro ${carId}: ${score} pts | Falhas: ${penalties.length}<br>`;
+            );
+        } else {
+            alert("Seu celular não possui ou não suporta GPS no navegador.");
         }
-        db.ref('final_rankings').set(finalScores);
     }
-
-    window.onload = initMap;
 </script>
+
 </body>
 </html>
