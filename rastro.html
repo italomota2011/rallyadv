@@ -3,7 +3,10 @@
 <head>
     <title>Rastro Real-Time</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>#map { height: 100vh; width: 100%; }</style>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; }
+        #map { height: 100vh; width: 100%; }
+    </style>
 </head>
 <body>
     <div id="map"></div>
@@ -15,25 +18,23 @@
         const firebaseConfig = { /* SEU CONFIG */ };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        const map = L.map('map').setView([-23.55, -46.63], 12);
+
+        const map = L.map('map').setView([-23.55, -46.63], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         const markers = {};
 
-        onValue(ref(db, 'competidores'), (snap) => {
-            const carros = snap.val();
-            for(let id in carros) {
-                const c = carros[id];
-                const pos = [c.lat, c.lng];
-                
-                if(!markers[id]) {
-                    const icon = L.divIcon({
-                        html: `<div style="background:red; color:white; border-radius:50%; width:25px; text-align:center; border:2px solid white;">${id}</div>`,
-                        className: ''
-                    });
-                    markers[id] = L.marker(pos, {icon}).addTo(map).bindPopup(`Vel: ${c.velocidade} km/h`);
-                } else {
-                    markers[id].setLatLng(pos).getPopup().setContent(`Vel: ${c.velocidade} km/h`);
+        onValue(ref(db, 'competidores'), (snapshot) => {
+            const data = snapshot.val();
+            for (let id in data) {
+                const c = data[id];
+                if (c.lat && c.lng) {
+                    if (markers[id]) {
+                        markers[id].setLatLng([c.lat, c.lng]);
+                    } else {
+                        markers[id] = L.marker([c.lat, c.lng]).addTo(map)
+                            .bindTooltip("Carro " + id, {permanent: true});
+                    }
                 }
             }
         });
