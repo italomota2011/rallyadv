@@ -34,6 +34,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // Configurações do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -46,6 +47,7 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
+        // Inicialização do Mapa
         const map = L.map('map').setView([-12.26, -38.96], 13);
         const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
@@ -57,46 +59,5 @@
             draw: { marker: true, circlemarker: false, circle: true, polygon: true, polyline: true } 
         }).addTo(map);
 
-        db.ref('configuracoes/percurso').once('value', snap => {
-            if(snap.exists() && snap.val().features) {
-                L.geoJSON(snap.val(), { 
-                    pointToLayer: (f, l) => {
-                        if(f.properties && f.properties.type === 'circle') return L.circle(l, {radius: f.properties.radius});
-                        return L.marker(l);
-                    },
-                    onEachFeature: (f, l) => {
-                        if(f.properties && f.properties.velocidade) l.bindPopup("Limite: " + f.properties.velocidade + " km/h");
-                        drawnItems.addLayer(l);
-                    }
-                });
-            }
-        });
-
-        map.on(L.Draw.Event.CREATED, e => {
-            const layer = e.layer;
-            const type = e.layerType;
-            layer.feature = layer.feature || {type: "Feature", properties: {}};
-
-            if(type === 'polygon' || type === 'circle') {
-                const vel = prompt("Limite de Velocidade (km/h):", "60");
-                layer.feature.properties.velocidade = parseInt(vel) || 0;
-                if(type === 'circle') {
-                    layer.feature.properties.type = 'circle';
-                    layer.feature.properties.radius = layer.getRadius();
-                }
-            }
-            drawnItems.addLayer(layer);
-        });
-
-        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
-
-        async function searchCity() {
-            const q = document.getElementById('cityInput').value;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
-        }
-
-        function saveRoute() {
-            const data = drawnItems.toGeoJSON();
-            data
+        // Carregar Percurso Salvo
+        db.ref('config
