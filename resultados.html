@@ -2,96 +2,46 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Resultados e Ranking - Sistema de Rastreio</title>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <title>Ranking - Rally</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { color: #2c3e50; text-align: center; }
-        .controls { display: flex; justify-content: space-between; margin-bottom: 20px; }
-        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; transition: 0.3s; }
-        .btn-process { background: #27ae60; color: white; }
-        .btn-process:hover { background: #219150; }
-        .btn-nav { background: #3498db; color: white; }
-        
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #2c3e50; color: white; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        .posicao { font-weight: bold; color: #e67e22; }
-        .pontos-perdidos { color: #c0392b; font-weight: bold; }
-        .pontos-finais { color: #27ae60; font-weight: bold; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #333; color: white; }
     </style>
 </head>
 <body>
+    <h2>Ranking Geral</h2>
+    <div id="tabelas"></div>
 
-<div class="container">
-    <h1>Resultados da Prova</h1>
-    
-    <div class="controls">
-        <button class="btn-nav" onclick="window.location.href='admin.html'">Voltar ao Painel</button>
-        <button class="btn-process" onclick="executarApuracao()">Processar Apuração Final</button>
-    </div>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script>
+        const firebaseConfig = { /* ... mesma config ... */ };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-    <table id="rankingTable">
-        <thead>
-            <tr>
-                <th>Posição</th>
-                <th>Carro</th>
-                <th>Pontos Perdidos</th>
-                <th>Pontos Finais</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody id="rankingBody">
-            </tbody>
-    </table>
-</div>
-
-<script>
-    // CONFIGURAÇÃO FIREBASE (Use as mesmas do Admin)
-    const firebaseConfig = {
-        apiKey: "SUA_API_KEY",
-        authDomain: "SEU_PROJETO.firebaseapp.com",
-        databaseURL: "https://SEU_PROJETO.firebaseio.com",
-        projectId: "SEU_PROJETO",
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // 1. FUNÇÃO DE APURAÇÃO (LÓGICA DO BACKEND VIRTUAL)
-    async function executarApuracao() {
-        if(!confirm("Deseja iniciar a apuração? Isso recalculará os pontos de todos os 100 carros.")) return;
-
-        const snapConfig = await db.ref('prova/configuracao').once('value');
-        const snapCarros = await db.ref('prova/carros').once('value');
-        
-        if(!snapConfig.exists() || !snapCarros.exists()) {
-            alert("Dados insuficientes para apuração.");
-            return;
-        }
-
-        const config = snapConfig.val().config; // GeoJSON do Admin
-        const carros = snapCarros.val();
-        
-        for (let key in carros) {
-            let carro = carros[key];
-            let pontosPerdidos = 0;
-            let waypointsVisitados = new Set();
+        db.ref('competidores').on('value', snapshot => {
+            let html = "";
+            let categorias = {};
             
-            // Simulação da verificação de Geofencing
-            // No mundo real, aqui compararíamos as coordenadas do 'historico' com o GeoJSON
-            // Para este exemplo, a lógica varre o rastro salvo:
-            if(carro.historico) {
-                carro.historico.forEach(ponto => {
-                    // Exemplo de lógica de Radar:
-                    config.features.forEach(feature => {
-                        // Se for um Retângulo de Radar
-                        if(feature.properties.speedLimit) {
-                            if(estaDentroDoRetangulo(ponto, feature.geometry.coordinates[0])) {
-                                if(ponto.velocidade > feature.properties.speedLimit) {
-                                    pontosPerdidos += 1000;
-                                }
-                            }
-                        }
+            snapshot.forEach(c => {
+                const val = c.val();
+                val.id = c.key;
+                if(!categorias[val.categoria]) categorias[val.categoria] = [];
+                categorias[val.categoria].push(val);
+            });
+
+            for(let cat in categorias) {
+                html += `<h3>Categoria: ${cat}</h3><table><tr><th>Carro</th><th>Nome</th><th>Pontos Perdidos</th><th>Total</th></tr>`;
+                categorias[cat].sort((a,b) => b.pontos - a.pontos);
+                categorias[cat].forEach(p => {
+                    let perdidos = 150000 - p.pontos;
+                    html += `<tr><td>${p.id}</td><td>${p.nome}</td><td>${perdidos}</td><td>${p.pontos}</td></tr>`;
+                });
+                html += `</table>`;
+            }
+            document.getElementById('tabelas').innerHTML = html;
+        });
+    </script>
+</body>
+</html>
