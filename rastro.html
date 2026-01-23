@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Analisador de Prova</title>
+    <title>Rastro Rally - Analisador Final</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
@@ -13,27 +13,17 @@
         select { background: #333; color: white; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; line-height: 1.5; }
-        .radar-label { color: #3498db !important; font-weight: bold; font-size: 11px; text-shadow: 1px 1px #000; background: none; border: none; box-shadow: none; }
-        .infraction-dot { border: 2px solid white; border-radius: 50%; background: #ff4757; box-shadow: 0 0 10px #ff4757; }
+        .radar-label { color: #3498db !important; font-weight: bold; font-size: 11px; text-shadow: 1px 1px #000; background: none !important; border: none !important; box-shadow: none !important; }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <h2>🛰️ Analisador</h2>
         <label>Competidor:</label>
-        <select id="carSelect">
-            <option value="">A carregar competidores...</option>
-        </select>
+        <select id="carSelect"><option value="">Carregando...</option></select>
         <button onclick="drawTrack()">ANALISAR TRAJETO</button>
-        
-        <div id="details">
-            <b>Legenda:</b><br>
-            🟦 Polígonos: Radares<br>
-            🟠 Linha: Rastro do Carro<br>
-            🔴 Pontos: Infrações detectadas
-        </div>
-        
-        <button style="background:#555; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+        <div id="details">Selecione um carro para ver o rastro e radares.</div>
+        <button style="background:#555; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
     <div id="map"></div>
 
@@ -62,71 +52,83 @@
         let routeLayer = L.layerGroup().addTo(map);
         let percursoOficial = null;
 
-        // 1. Carregar Percurso (Radares)
+        // 1. Carregar Percurso com Proteção contra GeoJSON Inválido
         db.ref('configuracoes/percurso').on('value', snap => {
             const data = snap.val();
-            if(!data) return;
+            if(!data || !data.features) return;
             percursoOficial = data;
             routeLayer.clearLayers();
-            L.geoJSON(data, {
-                style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
-                onEachFeature: (f, l) => {
-                    if(f.properties && f.properties.velocidade) {
-                        l.bindTooltip(`Radar ${f.properties.velocidade}km/h`, {permanent: true, direction: 'center', className: 'radar-label'});
-                    }
+
+            data.features.forEach(feature => {
+                try {
+                    L.geoJSON(feature, {
+                        style: { color: "#3498db", weight: 2, fillOpacity: 0.1 },
+                        pointToLayer: (f, latlng) => {
+                            // Se for um círculo salvo como ponto com propriedade de raio
+                            if (f.properties && f.properties.type === 'circle') {
+                                return L.circle(latlng, { radius: f.properties.radius });
+                            }
+                        },
+                        onEachFeature: (f, l) => {
+                            if(f.properties && f.properties.velocidade) {
+                                l.bindTooltip(`${f.properties.velocidade} km/h`, { 
+                                    permanent: true, direction: 'center', className: 'radar-label' 
+                                });
+                            }
+                        }
+                    }).addTo(routeLayer);
+                } catch (e) {
+                    console.warn("Pulando feição inválida:", feature, e);
                 }
-            }).addTo(routeLayer);
+            });
         });
 
-        // 2. Carregar Lista de Competidores (CORRIGIDO)
+        // 2. Carregar Lista de Competidores
         db.ref('competidores').on('value', snap => {
             const select = document.getElementById('carSelect');
             let html = '<option value="">Selecione um carro...</option>';
-            
-            if (snap.exists()) {
-                snap.forEach(child => {
-                    const id = child.key;
-                    const dados = child.val();
-                    html += `<option value="${id}">Carro ${id} - ${dados.nome}</option>`;
-                });
-            } else {
-                html = '<option value="">Nenhum competidor inscrito</option>';
-            }
+            snap.forEach(child => {
+                html += `<option value="${child.key}">Carro ${child.key} - ${child.val().nome}</option>`;
+            });
             select.innerHTML = html;
         });
 
-        // 3. Desenhar Trajeto e Infrações
+        // 3. Desenhar Trajeto e Penalizações
         async function drawTrack() {
             const id = document.getElementById('carSelect').value;
-            if(!id) return alert("Por favor, selecione um competidor.");
+            if(!id) return;
 
             const snap = await db.ref('rastros/' + id).once('value');
-            if(!snap.exists()) return alert("Sem rastro de GPS para este carro.");
+            if(!snap.exists()) return alert("Sem rastro disponível.");
 
             trackLayer.clearLayers();
             const pontos = Object.values(snap.val()).sort((a, b) => a.ts - b.ts);
             const coords = pontos.map(p => [p.lat, p.lng]);
 
-            // Linha do trajeto
-            const poly = L.polyline(coords, {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(trackLayer);
+            const poly = L.polyline(coords, {color: '#e67e22', weight: 4}).addTo(trackLayer);
             
             let infracoes = 0;
             if(percursoOficial && percursoOficial.features) {
                 pontos.forEach(p => {
                     const pt = turf.point([p.lng, p.lat]);
                     percursoOficial.features.forEach(feat => {
-                        if(feat.geometry.type === 'Polygon' && turf.booleanPointInPolygon(pt, feat)) {
+                        // Verifica se o ponto está dentro do polígono ou do raio do círculo
+                        let dentro = false;
+                        if (feat.geometry.type === 'Polygon') {
+                            dentro = turf.booleanPointInPolygon(pt, feat);
+                        } else if (feat.properties.type === 'circle') {
+                            const center = [feat.geometry.coordinates[1], feat.geometry.coordinates[0]];
+                            const distance = map.distance([p.lat, p.lng], center);
+                            if (distance <= feat.properties.radius) dentro = true;
+                        }
+
+                        if(dentro) {
                             const limite = parseFloat(feat.properties.velocidade) || 60;
                             if(p.vel > limite) {
                                 infracoes++;
                                 L.circleMarker([p.lat, p.lng], {
-                                    radius: 6,
-                                    fillColor: "#ff4757",
-                                    color: "#fff",
-                                    weight: 2,
-                                    fillOpacity: 1
-                                }).bindPopup(`<b>INFRAÇÃO</b><br>Velocidade: ${p.vel.toFixed(1)} km/h<br>Limite: ${limite} km/h`)
-                                  .addTo(trackLayer);
+                                    radius: 5, fillColor: "red", color: "white", weight: 2, fillOpacity: 1
+                                }).bindPopup(`Excesso: ${p.vel.toFixed(1)} km/h`).addTo(trackLayer);
                             }
                         }
                     });
@@ -134,12 +136,10 @@
             }
 
             map.fitBounds(poly.getBounds());
-
             document.getElementById('details').innerHTML = `
-                <b>Análise Carro ${id}:</b><br>
+                <b>Carro ${id}:</b><br>
                 Pontos de GPS: ${pontos.length}<br>
-                <b style="color:#ff4757">Infrações: ${infracoes}</b><br>
-                <small>* Radares azuis / Rastro laranja.</small>
+                <b style="color:#ff4757">Infrações: ${infracoes}</b>
             `;
         }
     </script>
