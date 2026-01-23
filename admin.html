@@ -2,35 +2,61 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Admin - Rally</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Rally Tracker</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    
     <style>
-        /* CSS CRÍTICO PARA O MAPA APARECER */
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
-        #map { 
-            height: calc(100vh - 60px); /* Altura total menos o painel superior */
-            width: 100%; 
-            background: #e5e3df; /* Cor de fundo caso o mapa falhe */
+        /* CSS FUNDAMENTAL PARA O MAPA APARECER */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: sans-serif;
         }
-        .panel { 
-            height: 60px; 
-            background: #2c3e50; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            padding: 0 15px;
+        
+        .panel {
+            height: 60px;
+            background: #1a1a1a;
             color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 10px;
+            z-index: 1000;
+            position: relative;
         }
+
+        #map {
+            height: calc(100vh - 60px); /* Ocupa o resto da tela */
+            width: 100%;
+            background: #222; /* Cor de fundo para teste */
+        }
+
+        button {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            font-weight: bold;
+        }
+        .btn-danger { background: #ff4444; color: white; }
+        .btn-success { background: #00c851; color: white; }
     </style>
 </head>
 <body>
+
     <div class="panel">
-        <strong>Admin Rally</strong>
-        <button onclick="saveConfig()">Salvar Prova</button>
-        <button onclick="apurarResultados()" style="background: #f39c12;">Apurar Pontos</button>
-        <button onclick="toggleMap()">Satélite/Rua</button>
+        <strong>ADMIN RALLY</strong>
+        <button onclick="window.toggleMap()">Satélite/Rua</button>
+        <button class="btn-success" onclick="window.saveConfig()">Salvar Prova</button>
+        <button onclick="window.apurarResultados()">Apurar Dados</button>
+        <button class="btn-danger" onclick="window.resetRace()">REINICIAR TUDO</button>
     </div>
+
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -39,8 +65,9 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, remove, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
+        // SUA CONFIGURAÇÃO DO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -54,19 +81,33 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Inicialização do Mapa com Coordenadas de SP por padrão
-        const map = L.map('map').setView([-23.5505, -46.6333], 12);
+        // INICIALIZAÇÃO DO MAPA
+        const map = L.map('map').setView([-23.55, -46.63], 12);
 
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap'
+            maxZoom: 19
         }).addTo(map);
 
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Esri'
+        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        const drawControl = new L.Control.Draw({
+            draw: { marker: false, circlemarker: false, polyline: true },
+            edit: { featureGroup: drawnItems }
+        });
+        map.addControl(drawControl);
+
+        map.on(L.Draw.Event.CREATED, (e) => {
+            const layer = e.layer;
+            if (e.layerType === 'rectangle') {
+                layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
+            }
+            drawnItems.addLayer(layer);
         });
 
-        // Toggle Map
+        // RESOLVENDO O ERRO DE "NOT DEFINED" - ANEXANDO AO WINDOW
         window.toggleMap = () => {
             if (map.hasLayer(osm)) {
                 map.removeLayer(osm);
@@ -77,39 +118,37 @@
             }
         };
 
-        // Ferramentas de Desenho
-        const drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
-        const drawControl = new L.Control.Draw({
-            edit: { featureGroup: drawnItems }
-        });
-        map.addControl(drawControl);
-
-        map.on(L.Draw.Event.CREATED, (e) => {
-            const layer = e.layer;
-            if (e.layerType === 'rectangle') {
-                layer.options.speedLimit = prompt("Velocidade Radar (km/h):", "60");
-            }
-            drawnItems.addLayer(layer);
-        });
-
-        // Tornar funções acessíveis globalmente
         window.saveConfig = async () => {
             const data = drawnItems.toGeoJSON();
-            // Injetar o raio nos círculos pois o GeoJSON padrão do Leaflet não salva 'radius'
             data.features.forEach((feature, index) => {
                 const layer = Object.values(drawnItems._layers)[index];
                 if (layer instanceof L.Circle) {
                     feature.properties.radius = layer.getRadius();
                     feature.properties.type = 'waypoint';
-                } else {
+                } else if (layer instanceof L.Rectangle) {
                     feature.properties.type = 'radar';
-                    feature.properties.speedLimit = layer.options.speedLimit || 60;
+                    feature.properties.speedLimit = layer.options.speedLimit;
                 }
             });
             await set(ref(db, 'config/mapa'), data);
-            alert("Mapa e regras salvos no Firebase!");
+            alert("Configurações salvas!");
         };
+
+        window.resetRace = async () => {
+            if (confirm("ATENÇÃO: Isso apagará TODOS os dados da prova e competidores. Confirmar?")) {
+                await remove(ref(db, '/'));
+                location.reload();
+            }
+        };
+
+        window.apurarResultados = () => {
+            alert("Iniciando apuração... Verifique o console ou a página de resultados.");
+            // Lógica de apuração aqui...
+        };
+
+        // Garante que o mapa redimensione corretamente
+        setTimeout(() => { map.invalidateSize(); }, 500);
+
     </script>
 </body>
 </html>
