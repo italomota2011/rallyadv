@@ -2,122 +2,112 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Monitoramento</title>
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
+    <title>Rally - Auditoria de Rastro</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        /* FORÇAR ALTURA TOTAL */
-        html, body { 
-            margin: 0; padding: 0; height: 100% !important; width: 100% !important; 
-            overflow: hidden; background-color: #333; 
-        }
-        
-        #map { 
-            position: absolute; top: 0; bottom: 0; right: 0; left: 0;
-            width: 100%; height: 100%; z-index: 1;
-        }
-        
-        #control-panel {
-            position: absolute; top: 20px; left: 20px; z-index: 1000;
-            background: white; padding: 15px; border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.5); width: 200px;
-            font-family: Arial, sans-serif;
-        }
-
-        .car-icon { 
-            background: #2980b9; color: white; border: 2px solid white; 
-            border-radius: 50%; text-align: center; line-height: 26px; 
-            font-weight: bold; font-size: 11px;
-        }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
+        #sidebar { width: 300px; background: #2c3e50; color: white; padding: 15px; overflow-y: auto; }
+        #map { flex-grow: 1; }
+        .info-card { background: #34495e; padding: 10px; margin-bottom: 10px; border-radius: 4px; font-size: 0.9em; }
+        select, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 4px; border: none; }
+        button { background: #e67e22; color: white; cursor: pointer; }
+        .penalidade { color: #e74c3c; font-weight: bold; }
     </style>
 </head>
 <body>
+    <div id="sidebar">
+        <h2>🧐 Auditoria</h2>
+        <label>Selecione o Carro:</label>
+        <select id="selectCarro">
+            <option value="">Escolha...</option>
+        </select>
+        <button onclick="analisarRastro()">Verificar Rastro</button>
+        <hr>
+        <div id="detalhes-auditoria">
+            <p>Selecione um carro para ver o relatório de penalidades.</p>
+        </div>
+    </div>
+    <div id="map"></div>
 
-<div id="control-panel">
-    <strong>Monitoramento</strong><br>
-    Carros: <span id="count">0</span>
-    <hr>
-    <select id="carSelector" onchange="exibirTrajeto()" style="width:100%; padding:5px;">
-        <option value="">Rastrear Carro...</option>
-    </select>
-    <button onclick="location.reload()" style="margin-top:10px; width:100%;">Recarregar Mapa</button>
-</div>
+    <script>
+        const firebaseConfig = { /* USE SEU CONFIG AQUI */ };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-<div id="map"></div>
+        const map = L.map('map').setView([-12.266, -38.966], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+        let percursoLayer = L.geoJSON(null, {style: {color: 'gray', dashArray: '5, 5'}}).addTo(map);
+        let rastroLayer = L.polyline([], {color: 'blue'}).addTo(map);
 
-<script>
-    // Configuração Oficial
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally"
-    };
-
-    // Inicialização
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // INICIALIZAÇÃO DO MAPA COM DELAY (Para garantir que o CSS carregou)
-    let map, markers = {}, trajetoLinha;
-
-    function initMap() {
-        map = L.map('map').setView([-23.5505, -46.6333], 12);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
-        }).addTo(map);
-
-        trajetoLinha = L.polyline([], {color: '#e67e22', weight: 5}).addTo(map);
-
-        // Força o mapa a recalcular o tamanho após 500ms
-        setTimeout(() => { map.invalidateSize(); }, 500);
-
-        iniciarMonitoramento();
-        preencherSeletor();
-    }
-
-    function preencherSeletor() {
-        const sel = document.getElementById('carSelector');
-        for(let i=1; i<=100; i++) {
-            let opt = document.createElement('option');
-            opt.value = i; opt.innerText = "Carro " + i;
-            sel.appendChild(opt);
-        }
-    }
-
-    function iniciarMonitoramento() {
-        db.ref('prova/carros').on('value', snapshot => {
-            const data = snapshot.val();
-            if(!data) return;
-            
-            let count = 0;
-            for(let key in data) {
-                const c = data[key];
-                if(c.lat && c.lng) {
-                    count++;
-                    if(markers[key]) {
-                        markers[key].setLatLng([c.lat, c.lng]);
-                    } else {
-                        markers[key] = L.marker([c.lat, c.lng], {
-                            icon: L.divIcon({ className: 'car-icon', html: c.id, iconSize: [26, 26] })
-                        }).addTo(map);
-                    }
-                }
-            }
-            document.getElementById('count').innerText = count;
+        // Popular Select de Carros
+        db.ref('competidores').once('value', snapshot => {
+            const select = document.getElementById('selectCarro');
+            snapshot.forEach(child => {
+                let opt = document.createElement('option');
+                opt.value = child.key;
+                opt.innerHTML = `Carro ${child.key} - ${child.val().nome}`;
+                select.appendChild(opt);
+            });
         });
-    }
 
-    function exibirTrajeto() {
-        const id = document.getElementById('carSelector').value;
-        if(!id) return;
-        db.ref(`prova/carros/carro_${id}/historico`).limitToLast(100).once('value', snap => {
-            const pts = [];
-            snap.forEach(c => { pts.push([c.val().lat, c.val().lng]); });
-            trajeto
+        async function analisarRastro() {
+            const idCarro = document.getElementById('selectCarro').value;
+            if(!idCarro) return;
+
+            // Limpar Mapa
+            rastroLayer.setLatLngs([]);
+            const detalhes = document.getElementById('detalhes-auditoria');
+            detalhes.innerHTML = "Analisando dados...";
+
+            // 1. Obter Percurso/Radares
+            const configSnap = await db.ref('configuracoes/percurso').once('value');
+            const percursoGeoJSON = configSnap.val();
+            if(percursoGeoJSON) percursoLayer.clearLayers().addData(percursoGeoJSON);
+
+            // 2. Obter Rastro do Carro
+            db.ref('rastros/' + idCarro).once('value', snapshot => {
+                const pontos = [];
+                let infrações = 0;
+                let waypointsVisitados = new Set();
+                
+                snapshot.forEach(p => {
+                    const data = p.val();
+                    const pt = [data.lat, data.lng];
+                    pontos.push(pt);
+
+                    // Lógica de Detecção de Radar (Simplificada)
+                    if(percursoGeoJSON) {
+                        percursoGeoJSON.features.forEach(feature => {
+                            const point = turf.point([data.lng, data.lat]);
+                            
+                            // Verificar Radares (Polígonos)
+                            if(feature.geometry.type === 'Polygon') {
+                                if(turf.booleanPointInPolygon(point, feature)) {
+                                    const velLimite = feature.properties.velocidade || 60;
+                                    if(data.vel > velLimite) infrações++;
+                                }
+                            }
+                        });
+                    }
+                });
+
+                rastroLayer.setLatLngs(pontos);
+                map.fitBounds(rastroLayer.getBounds());
+
+                detalhes.innerHTML = `
+                    <div class="info-card">
+                        <b>Resultado Carro ${idCarro}:</b><br>
+                        Infrações Radar: ${infrações}<br>
+                        <span class="penalidade">Total Perdido: -${infrações * 10000} pts</span>
+                    </div>
+                `;
+            });
+        }
+    </script>
+</body>
+</html>
