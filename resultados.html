@@ -2,51 +2,68 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Rally</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Ranking Final - Rally</title>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
-        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; }
-        td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        .penalidade { color: #c0392b; font-weight: bold; }
+        body { font-family: sans-serif; background: #1a202c; color: white; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        table { width: 100%; max-width: 800px; border-collapse: collapse; background: #2d3748; border-radius: 10px; overflow: hidden; }
+        th { background: #4a5568; padding: 15px; text-align: left; color: #f6ad55; }
+        td { padding: 15px; border-bottom: 1px solid #4a5568; }
+        tr:nth-child(even) { background: #344053; }
+        tr:first-child td { font-weight: bold; color: #f6ad55; font-size: 1.2em; }
+        .btn { margin-top: 20px; padding: 10px 20px; background: #ed8936; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
     </style>
 </head>
 <body>
+
     <h1>🏆 Classificação Oficial</h1>
-    <div id="results">Carregando...</div>
+    
+    <table id="rankingTable">
+        <thead>
+            <tr>
+                <th>Pos</th>
+                <th>Carro</th>
+                <th>Nome</th>
+                <th>Pontuação Final</th>
+            </tr>
+        </thead>
+        <tbody id="rankingBody">
+            </tbody>
+    </table>
+
+    <a href="admin.html" class="btn">Voltar ao Painel</a>
+
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
         db.ref('competidores').on('value', snap => {
-            const data = snap.val();
-            let html = "";
-            const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-            cats.forEach(c => {
-                let list = [];
-                for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
-                list.sort((a,b) => b.pontos - a.pontos);
-                if(list.length > 0) {
-                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>POS</th><th>Nº</th><th>Piloto</th><th>Penalidades</th><th>Total</th></tr>`;
-                    list.forEach((p, i) => {
-                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">-${150000 - p.pontos}</td><td>${p.pontos}</td></tr>`;
-                    });
-                    html += `</table></div>`;
-                }
+            const lista = [];
+            snap.forEach(c => {
+                lista.push({ id: c.key, ...c.val() });
             });
-            document.getElementById('results').innerHTML = html || "Sem dados.";
+
+            // Ordena por maior pontuação
+            lista.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+
+            const body = document.getElementById('rankingBody');
+            body.innerHTML = '';
+            lista.forEach((c, i) => {
+                body.innerHTML += `
+                    <tr>
+                        <td>${i + 1}º</td>
+                        <td>${c.id}</td>
+                        <td>${c.nome || 'Piloto'}</td>
+                        <td>${c.pontos || 0} pts</td>
+                    </tr>
+                `;
+            });
         });
     </script>
 </body>
