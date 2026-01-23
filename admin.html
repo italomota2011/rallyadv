@@ -1,91 +1,149 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-    <title>Painel Admin - Rally Tracker</title>
+    <meta charset="UTF-8">
+    <title>Admin Rally - Controle e Apuração</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <style>
-        #map { height: 600px; width: 100%; }
-        .controls { padding: 10px; background: #eee; display: flex; gap: 10px; flex-wrap: wrap; }
+        body { margin: 0; font-family: Arial, sans-serif; }
+        #map { height: calc(100vh - 60px); width: 100%; }
+        .menu { height: 60px; background: #2c3e50; color: white; display: flex; align-items: center; padding: 0 20px; gap: 15px; }
+        button { cursor: pointer; padding: 8px 15px; border-radius: 4px; border: none; font-weight: bold; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-success { background: #27ae60; color: white; }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <input type="text" id="citySearch" placeholder="Buscar cidade...">
-        <button onclick="searchCity()">Buscar</button>
-        <button onclick="toggleSatelite()">Alternar Satélite</button>
-        <button onclick="finalizarProva()" style="background: red; color: white;">Finalizar e Apurar</button>
-        <button onclick="resetarProva()">Reiniciar Prova</button>
-    </div>
-    <div id="map"></div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<div class="menu">
+    <strong>RALLY ADMIN</strong>
+    <button onclick="toggleSatelite()">Satelite/Mapa</button>
+    <button class="btn-success" onclick="processarApuracao()">Finalizar e Calcular Penalidades</button>
+    <button class="btn-danger" onclick="resetarTudo()">Reiniciar Prova</button>
+</div>
+<div id="map"></div>
 
-    <script>
-        const firebaseConfig = { /* SEU CONFIG AQUI */ };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
 
-        // Inicialização do Mapa
-        const map = L.map('map').setView([-23.55, -46.63], 10);
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+<script>
+    // CONFIGURAÇÃO FIREBASE
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        function toggleSatelite() {
-            map.hasLayer(osm) ? (map.removeLayer(osm), satelite.addTo(map)) : (map.removeLayer(satelite), osm.addTo(map));
+    // MAPA
+    const map = L.map('map').setView([-23.55, -46.63], 13);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    
+    // Busca de Cidade
+    L.Control.geocoder().addTo(map);
+
+    function toggleSatelite() {
+        map.hasLayer(osm) ? (map.removeLayer(osm), satelite.addTo(map)) : (map.removeLayer(satelite), osm.addTo(map));
+    }
+
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: { polygon: false, circle: false, circlemarker: false }
+    });
+    map.addControl(drawControl);
+
+    // Salva Radar e Waypoints no Firebase ao desenhar
+    map.on(L.Draw.Event.CREATED, (e) => {
+        const layer = e.layer;
+        if (e.layerType === 'rectangle') {
+            const vel = prompt("Velocidade Máxima permitida aqui:");
+            layer.options.limit = vel;
+            db.ref('config/radares').push({ bounds: layer.getBounds(), limit: parseInt(vel) });
+        } else if (e.layerType === 'marker') {
+            db.ref('config/waypoints').push(layer.getLatLng());
         }
+        drawnItems.addLayer(layer);
+    });
 
-        // Ferramentas de Desenho (Percurso, Radares, Waypoints)
-        const drawnItems = new L.FeatureGroup().addTo(map);
-        const drawControl = new L.Control.Draw({
-            draw: { polygon: false, circle: false, circlemarker: false, 
-                    polyline: true, rectangle: true, marker: true }
-        });
-        map.addControl(drawControl);
+    // Rastreio em Tempo Real
+    const carMarkers = {};
+    db.ref('competidores').on('value', snap => {
+        const data = snap.val();
+        for (let id in data) {
+            const car = data[id];
+            const pos = [car.lat, car.lng];
+            if (carMarkers[id]) {
+                carMarkers[id].setLatLng(pos).setPopupContent(`Vel: ${car.velocidade} km/h`);
+            } else {
+                carMarkers[id] = L.marker(pos).addTo(map)
+                    .bindTooltip(car.numero.toString(), {permanent: true})
+                    .bindPopup(`Piloto: ${car.nome}<br>Vel: ${car.velocidade} km/h`);
+            }
+        }
+    });
 
-        map.on(L.Draw.Event.CREATED, function (e) {
-            const type = e.layerType;
-            const layer = e.layer;
-            
-            if (type === 'rectangle') {
-                const vel = prompt("Defina a velocidade máxima para este radar (km/h):");
-                layer.options.maxSpeed = vel;
-                db.ref('configuracao/radares').push({ coords: layer.getBounds(), speed: vel });
-            }
-            if (type === 'polyline') {
-                db.ref('configuracao/percurso').set(layer.getLatLngs());
-            }
-            if (type === 'marker') {
-                db.ref('configuracao/waypoints').push(layer.getLatLng());
-            }
-            drawnItems.addLayer(layer);
-        });
+    // LÓGICA DE APURAÇÃO
+    async function processarApuracao() {
+        alert("Iniciando processamento de penalidades...");
+        const config = (await db.ref('config').once('value')).val();
+        const rastros = (await db.ref('rastros').once('value')).val();
+        const competidores = (await db.ref('competidores').once('value')).val();
 
-        // Monitoramento em Tempo Real
-        const markers = {};
-        db.ref('competidores').on('value', snapshot => {
-            const data = snapshot.val();
-            for (let id in data) {
-                const c = data[id];
-                const label = `Carro ${c.numero} - ${c.velocidade}km/h`;
-                if (markers[id]) {
-                    markers[id].setLatLng([c.lat, c.lng]).setPopupContent(label);
-                } else {
-                    markers[id] = L.marker([c.lat, c.lng]).addTo(map)
-                        .bindPopup(label).bindTooltip(c.numero.toString(), {permanent: true});
+        for (let num in rastros) {
+            let penalidades = 0;
+            const historico = Object.values(rastros[num]);
+            const waypointsAtingidos = new Set();
+
+            historico.forEach(ponto => {
+                // 1. Checar Velocidade nos Radares
+                if (config.radares) {
+                    Object.values(config.radares).forEach(radar => {
+                        const bounds = L.latLngBounds(radar.bounds._southWest, radar.bounds._northEast);
+                        if (bounds.contains([ponto.lat, ponto.lng])) {
+                            if (ponto.vel > radar.limit) penalidades++;
+                        }
+                    });
                 }
-            }
-        });
+                // 2. Checar Waypoints (Raio de 30 metros)
+                if (config.waypoints) {
+                    Object.values(config.waypoints).forEach((wp, index) => {
+                        const dist = map.distance([ponto.lat, ponto.lng], [wp.lat, wp.lng]);
+                        if (dist < 30) waypointsAtingidos.add(index);
+                    });
+                }
+            });
 
-        function resetarProva() {
-            if(confirm("Deseja apagar TUDO?")) {
-                db.ref('/').remove();
-                location.reload();
-            }
+            // 3. Penalizar waypoints não visitados
+            const totalWp = config.waypoints ? Object.keys(config.waypoints).length : 0;
+            const faltantes = totalWp - waypointsAtingidos.size;
+            penalidades += faltantes;
+
+            // 4. Atualizar Pontuação Final
+            const pontosPerdidos = penalidades * 1000;
+            const scoreFinal = 150000 - pontosPerdidos;
+            db.ref(`competidores/${num}`).update({ pontos: scoreFinal });
         }
-    </script>
+        alert("Apuração concluída! Verifique o Ranking.");
+    }
+
+    function resetarTudo() {
+        if(confirm("Isso apagará todos os competidores e configurações. Confirmar?")) {
+            db.ref('/').remove();
+            location.reload();
+        }
+    }
+</script>
 </body>
 </html>
