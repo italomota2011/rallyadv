@@ -1,52 +1,71 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Simulador de GPS - Testes</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <title>Simulador de GPS - 100 Carros</title>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
     <style>
-        #map { height: 500px; cursor: crosshair; }
-        .controls { padding: 20px; background: #eee; }
+        body { font-family: sans-serif; text-align: center; padding: 50px; background: #ecf0f1; }
+        .status-box { background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .active { color: #27ae60; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="controls">
-        <h3>Simulador de Teste</h3>
-        <p>1. Digite o número do carro | 2. Clique no mapa para definir o destino | 3. O simulador enviará os pontos.</p>
-        Carro: <input type="number" id="simCarro" value="99">
-        Velocidade Simulada: <input type="number" id="simVel" value="80"> km/h
-    </div>
-    <div id="map"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+<div class="status-box">
+    <h2>Simulador Ativo</h2>
+    <p>Enviando dados de 100 carros para o Firebase...</p>
+    <p>Status: <span class="active" id="status">Transmitindo</span></p>
+    <p>Intervalo: 2 segundos</p>
+</div>
 
-        const firebaseConfig = { /* SEU CONFIG */ };
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+<script>
+    // CONFIGURAÇÃO FIREBASE (Use as mesmas do Admin)
+    const firebaseConfig = {
+        apiKey: "SUA_API_KEY",
+        authDomain: "SEU_PROJETO.firebaseapp.com",
+        databaseURL: "https://SEU_PROJETO.firebaseio.com",
+        projectId: "SEU_PROJETO",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        const map = L.map('map').setView([-23.55, -46.63], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // Ponto central inicial (Ex: São Paulo)
+    let centerLat = -23.5505;
+    let centerLng = -46.6333;
 
-        map.on('click', function(e) {
-            const id = document.getElementById('simCarro').value;
-            const vel = parseFloat(document.getElementById('simVel').value);
-            const {lat, lng} = e.latlng;
+    function simularMovimento() {
+        for (let i = 1; i <= 100; i++) {
+            // Gera um movimento aleatório pequeno
+            let novaLat = centerLat + (Math.random() - 0.5) * 0.01;
+            let novaLng = centerLng + (Math.random() - 0.5) * 0.01;
+            let vel = Math.floor(Math.random() * 100); // Velocidade entre 0 e 100 km/h
 
-            // Simula o envio para o Firebase
-            update(ref(db, `competidores/${id}`), {
-                lat, lng, velocidade: vel, nome: "Teste Simulado", categoria: "4x4", pontos: 150000
+            const carroRef = db.ref(`prova/carros/carro_${i}`);
+
+            // 1. Atualiza posição atual (para o mapa de Rastro)
+            carroRef.update({
+                lat: novaLat,
+                lng: novaLng,
+                velocidade: vel
             });
 
-            push(ref(db, `logs/${id}`), {
-                lat, lng, vel: vel, ts: Date.now()
+            // 2. Alimenta o histórico (para a página de Resultados)
+            // Usamos push() para criar uma lista de pontos percorridos
+            carroRef.child('historico').push({
+                lat: novaLat,
+                lng: novaLng,
+                velocidade: vel,
+                timestamp: Date.now()
             });
+        }
+        console.log("Posições de 100 carros atualizadas.");
+    }
 
-            L.circleMarker([lat, lng], {radius: 5, color: 'green'}).addTo(map);
-            console.log("Ponto enviado:", lat, lng);
-        });
-    </script>
+    // Inicia a simulação a cada 2 segundos
+    setInterval(simularMovimento, 2000);
+
+</script>
 </body>
 </html>
