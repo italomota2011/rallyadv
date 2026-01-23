@@ -4,13 +4,21 @@
     <meta charset="UTF-8">
     <title>Ranking Final - Rally</title>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; display: flex; flex-direction: column; align-items: center; padding: 40px; }
-        table { width: 100%; max-width: 800px; border-collapse: collapse; background: #2d3748; border-radius: 10px; overflow: hidden; }
-        th { background: #4a5568; padding: 15px; text-align: left; color: #f6ad55; }
-        td { padding: 15px; border-bottom: 1px solid #4a5568; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; display: flex; flex-direction: column; align-items: center; padding: 40px; margin: 0; }
+        h1 { color: #f6ad55; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 30px; }
+        table { width: 100%; max-width: 900px; border-collapse: collapse; background: #2d3748; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
+        th { background: #4a5568; padding: 18px; text-align: left; color: #f6ad55; font-size: 1.1em; }
+        td { padding: 15px 18px; border-bottom: 1px solid #4a5568; font-size: 1.1em; }
         tr:nth-child(even) { background: #344053; }
-        tr:first-child td { font-weight: bold; color: #f6ad55; font-size: 1.2em; }
-        .btn { margin-top: 20px; padding: 10px 20px; background: #ed8936; color: white; border: none; border-radius: 5px; cursor: pointer; text-decoration: none; }
+        
+        /* Destaque para o Pódio */
+        tr:nth-child(1) td { color: #ffd700; font-weight: bold; font-size: 1.4em; } /* Ouro */
+        tr:nth-child(2) td { color: #c0c0c0; font-weight: bold; } /* Prata */
+        tr:nth-child(3) td { color: #cd7f32; font-weight: bold; } /* Bronze */
+
+        .btn-voltar { margin-top: 30px; padding: 12px 25px; background: #4a5568; color: white; border: none; border-radius: 6px; cursor: pointer; text-decoration: none; font-weight: bold; transition: 0.3s; }
+        .btn-voltar:hover { background: #718096; }
+        .pontos { font-family: 'Courier New', monospace; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -20,51 +28,7 @@
     <table id="rankingTable">
         <thead>
             <tr>
-                <th>Pos</th>
+                <th>Posição</th>
                 <th>Carro</th>
-                <th>Nome</th>
+                <th>Nome do Piloto</th>
                 <th>Pontuação Final</th>
-            </tr>
-        </thead>
-        <tbody id="rankingBody">
-            </tbody>
-    </table>
-
-    <a href="admin.html" class="btn">Voltar ao Painel</a>
-
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-
-        db.ref('competidores').on('value', snap => {
-            const lista = [];
-            snap.forEach(c => {
-                lista.push({ id: c.key, ...c.val() });
-            });
-
-            // Ordena por maior pontuação
-            lista.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
-
-            const body = document.getElementById('rankingBody');
-            body.innerHTML = '';
-            lista.forEach((c, i) => {
-                body.innerHTML += `
-                    <tr>
-                        <td>${i + 1}º</td>
-                        <td>${c.id}</td>
-                        <td>${c.nome || 'Piloto'}</td>
-                        <td>${c.pontos || 0} pts</td>
-                    </tr>
-                `;
-            });
-        });
-    </script>
-</body>
-</html>
