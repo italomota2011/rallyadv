@@ -1,112 +1,30 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rastro Rally - Sistema de Telemetria</title>
-    
+    <title>Rastro Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
-        * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; background: #1a1a1a; color: white; overflow: hidden; }
-        
-        #main-container { display: flex; height: 100vh; width: 100vw; }
-
-        #sidebar { 
-            width: 320px; 
-            min-width: 320px;
-            background: #2c3e50; 
-            padding: 20px; 
-            z-index: 2000; 
-            display: flex; 
-            flex-direction: column;
-            box-shadow: 4px 0 10px rgba(0,0,0,0.5);
-            height: 100%;
-        }
-
-        #map { 
-            flex-grow: 1; 
-            height: 100%; 
-            background: #242424; 
-        }
-
-        h2 { color: #e67e22; margin: 0 0 20px 0; border-bottom: 2px solid #e67e22; padding-bottom: 10px; font-size: 1.4rem; }
-        
-        .form-group { margin-bottom: 15px; }
-        label { font-size: 0.75rem; color: #bdc3c7; text-transform: uppercase; display: block; margin-bottom: 5px; }
-
-        select { 
-            width: 100%; padding: 12px; border-radius: 6px; border: none; 
-            background: #ecf0f1; color: #2c3e50; font-weight: bold; font-size: 14px;
-        }
-        
-        button { 
-            width: 100%; padding: 12px; margin-top: 10px; border-radius: 6px; border: none; 
-            font-weight: bold; cursor: pointer; transition: 0.3s; color: white;
-        }
-
-        .btn-draw { background: #e67e22; }
-        .btn-play { background: #27ae60; }
-        .btn-stop { background: #c0392b; }
-        button:hover { opacity: 0.9; transform: scale(1.02); }
-        button:disabled { background: #7f8c8d; cursor: not-allowed; }
-
-        #details { 
-            margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.3); 
-            border-radius: 8px; border-left: 4px solid #e67e22; min-height: 100px;
-        }
-
-        .car-marker {
-            background: #e67e22; border: 2px solid white; border-radius: 50%;
-            color: white; text-align: center; font-weight: bold; line-height: 24px;
-            box-shadow: 0 0 10px rgba(230,126,34,0.5);
-        }
-
-        /* Mensagem de Erro Crítico */
-        #error-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; background: #c0392b;
-            color: white; text-align: center; padding: 5px; z-index: 9999; display: none;
-        }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
+        #sidebar { width: 280px; background: #34495e; color: white; padding: 15px; }
+        #map { flex-grow: 1; }
+        button { width: 100%; padding: 12px; background: #e67e22; color: white; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
-
-    <div id="error-overlay">Erro de conexão com o Banco de Dados. Verifique sua internet.</div>
-
-    <div id="main-container">
-        <div id="sidebar">
-            <h2>RASTRO RALLY</h2>
-            
-            <div class="form-group">
-                <label>Competidor</label>
-                <select id="carSelect">
-                    <option value="">Conectando ao Firebase...</option>
-                </select>
-            </div>
-            
-            <button class="btn-draw" id="btnLoad">CARREGAR RASTRO</button>
-            
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button class="btn-play" id="btnPlay">PLAY</button>
-                <button class="btn-stop" id="btnStop">STOP</button>
-            </div>
-            
-            <div id="details">
-                <div id="status">Iniciando sistema...</div>
-                <div id="telemetria" style="margin-top:12px; font-size: 0.85rem; color: #ecf0f1;"></div>
-            </div>
-        </div>
-
-        <div id="map"></div>
+    <div id="sidebar">
+        <h2>Rastro</h2>
+        <select id="carSelect" style="width:100%; padding:10px;"><option>Carregando...</option></select>
+        <button onclick="drawTrack()" style="margin-top:10px;">VER RASTRO</button>
+        <div id="details" style="margin-top:20px;"></div>
     </div>
+    <div id="map"></div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // --- CONFIGURAÇÃO ---
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -116,56 +34,29 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
 
-        let map, db, trackGroup, playbackMarker, playbackInterval;
-        let currentPath = [];
+        const map = L.map('map').setView([-12.26, -38.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let poly = L.polyline([], {color: 'red'}).addTo(map);
 
-        // --- INICIALIZAÇÃO ---
-        function init() {
-            console.log("Iniciando...");
-            try {
-                // 1. Firebase
-                const app = firebase.initializeApp(firebaseConfig);
-                db = firebase.database(app);
+        db.ref('competidores').on('value', snap => {
+            const s = document.getElementById('carSelect');
+            s.innerHTML = '<option value="">Selecione...</option>';
+            snap.forEach(c => s.innerHTML += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`);
+        });
 
-                // 2. Mapa (Foco em Feira de Santana)
-                map = L.map('map', {
-                    zoomControl: true,
-                    layers: [
-                        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            attribution: '© OpenStreetMap'
-                        })
-                    ]
-                }).setView([-12.26, -38.96], 13);
-
-                trackGroup = L.featureGroup().addTo(map);
-
-                // 3. Carregar dados
-                listenCompetidores();
-
-                // Forçar renderização do Leaflet
-                setTimeout(() => { map.invalidateSize(); }, 500);
-
-            } catch (err) {
-                console.error(err);
-                document.getElementById('status').innerText = "Erro ao iniciar: " + err.message;
-                document.getElementById('error-overlay').style.display = 'block';
-            }
+        async function drawTrack() {
+            const id = document.getElementById('carSelect').value;
+            const snap = await db.ref('rastros/' + id).once('value');
+            const data = snap.val();
+            if(!data) return alert("Sem rastro.");
+            const path = Object.values(data).map(p => [p.lat, p.lng]);
+            poly.setLatLngs(path);
+            map.fitBounds(poly.getBounds());
+            document.getElementById('details').innerHTML = `Pontos: ${path.length}`;
         }
-
-        function listenCompetidores() {
-            const select = document.getElementById('carSelect');
-            
-            db.ref('competidores').on('value', snap => {
-                const data = snap.val();
-                if (!data) {
-                    select.innerHTML = '<option>Nenhum piloto cadastrado</option>';
-                    return;
-                }
-
-                select.innerHTML = '<option value="">Selecione um competidor...</option>';
-                Object.keys(data).forEach(id => {
-                    const opt = document.createElement('option');
-                    opt.value = id;
-                    opt.textContent = `Carro ${id} - ${data[id].nome}`;
-                    select.
+    </script>
+</body>
+</html>
