@@ -2,77 +2,67 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
+    <title>Rally - Competidor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Competidor - Rally Tracker</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@300;500&display=swap" rel="stylesheet">
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-
     <style>
-        body { 
-            background-color: #121212; 
-            color: #ffffff; 
-            font-family: 'Roboto', sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        input, select, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: none; }
+        button { background: #e67e22; color: white; font-weight: bold; }
+        .status { color: #2ecc71; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>Registro do Competidor</h2>
+    <div id="registro">
+        <input type="text" id="nome" placeholder="Nome do Piloto">
+        <select id="categoria">
+            <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+            <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+            <option>ANTIGOS</option>
+        </select>
+        <input type="number" id="carro" placeholder="Número do Carro (1-100)" min="1" max="100">
+        <button onclick="iniciarRastreio()">INICIAR PROVA</button>
+    </div>
+    <div id="tracking" style="display:none">
+        <h3>Rastreio Ativo</h3>
+        <p>Carro: <span id="dispCarro"></span></p>
+        <p class="status">ENVIANDO COORDENADAS...</p>
+    </div>
+
+    <script>
+        const firebaseConfig = { /* SEUS DADOS AQUI */ };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        function iniciarRastreio() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value;
+            const cat = document.getElementById('categoria').value;
+
+            if(!num || !nome) return alert("Preencha tudo!");
+
+            db.ref('competidores/' + num).once('value', snapshot => {
+                if(snapshot.exists()) return alert("Carro já em uso!");
+
+                db.ref('competidores/' + num).set({ nome, categoria, pontos: 150000 });
+                document.getElementById('registro').style.display = 'none';
+                document.getElementById('tracking').style.display = 'block';
+                document.getElementById('dispCarro').innerText = num;
+
+                navigator.geolocation.watchPosition(pos => {
+                    const data = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        vel: (pos.coords.speed || 0) * 3.6, // km/h
+                        timestamp: Date.now()
+                    };
+                    db.ref('posicoes/' + num).set(data);
+                    db.ref('rastros/' + num).push(data);
+                }, err => console.error(err), { enableHighAccuracy: true });
+            });
         }
-        .card-rally {
-            background: #1e1e1e;
-            border: 2px solid #f39c12;
-            border-radius: 15px;
-            box-shadow: 0 0 20px rgba(243, 156, 18, 0.2);
-            padding: 30px;
-            width: 100%;
-            max-width: 400px;
-        }
-        h2 { 
-            font-family: 'Orbitron', sans-serif; 
-            color: #f39c12; 
-            text-align: center; 
-            margin-bottom: 25px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }
-        .form-label { color: #bdc3c7; font-size: 0.9rem; }
-        .form-control, .form-select {
-            background-color: #2c2c2c;
-            border: 1px solid #444;
-            color: white;
-            padding: 12px;
-        }
-        .form-control:focus, .form-select:focus {
-            background-color: #333;
-            color: white;
-            border-color: #f39c12;
-            box-shadow: 0 0 0 0.25rem rgba(243, 156, 18, 0.25);
-        }
-        .btn-start {
-            background: linear-gradient(45deg, #f39c12, #d35400);
-            border: none;
-            color: white;
-            font-family: 'Orbitron', sans-serif;
-            padding: 15px;
-            font-weight: bold;
-            font-size: 1.1rem;
-            transition: 0.3s;
-            margin-top: 15px;
-        }
-        .btn-start:disabled { background: #555; opacity: 0.7; }
-        
-        /* Status de Rastreio Ativo */
-        #status-container {
-            display: none;
-            text-align: center;
-            margin-top: 20px;
-        }
-        .pulse-red {
-            width: 12px;
-            height: 12px;
-            background: #e74c3c;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right
+    </script>
+</body>
+</html>
