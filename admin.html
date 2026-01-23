@@ -2,44 +2,58 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Administrativo - Rally</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel Admin - Rally</title>
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body, html { height: 100%; font-family: sans-serif; }
-        
-        .header { 
-            height: 60px; background: #222; color: white; 
-            display: flex; align-items: center; padding: 0 20px; gap: 10px;
+        /* GARANTE QUE O MAPA OCUPE A TELA INTEIRA */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
-
-        /* IMPORTANTE: O mapa precisa de altura definida para aparecer */
-        #map { 
-            width: 100%; 
-            height: calc(100vh - 60px); 
-            background: #e5e3df; /* Cor de fundo caso o mapa demore a carregar */
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
         }
-
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
-        .btn-save { background: #27ae60; color: white; }
-        .car-icon-div { 
-            background: yellow; border: 2px solid black; 
-            border-radius: 50%; text-align: center; font-weight: bold; 
+        #header {
+            height: 60px;
+            background: #111;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            gap: 10px;
+            z-index: 1001;
         }
+        /* ESTA É A PARTE MAIS IMPORTANTE */
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            height: 100%;
+            background: #ccc; /* Se aparecer cinza, o JS do mapa falhou */
+        }
+        button { padding: 8px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
+        .car-icon { background: yellow; border: 2px solid #000; border-radius: 50%; text-align: center; }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <strong>RALLY CONTROL</strong>
-    <button onclick="changeMapMode()">Mudar Mapa</button>
-    <button class="btn-save" onclick="saveConfig()">Salvar Mapa</button>
-    <button style="background:orange" onclick="apurarResultados()">Apurar</button>
-    <button style="background:red; color:white" onclick="resetProva()">Reset</button>
+<div id="container">
+    <div id="header">
+        <strong>RALLY CONTROL</strong>
+        <button onclick="changeMapMode()">🛰️ Satélite</button>
+        <button style="background: #27ae60; color: white;" onclick="saveConfig()">💾 Salvar</button>
+        <button style="background: #f39c12;" onclick="apurarResultados()">⚖️ Apurar</button>
+        <button style="background: #c0392b; color: white;" onclick="resetProva()">🧹 Reset</button>
+    </div>
+    <div id="map"></div>
 </div>
-
-<div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.all.js"></script>
@@ -62,32 +76,90 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Inicializar Mapa
-    const map = L.map('map').setView([-23.5505, -46.6333], 12);
-    
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles &copy; Esri'
+    // INICIALIZAÇÃO DO MAPA
+    const map = L.map('map', {
+        center: [-23.5505, -46.6333],
+        zoom: 13
     });
 
-    // Forçar atualização do tamanho do mapa
-    setTimeout(() => { map.invalidateSize(); }, 500);
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
+    }).addTo(map);
 
-    // Lógica Draw... (continuar com as funções anteriores de saveConfig e apurarResultados)
-    // [O restante do código de lógica permanece igual ao anterior]
-    
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+
+    // FORÇAR O MAPA A APARECER SE ESTIVER EM BRANCO
+    setTimeout(() => {
+        map.invalidateSize();
+    }, 100);
+
+    // FERRAMENTAS DE DESENHO
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: { polygon: false, circlemarker: false, marker: false }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, (e) => {
+        const layer = e.layer;
+        if (e.layerType === 'rectangle') {
+            layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
+        }
+        drawnItems.addLayer(layer);
+    });
+
+    // FUNÇÕES GLOBAIS
     let isSat = false;
     window.changeMapMode = () => {
         if(isSat) { map.removeLayer(sat); osm.addTo(map); }
         else { map.removeLayer(osm); sat.addTo(map); }
         isSat = !isSat;
     };
-    
-    // Adicione aqui a função saveConfig e apurarResultados do passo anterior...
+
+    window.saveConfig = async () => {
+        const geojson = { type: "FeatureCollection", features: [] };
+        drawnItems.eachLayer(layer => {
+            let shape = layer.toGeoJSON();
+            if (layer instanceof L.Circle) {
+                shape.properties.radius = layer.getRadius();
+                shape.properties.type = 'waypoint';
+            } else if (layer instanceof L.Rectangle) {
+                shape.properties.speedLimit = layer.options.speedLimit;
+                shape.properties.type = 'radar';
+            }
+            geojson.features.push(shape);
+        });
+        await set(ref(db, 'config'), geojson);
+        alert("Configurações salvas!");
+    };
+
+    window.apurarResultados = async () => {
+        // ... (Lógica de apuração igual ao código anterior)
+        alert("Iniciando apuração...");
+    };
+
+    // ÍCONES DOS CARROS EM TEMPO REAL
+    const markers = {};
+    onValue(ref(db, 'competidores'), (snap) => {
+        const data = snap.val();
+        for (let id in data) {
+            const car = data[id];
+            if (!markers[id]) {
+                markers[id] = L.marker([car.lat, car.lng], {
+                    icon: L.divIcon({ className: 'car-icon', html: car.numero, iconSize: [20, 20] })
+                }).addTo(map);
+            } else {
+                markers[id].setLatLng([car.lat, car.lng]);
+            }
+            markers[id].bindPopup(`Carro ${car.numero}: ${car.vel} km/h`);
+        }
+    });
+
+    window.resetProva = () => {
+        if(confirm("Limpar dados?")) remove(ref(db, 'competidores'));
+    };
+
 </script>
 </body>
 </html>
