@@ -2,27 +2,38 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Configurar Prova</title>
+    <title>Admin - Configuração de Prova</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     <style>
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
-        #header { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; z-index: 1000; flex-wrap: wrap; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: 'Segoe UI', sans-serif; }
+        #header { background: #2c3e50; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 15px; z-index: 1000; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
         #map { flex-grow: 1; }
-        .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; }
+        .controls { display: flex; gap: 10px; }
+        input[type="text"] { padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 200px; }
+        .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
         .btn-blue { background: #3498db; }
         .btn-green { background: #27ae60; }
         .btn-red { background: #c0392b; }
+        .btn:hover { opacity: 0.9; }
     </style>
 </head>
 <body>
 
 <header id="header">
-    <input type="text" id="cityInput" placeholder="Cidade para focar...">
-    <button class="btn btn-blue" onclick="buscarCidade()">Buscar</button>
-    <button class="btn btn-blue" onclick="toggleSat()">Satélite</button>
-    <button class="btn btn-green" onclick="salvarConfig()">💾 Salvar Percurso/Radares</button>
-    <button class="btn btn-red" onclick="resetTotal()">Resetar Sistema (Senha)</button>
+    <div class="controls">
+        <input type="text" id="citySearch" placeholder="Buscar Cidade...">
+        <button class="btn btn-blue" onclick="buscarCidade()">Buscar</button>
+    </div>
+    <div class="controls">
+        <button class="btn btn-blue" onclick="alternarMapa()">Satélite/Mapa</button>
+        <button class="btn btn-green" onclick="salvarConfiguracao()">💾 Salvar Prova</button>
+    </div>
+    <div class="controls">
+        <button class="btn btn-blue" onclick="window.location.href='rastro.html'">📍 Ver Rastro</button>
+        <button class="btn btn-blue" onclick="window.location.href='resultados.html'">🏆 Resultados</button>
+    </div>
+    <button class="btn btn-red" style="margin-left: auto;" onclick="resetarSistema()">🔄 Resetar Prova</button>
 </header>
 
 <div id="map"></div>
@@ -33,12 +44,113 @@
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    const firebaseConfig = { apiKey: "SUA_API", databaseURL: "SUA_URL", projectId: "SEU_ID" };
+    // 1. Configuração do seu Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app",
+        messagingSenderId: "341731891354",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // 2. Inicialização do Mapa
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-    const map = L.map('map', { center: [-23.5505, -46.6333], zoom: 13, layers: [osm] });
+    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    
+    const map = L.map('map', {
+        center: [-23.5505, -46.6333],
+        zoom: 13,
+        layers: [osm]
+    });
 
-    function toggleSat() { map.hasLayer(osm) ? (map.removeLayer(osm), sat
+    function alternarMapa() {
+        if (map.hasLayer(osm)) {
+            map.removeLayer(osm);
+            satelite.addTo(map);
+        } else {
+            map.removeLayer(satelite);
+            osm.addTo(map);
+        }
+    }
+
+    // 3. Busca de Cidade
+    async function buscarCidade() {
+        const city = document.getElementById('citySearch').value;
+        if(!city) return;
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`);
+        const data = await resp.json();
+        if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+    }
+
+    // 4. Ferramentas de Desenho
+    const drawnItems = new L.FeatureGroup().addTo(map);
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: {
+            polygon: false, marker: false, circlemarker: false,
+            polyline: { title: 'Traçar Percurso' },
+            rectangle: { title: 'Radar de Velocidade' },
+            circle: { title: 'Waypoint Obrigatório' }
+        }
+    }).addTo(map);
+
+    map.on(L.Draw.Event.CREATED, (e) => {
+        const layer = e.layer;
+        const type = e.layerType;
+
+        if (type === 'rectangle') {
+            const vel = prompt("Velocidade Máxima do Radar (km/h):", "60");
+            layer.options.speedLimit = parseInt(vel);
+            layer.bindPopup("Radar: " + vel + " km/h").openPopup();
+        }
+        
+        if (type === 'circle') {
+            layer.bindPopup("Waypoint").openPopup();
+        }
+
+        drawnItems.addLayer(layer);
+    });
+
+    // 5. Salvar Configuração
+    function salvarConfiguracao() {
+        const geoJSON = drawnItems.toGeoJSON();
+        
+        // Incluir propriedades manuais que o toGeoJSON não pega sozinho (speedLimit e radius)
+        geoJSON.features.forEach((feature, index) => {
+            const layer = Object.values(drawnItems._layers)[index];
+            if(layer.options.speedLimit) feature.properties.speedLimit = layer.options.speedLimit;
+            if(layer._mRadius) {
+                feature.properties.radius = layer._mRadius;
+                // Salva a lat/lng do centro para facilitar a apuração por distância
+                feature.properties.lat = layer.getLatLng().lat;
+                feature.properties.lng = layer.getLatLng().lng;
+            }
+        });
+
+        db.ref('prova/configuracao').set({
+            config: geoJSON,
+            timestamp: Date.now()
+        }).then(() => alert("Configurações da prova salvas com sucesso!"));
+    }
+
+    // 6. Reset Master
+    function resetarSistema() {
+        const senha = prompt("Digite a senha para REINICIAR TUDO:");
+        if(senha === "261291") {
+            db.ref('prova').remove().then(() => {
+                alert("Sistema reiniciado. Os carros voltarão a 150.000 pontos.");
+                location.reload();
+            });
+        } else {
+            alert("Senha incorreta!");
+        }
+    }
+</script>
+
+</body>
+</html>
