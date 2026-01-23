@@ -1,80 +1,66 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Administrativo - Rally</title>
-    
+    <title>Painel Admin Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-    
     <style>
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #2d3748; }
-        body { display: flex; flex-direction: column; font-family: sans-serif; }
+        html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; background: #1a202c; overflow: hidden; }
         
-        /* Área do Menu Superior */
-        .header-menu { 
-            background: #1a202c; 
-            color: white; 
-            padding: 10px; 
+        /* Menu Superior */
+        #toolbar { 
+            height: 60px; 
+            background: #2d3748; 
             display: flex; 
-            gap: 10px; 
-            flex-wrap: wrap; 
+            align-items: center; 
+            padding: 0 15px; 
+            gap: 10px;
             z-index: 9999;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            position: relative;
         }
 
-        /* Área do Mapa */
+        /* Mapa Ocupando o resto da tela */
         #map { 
-            flex: 1; 
+            height: calc(100vh - 60px); 
             width: 100%; 
-            z-index: 1;
+            background: #a0aec0; 
         }
 
         button { 
-            padding: 8px 12px; 
-            cursor: pointer; 
-            border-radius: 4px; 
-            border: none; 
-            font-weight: bold; 
+            padding: 8px 15px; 
             background: #4a5568; 
-            color: white;
-            font-size: 13px;
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer;
+            font-weight: bold;
         }
+        
         button:hover { background: #718096; }
-        input { padding: 8px; border-radius: 4px; border: 1px solid #4a5568; background: #2d3748; color: white; }
-
-        .marker-label { 
-            background: #ed8936; border: 2px solid white; border-radius: 50%; 
-            color: white; font-weight: bold; text-align: center; line-height: 26px; 
-            width: 30px; height: 30px; font-size: 12px; 
-        }
+        input { padding: 8px; border-radius: 4px; border: none; }
     </style>
 </head>
 <body>
 
-    <div class="header-menu">
+    <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Cidade...">
-        <button onclick="searchCity()">Buscar</button>
-        <button onclick="toggleMap()">Satélite</button>
-        <button onclick="saveRoute()" style="background: #38a169;">Salvar Trajeto</button>
-        <button onclick="runApuracao()" style="background: #dd6b20;">Rodar Apuração</button>
-        <button onclick="location.href='resultados.html'">Ranking</button>
-        <button onclick="location.href='rastro.html'">Ver Rastro</button>
-        <button onclick="resetSystem()" style="background: #e53e3e;">Reset</button>
+        <button onclick="buscar()">Buscar</button>
+        <button onclick="salvar()" style="background: #38a169;">Salvar Trajeto</button>
+        <button onclick="apurar()" style="background: #dd6b20;">Rodar Apuração</button>
+        <button onclick="window.location.href='resultados.html'">Ranking</button>
+        <button onclick="resetar()" style="background: #e53e3e;">Reset</button>
     </div>
 
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
-    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // CONFIGURAÇÃO FIREBASE
+        console.log("Script carregado. Iniciando Firebase...");
+
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -84,57 +70,32 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
 
-        // VARIÁVEIS DO MAPA
-        let map, drawnItems;
-        let isSat = false;
-        const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        let db, map;
 
-        // INICIALIZAÇÃO SEGURA
-        window.addEventListener('load', function() {
-            map = L.map('map').setView([-12.26, -38.96], 13);
-            streets.addTo(map);
+        try {
+            const app = firebase.initializeApp(firebaseConfig);
+            db = firebase.database(app);
+            console.log("Firebase OK");
+        } catch (e) {
+            alert("Erro Firebase: " + e.message);
+        }
 
-            drawnItems = new L.FeatureGroup().addTo(map);
+        // Inicialização do Mapa
+        function initMap() {
+            try {
+                console.log("Tentando renderizar mapa...");
+                map = L.map('map').setView([-12.26, -38.96], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                console.log("Mapa Renderizado com sucesso.");
+            } catch (e) {
+                console.error("Erro no Leaflet:", e);
+                document.getElementById('map').innerHTML = "<h1 style='color:white; padding:20px;'>Erro ao carregar mapa: " + e.message + "</h1>";
+            }
+        }
 
-            const drawControl = new L.Control.Draw({
-                edit: { featureGroup: drawnItems },
-                draw: {
-                    polyline: true,
-                    polygon: true,
-                    circle: true,
-                    rectangle: false,
-                    marker: false,
-                    circlemarker: false
-                }
-            });
-            map.addControl(drawControl);
-
-            // Escuta a criação de itens
-            map.on(L.Draw.Event.CREATED, function (e) {
-                const layer = e.layer;
-                layer.feature = layer.feature || { type: "Feature", properties: {} };
-
-                if (e.layerType === 'polygon') {
-                    const v = prompt("Velocidade Radar (KM/H):", "60");
-                    layer.feature.properties.velocidade = parseInt(v) || 60;
-                }
-                if (e.layerType === 'circle') {
-                    layer.feature.properties.type = 'circle';
-                    layer.feature.properties.radius = layer.getRadius();
-                }
-                drawnItems.addLayer(layer);
-            });
-
-            loadSavedRoute();
-            startTracking();
-        });
-
-        // FUNÇÕES GLOBAIS
-        window.searchCity = async function() {
+        // Funções dos botões anexadas ao objeto global window
+        window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
             if(!q) return;
             const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
@@ -142,81 +103,20 @@
             if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
         };
 
-        window.toggleMap = function() {
-            if(isSat) { map.removeLayer(sat); streets.addTo(map); }
-            else { map.removeLayer(streets); sat.addTo(map); }
-            isSat = !isSat;
+        window.salvar = function() {
+            alert("Botão Salvar clicado!");
         };
 
-        window.saveRoute = function() {
-            try {
-                const data = { type: "FeatureCollection", features: [] };
-                drawnItems.eachLayer(layer => {
-                    const gj = layer.toGeoJSON();
-                    gj.properties = gj.properties || {};
-                    
-                    if (layer instanceof L.Circle) {
-                        gj.properties.type = 'circle';
-                        gj.properties.radius = layer.getRadius();
-                    } else if (layer instanceof L.Polygon) {
-                        if(!gj.properties.velocidade) gj.properties.velocidade = 60;
-                    }
-                    data.features.push(gj);
-                });
-
-                db.ref('configuracoes/percurso').set(data)
-                    .then(() => alert("Salvo!"));
-            } catch (e) { alert("Erro ao salvar."); }
+        window.apurar = function() {
+            alert("Botão Apurar clicado!");
         };
 
-        function loadSavedRoute() {
-            db.ref('configuracoes/percurso').once('value', snap => {
-                if(snap.exists()) {
-                    L.geoJSON(snap.val(), {
-                        pointToLayer: (f, latlng) => {
-                            if (f.properties && f.properties.type === 'circle') {
-                                return L.circle(latlng, { radius: f.properties.radius });
-                            }
-                        },
-                        onEachFeature: (f, l) => { drawnItems.addLayer(l); }
-                    });
-                }
-            });
-        }
+        window.resetar = function() {
+            if(confirm("Resetar tudo?")) db.ref('/').remove().then(() => location.reload());
+        };
 
-        function startTracking() {
-            const markers = {};
-            db.ref('posicoes').on('value', snap => {
-                snap.forEach(c => {
-                    const id = c.key; const p = c.val();
-                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
-                });
-            });
-        }
-
-        window.runApuracao = async function() {
-            if(!confirm("Iniciar apuração?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-
-            for(let id in comps) {
-                let perdidos = 0;
-                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
-                if(rastroArr.length === 0) continue;
-
-                config.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        const excesso = rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60));
-                        if(excesso) perdidos += 10000;
-                    } else if(feat.properties && feat.properties.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raioKm = feat.properties.radius / 1000;
-                        const passou = rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raioKm);
-                        if(!passou) perdidos += 20000;
-                    }
-                });
-                db.ref(`competidores/${id}`).
+        // Dispara a inicialização
+        window.onload = initMap;
+    </script>
+</body>
+</html>
