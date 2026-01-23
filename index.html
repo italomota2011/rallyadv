@@ -3,70 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rally - Tracker</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>GPS Rally - Competidor</title>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
-        input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
-        .tracking { text-align: center; display: none; }
+        body { font-family: sans-serif; background: #1a202c; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .card { background: #2d3748; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 400px; }
+        #status { font-size: 1.2em; margin-bottom: 20px; color: #f6ad55; }
+        #speed { font-size: 3em; font-weight: bold; margin: 10px 0; color: #68d391; }
+        .info { font-size: 0.9em; color: #a0aec0; margin-bottom: 5px; }
+        input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 8px; border: none; background: #1a202c; color: white; text-align: center; font-size: 1.1em; }
+        button { width: 100%; padding: 15px; border-radius: 8px; border: none; background: #ed8936; color: white; font-weight: bold; font-size: 1.2em; cursor: pointer; }
+        button:disabled { background: #4a5568; cursor: not-allowed; }
     </style>
 </head>
 <body>
+
     <div class="card">
-        <div id="setup">
-            <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto">
-            <select id="categoria">
-                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
-                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
-                <option>ANTIGOS</option>
-            </select>
-            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
-            <button id="btnIniciar">INICIAR PROVA</button>
-        </div>
-        <div id="ativo" class="tracking">
-            <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
-            <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
-            <p>KM/H</p>
-            <p style="color:#2ecc71;">● TRANSMITINDO GPS</p>
-        </div>
+        <h2>Transmissão Rally</h2>
+        <input type="number" id="carId" placeholder="Número do Carro (Ex: 01)">
+        <input type="text" id="carName" placeholder="Nome do Piloto">
+        
+        <div id="status">🔴 Desconectado</div>
+        <div class="info">Velocidade Atual:</div>
+        <div id="speed">0 <span style="font-size: 0.4em;">KM/H</span></div>
+        
+        <button id="startBtn" onclick="toggleTracking()">Iniciar Corrida</button>
     </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        document.getElementById('btnIniciar').onclick = async function() {
-            const num = document.getElementById('carro').value;
-            const nome = document.getElementById('nome').value;
-            const cat = document.getElementById('categoria').value;
+        let watchId = null;
+        let isTracking = false;
 
-            if(!nome || !num) return alert("Preencha tudo!");
+        function toggleTracking() {
+            const id = document.getElementById('carId').value;
+            const nome = document.getElementById('carName').value;
 
-            await db.ref('competidores/' + num).set({ nome, categoria: cat, pontos: 150000 });
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
-            document.getElementById('viewCarro').innerText = "Carro " + num;
+            if(!id || !nome) return alert("Preencha o Número do Carro e o Nome!");
 
-            navigator.geolocation.watchPosition(pos => {
-                const vel = (pos.coords.speed || 0) * 3.6;
-                document.getElementById('viewVel').innerText = vel.toFixed(1);
-                const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel, ts: Date.now() };
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-            }, null, { enableHighAccuracy: true });
-        };
+            if (!isTracking) {
+                // Iniciar
+                isTracking = true;
+                document.getElementById('startBtn').innerText = "Encerrar Corrida";
+                document.getElementById('startBtn').style.background = "#e53e3e";
+                document.getElementById('status').innerText = "🟢 Transmitindo...";
+                
+                // Salva o nome do competidor no banco
+                db.ref('competidores/' + id).update({ nome: nome, pontos: 150000 });
+
+                startGps(id);
+            } else {
+                // Parar
+                location.reload(); // Recarrega para limpar tudo de forma segura
+            }
+        }
+
+        function startGps(id) {
+            if ("geolocation" in navigator) {
+                watchId = navigator.geolocation.watchPosition(
+                    (pos) => {
+                        // Converte velocidade de m/s para km/h (o GPS envia m/s)
+                        const speedKmh = pos.coords.speed ? (pos.coords.speed * 3.6) : 0;
+                        
+                        document.getElementById('speed').innerHTML = `${Math.round(speedKmh)} <span style="font-size: 0.4em;">KM/H</span>`;
+
+                        const dados = {
+                            lat: pos.coords.latitude,
+                            lng: pos.coords.longitude,
+                            vel: speedKmh,
+                            time: Date.now()
+                        };
+
+                        // 1. Atualiza posição atual (para o Admin ver no mapa)
+                        db.ref('posicoes/' + id).set(dados);
+
+                        // 2. Registra o rastro (para a apuração final)
+                        db.ref('rastros/' + id).push(dados);
+                    },
+                    (err) => console.error(err),
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+            }
+        }
     </script>
 </body>
 </html>
