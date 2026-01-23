@@ -1,31 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Painel Admin - Rally</title>
+    <title>Painel Admin - Rally Pro</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
-        #map { height: 600px; width: 100%; }
-        .controls { padding: 10px; background: #eee; display: flex; gap: 10px; flex-wrap: wrap; }
+        body { font-family: sans-serif; margin: 0; }
+        #map { height: calc(100vh - 100px); width: 100%; }
+        .controls { padding: 15px; background: #2c3e50; color: white; display: flex; gap: 10px; align-items: center; }
+        .car-icon { background: white; border: 2px solid black; border-radius: 50%; text-align: center; font-weight: bold; line-height: 20px; }
     </style>
 </head>
 <body>
     <div class="controls">
-        <input type="text" id="citySearch" placeholder="Buscar Cidade...">
-        <button onclick="changeMapMode()">Alternar Satélite</button>
-        <button onclick="saveConfig()" style="background: green; color: white;">Salvar Configurações</button>
-        <button onclick="window.location.href='rastro.html'">Ver Rastro</button>
-        <button onclick="window.location.href='resultados.html'">Resultados</button>
-        <button onclick="resetProva()" style="background: red; color: white;">REINICIAR PROVA</button>
-        <button onclick="processarPenalidades()">Finalizar e Apurar</button>
+        <input type="text" id="citySearch" placeholder="Cidade...">
+        <button onclick="changeMapMode()">🛰️ Satélite</button>
+        <button onclick="saveConfig()" style="background: #27ae60; color: white;">💾 Salvar Mapa</button>
+        <button onclick="apurarResultados()" style="background: #e67e22; color: white;">🏁 Finalizar e Apurar</button>
+        <button onclick="resetProva()" style="background: #c0392b; color: white;">🧹 Resetar</button>
+        <button onclick="window.location.href='resultados.html'">📊 Ranking</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.all.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
@@ -40,71 +43,122 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Configuração do Mapa
-        const map = L.map('map').setView([-23.55, -46.63], 10);
+        // --- INICIALIZAÇÃO DO MAPA ---
+        const map = L.map('map').setView([-23.55, -46.63], 13);
         const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-
-        let isSat = false;
-        window.changeMapMode = () => {
-            if(isSat) { map.removeLayer(sat); osm.addTo(map); }
-            else { map.removeLayer(osm); sat.addTo(map); }
-            isSat = !isSat;
-        };
-
-        // Camada de Desenho
-        const drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
+        
+        const drawnItems = new L.FeatureGroup().addTo(map);
         const drawControl = new L.Control.Draw({
             edit: { featureGroup: drawnItems },
-            draw: { polygon: false, marker: false, circlemarker: false }
+            draw: { polygon: false, marker: false, circlemarker: false, 
+                    polyline: { title: 'Desenhar Percurso' },
+                    rectangle: { title: 'Radar de Velocidade' },
+                    circle: { title: 'Waypoint' } }
         });
         map.addControl(drawControl);
 
+        // Captura desenhos e solicita velocidade
         map.on(L.Draw.Event.CREATED, (e) => {
             const layer = e.layer;
             if (e.layerType === 'rectangle') {
-                const speed = prompt("Defina a velocidade máxima para este radar (km/h):", "60");
-                layer.options.speedLimit = speed;
+                layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
+                layer.bindPopup("Radar: " + layer.options.speedLimit + "km/h");
+            }
+            if (e.layerType === 'circle') {
+                layer.bindPopup("Waypoint");
             }
             drawnItems.addLayer(layer);
         });
 
-        // Salvar Rota e Áreas
-        window.saveConfig = () => {
-            const data = drawnItems.toGeoJSON();
-            // Adicionando limites de velocidade personalizados que o GeoJSON padrão ignora
-            data.features.forEach((f, i) => {
+        // --- FUNÇÕES DE INTERFACE ---
+        window.changeMapMode = () => map.hasLayer(osm) ? (map.removeLayer(osm), sat.addTo(map)) : (map.removeLayer(sat), osm.addTo(map));
+
+        window.saveConfig = async () => {
+            const geojson = drawnItems.toGeoJSON();
+            // Injetar propriedades extras que o toGeoJSON nativo perde (raio e limite vel)
+            geojson.features.forEach((feature, i) => {
                 const layer = Object.values(drawnItems._layers)[i];
-                if(layer.options.speedLimit) f.properties.speedLimit = layer.options.speedLimit;
+                if(layer instanceof L.Circle) feature.properties.radius = layer.getRadius();
+                if(layer.options.speedLimit) feature.properties.speedLimit = layer.options.speedLimit;
             });
-            set(ref(db, 'config'), data).then(() => alert("Configuração Salva!"));
+            await set(ref(db, 'config'), geojson);
+            alert("Configuração de prova salva!");
         };
 
-        // Resetar Prova
+        // --- LÓGICA DE APURAÇÃO (O CÉREBRO DO SISTEMA) ---
+        window.apurarResultados = async () => {
+            const configSnap = await get(ref(db, 'config'));
+            const competidoresSnap = await get(ref(db, 'competidores'));
+            const historicoSnap = await get(ref(db, 'historico'));
+
+            if (!configSnap.exists() || !competidoresSnap.exists()) return alert("Dados insuficientes.");
+
+            const config = configSnap.val();
+            const competidores = competidoresSnap.val();
+            const historicos = historicoSnap.val();
+
+            for (let id in competidores) {
+                let pontosPerdidos = 0;
+                const rastro = Object.values(historicos[id] || {});
+                const waypointsCheck = config.features.filter(f => f.geometry.type === "Point" && f.properties.radius);
+                const radares = config.features.filter(f => f.geometry.type === "Polygon" && f.properties.speedLimit);
+                
+                let waypointsVisitados = new Set();
+
+                rastro.forEach(pos => {
+                    const pt = turf.point([pos.lng, pos.lat]);
+
+                    // 1. Checar Radares (Retângulos)
+                    radares.forEach(radar => {
+                        const poly = turf.polygon(radar.geometry.coordinates);
+                        if (turf.booleanPointInPolygon(pt, poly)) {
+                            if (pos.vel > parseFloat(radar.properties.speedLimit)) {
+                                pontosPerdidos += 1000; // Penalidade por excesso de velocidade
+                            }
+                        }
+                    });
+
+                    // 2. Checar Waypoints (Círculos)
+                    waypointsCheck.forEach((wp, idx) => {
+                        const center = [wp.geometry.coordinates[0], wp.geometry.coordinates[1]];
+                        const distance = turf.distance(pt, turf.point(center), {units: 'meters'});
+                        if (distance <= wp.properties.radius) {
+                            waypointsVisitados.add(idx);
+                        }
+                    });
+                });
+
+                // Penalizar Waypoints não visitados
+                const naoVisitados = waypointsCheck.length - waypointsVisitados.size;
+                pontosPerdidos += (naoVisitados * 1000);
+
+                // Atualizar Firebase
+                const pontosFinais = 150000 - pontosPerdidos;
+                await update(ref(db, `competidores/${id}`), {
+                    pontosPerdidos,
+                    pontos: pontosFinais
+                });
+            }
+            alert("Apuração concluída! Verifique o ranking.");
+        };
+
         window.resetProva = () => {
-            if(confirm("Deseja apagar TUDO?")) {
+            if(confirm("Apagar todos os dados de competidores e histórico?")) {
                 remove(ref(db, 'competidores'));
                 remove(ref(db, 'historico'));
-                alert("Dados limpos!");
+                location.reload();
             }
         };
 
-        // Monitoramento em tempo real
-        const carMarkers = {};
-        onValue(ref(db, 'competidores'), (snapshot) => {
-            const data = snapshot.val();
+        // Monitoramento em tempo real (Ícones com números)
+        onValue(ref(db, 'competidores'), (snap) => {
+            const data = snap.val();
             for(let id in data) {
-                const car = data[id];
-                const pos = [car.lat, car.lng];
-                if(!carMarkers[id]) {
-                    carMarkers[id] = L.marker(pos, {
-                        icon: L.divIcon({html: `<b>${car.numero}</b>`, className: 'car-icon'})
-                    }).addTo(map);
-                } else {
-                    carMarkers[id].setLatLng(pos);
-                }
-                carMarkers[id].bindPopup(`Carro: ${car.numero}<br>Vel: ${car.vel || 0} km/h`);
+                const c = data[id];
+                const pos = [c.lat, c.lng];
+                const icon = L.divIcon({ className: 'car-icon', html: c.numero, iconSize: [25, 25] });
+                // Lógica de atualizar/criar marker...
             }
         });
     </script>
