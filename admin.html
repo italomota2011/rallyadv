@@ -2,62 +2,85 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Controle Rally</title>
+    <title>Painel Admin - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.8.0/dist/geosearch.css" />
     <style>
-        body { font-family: sans-serif; margin: 0; }
-        #map { height: 75vh; width: 100%; }
-        .panel { padding: 15px; background: #2c3e50; color: white; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        button { cursor: pointer; padding: 8px 12px; font-weight: bold; border-radius: 4px; border: none; }
-        .btn-save { background: #27ae60; color: white; }
-        .btn-reset { background: #c0392b; color: white; }
-        .btn-calc { background: #f39c12; color: white; }
+        /* CSS CRÍTICO PARA O MAPA APARECER */
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
+        #map { 
+            height: calc(100vh - 60px); /* Altura total menos o painel superior */
+            width: 100%; 
+            background: #e5e3df; /* Cor de fundo caso o mapa falhe */
+        }
+        .panel { 
+            height: 60px; 
+            background: #2c3e50; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            padding: 0 15px;
+            color: white;
+        }
     </style>
 </head>
 <body>
     <div class="panel">
-        <div id="search-container" style="width: 300px; color: black;"></div>
-        <button onclick="toggleMap()">Alternar Satélite</button>
-        <button class="btn-save" onclick="saveConfig()">Salvar Percurso/Radares</button>
-        <button class="btn-calc" onclick="apurarResultados()">FINALIZAR E APURAR PROVA</button>
-        <button class="btn-reset" onclick="resetRace()">REINICIAR TUDO</button>
-        <a href="resultados.html"><button>Ranking</button></a>
+        <strong>Admin Rally</strong>
+        <button onclick="saveConfig()">Salvar Prova</button>
+        <button onclick="apurarResultados()" style="background: #f39c12;">Apurar Pontos</button>
+        <button onclick="toggleMap()">Satélite/Rua</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://unpkg.com/leaflet-geosearch@3.8.0/dist/bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        const firebaseConfig = { /* SEU CONFIG AQUI */ };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            storageBucket: "cronometro-rally.firebasestorage.app",
+            messagingSenderId: "341731891354",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Mapa e Camadas
-        const map = L.map('map').setView([-23.55, -46.63], 10);
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+        // Inicialização do Mapa com Coordenadas de SP por padrão
+        const map = L.map('map').setView([-23.5505, -46.6333], 12);
 
-        // Busca de Cidade
-        const searchControl = new GeoSearch.GeoSearchControl({
-            provider: new GeoSearch.OpenStreetMapProvider(),
-            style: 'bar',
-            container: document.getElementById('search-container')
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri'
         });
-        map.addControl(searchControl);
 
-        // Desenho
+        // Toggle Map
+        window.toggleMap = () => {
+            if (map.hasLayer(osm)) {
+                map.removeLayer(osm);
+                sat.addTo(map);
+            } else {
+                map.removeLayer(sat);
+                osm.addTo(map);
+            }
+        };
+
+        // Ferramentas de Desenho
         const drawnItems = new L.FeatureGroup();
         map.addLayer(drawnItems);
         const drawControl = new L.Control.Draw({
-            draw: { marker: false, circlemarker: false },
             edit: { featureGroup: drawnItems }
         });
         map.addControl(drawControl);
@@ -65,10 +88,28 @@
         map.on(L.Draw.Event.CREATED, (e) => {
             const layer = e.layer;
             if (e.layerType === 'rectangle') {
-                layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
+                layer.options.speedLimit = prompt("Velocidade Radar (km/h):", "60");
             }
             drawnItems.addLayer(layer);
         });
 
-        // Funções Globais
-        window.toggleMap = () => map.hasLayer(osm) ? (map.removeLayer(osm), sat.addTo(map)) : (map
+        // Tornar funções acessíveis globalmente
+        window.saveConfig = async () => {
+            const data = drawnItems.toGeoJSON();
+            // Injetar o raio nos círculos pois o GeoJSON padrão do Leaflet não salva 'radius'
+            data.features.forEach((feature, index) => {
+                const layer = Object.values(drawnItems._layers)[index];
+                if (layer instanceof L.Circle) {
+                    feature.properties.radius = layer.getRadius();
+                    feature.properties.type = 'waypoint';
+                } else {
+                    feature.properties.type = 'radar';
+                    feature.properties.speedLimit = layer.options.speedLimit || 60;
+                }
+            });
+            await set(ref(db, 'config/mapa'), data);
+            alert("Mapa e regras salvos no Firebase!");
+        };
+    </script>
+</body>
+</html>
