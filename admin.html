@@ -7,9 +7,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; height: 100vh; width: 100vw; background: #1a202c; overflow: hidden; font-family: sans-serif; }
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
-        #map { height: calc(100vh - 60px); width: 100%; background: #a0aec0; }
+        /* GARANTE QUE O MAPA APAREÇA */
+        #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
         button:hover { background: #718096; }
         input { padding: 8px; border-radius: 4px; border: none; background: #1a202c; color: white; width: 150px; }
@@ -28,6 +29,7 @@
         <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Ranking</button>
         <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
     </div>
+    
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -51,12 +53,19 @@
         const db = firebase.database(app);
         let map, drawnItems;
 
-        window.onload = function() {
+        function initMap() {
             const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
             const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-            map = L.map('map', { center: [-12.26, -38.96], zoom: 13, layers: [camadaRuas] });
+            
+            map = L.map('map', { 
+                center: [-12.26, -38.96], 
+                zoom: 13, 
+                layers: [camadaRuas] 
+            });
+
             L.control.layers({ "Mapa": camadaRuas, "Satélite": camadaSat }).addTo(map);
             drawnItems = new L.FeatureGroup().addTo(map);
+            
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
                 draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
@@ -76,16 +85,24 @@
                 }
                 drawnItems.addLayer(layer);
             });
+
             carregarTrajeto();
             rastrearCarros();
-        };
+            
+            // Força o redimensionamento para garantir que o mapa apareça
+            setTimeout(() => { map.invalidateSize(); }, 500);
+        }
+
+        window.onload = initMap;
 
         window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
             if(!q) return;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+                const data = await res.json();
+                if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+            } catch(e) { alert("Erro na busca."); }
         };
 
         window.salvar = function() {
@@ -136,4 +153,40 @@
             for(let id in comps) {
                 let pen = 0;
                 const rastroArr = Object.values(rastros[id] || {}).sort((a, b) => a.ts - b.ts);
-                if(rastroArr.length ===
+                if(rastroArr.length === 0) continue;
+
+                config.features.forEach(feat => {
+                    if(feat.geometry.type === 'Polygon') {
+                        const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
+                        let tempoExcessoMs = 0;
+                        for(let i = 1; i < rastroArr.length; i++) {
+                            const p = rastroArr[i];
+                            const duration = p.ts - rastroArr[i-1].ts;
+                            // Considera pontos dentro do polígono com velocidade acima da tolerância
+                            if(duration < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                tempoExcessoMs += duration;
+                            }
+                        }
+                        // Se passou de 10 segundos de carência
+                        if(tempoExcessoMs > 10000) {
+                            pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
+                        }
+                    } else if(feat.properties?.type === 'circle') {
+                        const centro = feat.geometry.coordinates;
+                        const raio = feat.properties.radius / 1000;
+                        if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
+                            pen += 20000;
+                        }
+                    }
+                });
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - pen });
+            }
+            alert("✅ Apuração concluída!");
+        };
+
+        window.resetar = function() {
+            if(prompt("Senha de Segurança:") === "261291") db.ref('/').remove().then(() => location.reload());
+        };
+    </script>
+</body>
+</html>
