@@ -1,71 +1,52 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Simulador de GPS - Rally</title>
+    <meta charset="UTF-8">
+    <title>Simulador de GPS - Testes</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-        .box { border: 1px solid #ccc; padding: 15px; border-radius: 8px; max-width: 400px; }
-        button { cursor: pointer; padding: 10px; margin-top: 10px; width: 100%; }
+        #map { height: 500px; cursor: crosshair; }
+        .controls { padding: 20px; background: #eee; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h3>Simulador de Movimento</h3>
-        <p>Este script enviará coordenadas automáticas para o Carro 1 para testar sua apuração.</p>
-        <button onclick="simularRota()" id="btnSimular" style="background: #3498db; color: white;">Iniciar Simulação (Carro 1)</button>
+    <div class="controls">
+        <h3>Simulador de Teste</h3>
+        <p>1. Digite o número do carro | 2. Clique no mapa para definir o destino | 3. O simulador enviará os pontos.</p>
+        Carro: <input type="number" id="simCarro" value="99">
+        Velocidade Simulada: <input type="number" id="simVel" value="80"> km/h
     </div>
+    <div id="map"></div>
 
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, update, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
-
+        const firebaseConfig = { /* SEU CONFIG */ };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Coordenadas fictícias (ajuste para perto de onde você desenhou no mapa)
-        const rotaFake = [
-            { lat: -23.550, lng: -46.633, vel: 40 },
-            { lat: -23.551, lng: -46.634, vel: 85 }, // Alta velocidade (para testar radar)
-            { lat: -23.552, lng: -46.635, vel: 30 }, // Ponto sobre um Waypoint
-            { lat: -23.553, lng: -46.636, vel: 45 }
-        ];
+        const map = L.map('map').setView([-23.55, -46.63], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        window.simularRota = async () => {
-            document.getElementById('btnSimular').disabled = true;
-            document.getElementById('btnSimular').innerText = "Simulando...";
+        map.on('click', function(e) {
+            const id = document.getElementById('simCarro').value;
+            const vel = parseFloat(document.getElementById('simVel').value);
+            const {lat, lng} = e.latlng;
 
-            for (let i = 0; i < rotaFake.length; i++) {
-                const ponto = rotaFake[i];
-                const data = {
-                    nome: "Piloto Teste",
-                    numero: "1",
-                    categoria: "4x4",
-                    lat: ponto.lat,
-                    lng: ponto.lng,
-                    vel: ponto.vel,
-                    pontos: 150000
-                };
+            // Simula o envio para o Firebase
+            update(ref(db, `competidores/${id}`), {
+                lat, lng, velocidade: vel, nome: "Teste Simulado", categoria: "4x4", pontos: 150000
+            });
 
-                // Envia para o tempo real e para o histórico
-                await set(ref(db, 'competidores/1'), data);
-                await push(ref(db, 'historico/1'), { ...ponto, time: Date.now() });
-                
-                console.log(`Ponto ${i+1} enviado.`);
-                await new Promise(r => setTimeout(r, 2000)); // Espera 2 segundos entre pontos
-            }
-            alert("Simulação concluída! Agora vá ao Painel Admin e clique em 'Apurar'.");
-            document.getElementById('btnSimular').disabled = false;
-        };
+            push(ref(db, `logs/${id}`), {
+                lat, lng, vel: vel, ts: Date.now()
+            });
+
+            L.circleMarker([lat, lng], {radius: 5, color: 'green'}).addTo(map);
+            console.log("Ponto enviado:", lat, lng);
+        });
     </script>
 </body>
 </html>
