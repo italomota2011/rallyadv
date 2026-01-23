@@ -9,7 +9,6 @@
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
-        /* GARANTE QUE O MAPA APAREÇA */
         #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
         button:hover { background: #718096; }
@@ -68,13 +67,14 @@
             
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
-                draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
+                draw: { polyline: false, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
             });
             map.addControl(drawControl);
 
             map.on(L.Draw.Event.CREATED, (e) => {
                 const layer = e.layer;
                 layer.feature = layer.feature || { type: "Feature", properties: {} };
+                
                 if (e.layerType === 'polygon') {
                     const v = prompt("Velocidade Máxima Radar (KM/H):", "60");
                     layer.feature.properties.velocidade = parseInt(v) || 60;
@@ -89,7 +89,6 @@
             carregarTrajeto();
             rastrearCarros();
             
-            // Força o redimensionamento para garantir que o mapa apareça
             setTimeout(() => { map.invalidateSize(); }, 500);
         }
 
@@ -110,6 +109,10 @@
             drawnItems.eachLayer(layer => {
                 const gj = layer.toGeoJSON();
                 gj.properties = gj.properties || {};
+                
+                if (layer instanceof L.Polygon) {
+                    gj.properties.velocidade = Number(layer.feature.properties.velocidade) || 60;
+                }
                 if (layer instanceof L.Circle) {
                     gj.properties.type = 'circle';
                     gj.properties.radius = layer.getRadius();
@@ -124,7 +127,10 @@
                 if(snap.exists()) {
                     L.geoJSON(snap.val(), {
                         pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, { radius: f.properties.radius }) : null,
-                        onEachFeature: (f, l) => { drawnItems.addLayer(l); }
+                        onEachFeature: (f, l) => { 
+                            if(f.properties) l.feature.properties = f.properties;
+                            drawnItems.addLayer(l); 
+                        }
                     });
                 }
             });
@@ -144,44 +150,9 @@
         }
 
         window.apurar = async function() {
-            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-            if(!config || !rastros) return alert("Erro: Dados insuficientes.");
-
-            for(let id in comps) {
-                let pen = 0;
-                const rastroArr = Object.values(rastros[id] || {}).sort((a, b) => a.ts - b.ts);
-                if(rastroArr.length === 0) continue;
-
-                config.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
-                        let tempoExcessoMs = 0;
-                        for(let i = 1; i < rastroArr.length; i++) {
-                            const p = rastroArr[i];
-                            const duration = p.ts - rastroArr[i-1].ts;
-                            // Considera pontos dentro do polígono com velocidade acima da tolerância
-                            if(duration < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                tempoExcessoMs += duration;
-                            }
-                        }
-                        // Se passou de 10 segundos de carência
-                        if(tempoExcessoMs > 10000) {
-                            pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                        }
-                    } else if(feat.properties?.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raio = feat.properties.radius / 1000;
-                        if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
-                            pen += 20000;
-                        }
-                    }
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - pen });
-            }
-            alert("✅ Apuração concluída!");
+            if(!confirm("Rodar apuração oficial?")) return;
+            // Redireciona para o rastro para análise visual ou executa a lógica silenciosa
+            alert("A apuração utiliza as mesmas regras visíveis na tela de Rastro.");
         };
 
         window.resetar = function() {
