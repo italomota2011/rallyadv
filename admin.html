@@ -2,164 +2,73 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel Admin - Rally</title>
-    
+    <title>Admin - Controle Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
-
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-geosearch@3.8.0/dist/geosearch.css" />
     <style>
-        /* GARANTE QUE O MAPA OCUPE A TELA INTEIRA */
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-        #container {
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-        }
-        #header {
-            height: 60px;
-            background: #111;
-            color: white;
-            display: flex;
-            align-items: center;
-            padding: 0 15px;
-            gap: 10px;
-            z-index: 1001;
-        }
-        /* ESTA É A PARTE MAIS IMPORTANTE */
-        #map {
-            flex-grow: 1;
-            width: 100%;
-            height: 100%;
-            background: #ccc; /* Se aparecer cinza, o JS do mapa falhou */
-        }
-        button { padding: 8px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
-        .car-icon { background: yellow; border: 2px solid #000; border-radius: 50%; text-align: center; }
+        body { font-family: sans-serif; margin: 0; }
+        #map { height: 75vh; width: 100%; }
+        .panel { padding: 15px; background: #2c3e50; color: white; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        button { cursor: pointer; padding: 8px 12px; font-weight: bold; border-radius: 4px; border: none; }
+        .btn-save { background: #27ae60; color: white; }
+        .btn-reset { background: #c0392b; color: white; }
+        .btn-calc { background: #f39c12; color: white; }
     </style>
 </head>
 <body>
-
-<div id="container">
-    <div id="header">
-        <strong>RALLY CONTROL</strong>
-        <button onclick="changeMapMode()">🛰️ Satélite</button>
-        <button style="background: #27ae60; color: white;" onclick="saveConfig()">💾 Salvar</button>
-        <button style="background: #f39c12;" onclick="apurarResultados()">⚖️ Apurar</button>
-        <button style="background: #c0392b; color: white;" onclick="resetProva()">🧹 Reset</button>
+    <div class="panel">
+        <div id="search-container" style="width: 300px; color: black;"></div>
+        <button onclick="toggleMap()">Alternar Satélite</button>
+        <button class="btn-save" onclick="saveConfig()">Salvar Percurso/Radares</button>
+        <button class="btn-calc" onclick="apurarResultados()">FINALIZAR E APURAR PROVA</button>
+        <button class="btn-reset" onclick="resetRace()">REINICIAR TUDO</button>
+        <a href="resultados.html"><button>Ranking</button></a>
     </div>
     <div id="map"></div>
-</div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.all.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/leaflet-geosearch@3.8.0/dist/bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, get, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        storageBucket: "cronometro-rally.firebasestorage.app",
-        messagingSenderId: "341731891354",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
+        const firebaseConfig = { /* SEU CONFIG AQUI */ };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+        // Mapa e Camadas
+        const map = L.map('map').setView([-23.55, -46.63], 10);
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
 
-    // INICIALIZAÇÃO DO MAPA
-    const map = L.map('map', {
-        center: [-23.5505, -46.6333],
-        zoom: 13
-    });
-
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19
-    }).addTo(map);
-
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-
-    // FORÇAR O MAPA A APARECER SE ESTIVER EM BRANCO
-    setTimeout(() => {
-        map.invalidateSize();
-    }, 100);
-
-    // FERRAMENTAS DE DESENHO
-    const drawnItems = new L.FeatureGroup().addTo(map);
-    const drawControl = new L.Control.Draw({
-        edit: { featureGroup: drawnItems },
-        draw: { polygon: false, circlemarker: false, marker: false }
-    });
-    map.addControl(drawControl);
-
-    map.on(L.Draw.Event.CREATED, (e) => {
-        const layer = e.layer;
-        if (e.layerType === 'rectangle') {
-            layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
-        }
-        drawnItems.addLayer(layer);
-    });
-
-    // FUNÇÕES GLOBAIS
-    let isSat = false;
-    window.changeMapMode = () => {
-        if(isSat) { map.removeLayer(sat); osm.addTo(map); }
-        else { map.removeLayer(osm); sat.addTo(map); }
-        isSat = !isSat;
-    };
-
-    window.saveConfig = async () => {
-        const geojson = { type: "FeatureCollection", features: [] };
-        drawnItems.eachLayer(layer => {
-            let shape = layer.toGeoJSON();
-            if (layer instanceof L.Circle) {
-                shape.properties.radius = layer.getRadius();
-                shape.properties.type = 'waypoint';
-            } else if (layer instanceof L.Rectangle) {
-                shape.properties.speedLimit = layer.options.speedLimit;
-                shape.properties.type = 'radar';
-            }
-            geojson.features.push(shape);
+        // Busca de Cidade
+        const searchControl = new GeoSearch.GeoSearchControl({
+            provider: new GeoSearch.OpenStreetMapProvider(),
+            style: 'bar',
+            container: document.getElementById('search-container')
         });
-        await set(ref(db, 'config'), geojson);
-        alert("Configurações salvas!");
-    };
+        map.addControl(searchControl);
 
-    window.apurarResultados = async () => {
-        // ... (Lógica de apuração igual ao código anterior)
-        alert("Iniciando apuração...");
-    };
+        // Desenho
+        const drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+        const drawControl = new L.Control.Draw({
+            draw: { marker: false, circlemarker: false },
+            edit: { featureGroup: drawnItems }
+        });
+        map.addControl(drawControl);
 
-    // ÍCONES DOS CARROS EM TEMPO REAL
-    const markers = {};
-    onValue(ref(db, 'competidores'), (snap) => {
-        const data = snap.val();
-        for (let id in data) {
-            const car = data[id];
-            if (!markers[id]) {
-                markers[id] = L.marker([car.lat, car.lng], {
-                    icon: L.divIcon({ className: 'car-icon', html: car.numero, iconSize: [20, 20] })
-                }).addTo(map);
-            } else {
-                markers[id].setLatLng([car.lat, car.lng]);
+        map.on(L.Draw.Event.CREATED, (e) => {
+            const layer = e.layer;
+            if (e.layerType === 'rectangle') {
+                layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
             }
-            markers[id].bindPopup(`Carro ${car.numero}: ${car.vel} km/h`);
-        }
-    });
+            drawnItems.addLayer(layer);
+        });
 
-    window.resetProva = () => {
-        if(confirm("Limpar dados?")) remove(ref(db, 'competidores'));
-    };
-
-</script>
-</body>
-</html>
+        // Funções Globais
+        window.toggleMap = () => map.hasLayer(osm) ? (map.removeLayer(osm), sat.addTo(map)) : (map
