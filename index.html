@@ -7,35 +7,31 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
-        h2 { text-align: center; color: #e67e22; margin-bottom: 25px; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:disabled { background: #555; cursor: not-allowed; }
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
         .tracking { text-align: center; display: none; }
-        .pulse { height: 12px; width: 12px; background-color: #2ecc71; border-radius: 50%; display: inline-block; animation: blink 1s infinite; margin-right: 8px; }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
     <div class="card">
         <div id="setup">
-            <h2>REGISTRO RALLY</h2>
+            <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
             <input type="text" id="nome" placeholder="Nome do Piloto">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="number" id="carro" placeholder="Nº do Carro (1-100)" min="1" max="100">
+            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
         <div id="ativo" class="tracking">
-            <h2 id="viewCarro">Carro --</h2>
-            <p><span class="pulse"></span> Transmitindo GPS...</p>
-            <div id="viewVel" style="font-size: 3rem; font-weight: bold; margin: 20px 0;">0.0</div>
+            <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
+            <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
             <p>KM/H</p>
+            <p style="color:#2ecc71;">● TRANSMITINDO GPS</p>
         </div>
     </div>
 
@@ -49,23 +45,18 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
 
         document.getElementById('btnIniciar').onclick = async function() {
             const num = document.getElementById('carro').value;
             const nome = document.getElementById('nome').value;
             const cat = document.getElementById('categoria').value;
 
-            if(!num || !nome || num < 1 || num > 100) return alert("Dados inválidos!");
+            if(!num || !nome) return alert("Preencha tudo!");
 
-            this.disabled = true;
             const snap = await db.ref('competidores/' + num).once('value');
-            if(snap.exists()) {
-                alert("Carro já cadastrado!");
-                this.disabled = false;
-                return;
-            }
+            if(snap.exists()) return alert("Carro já cadastrado!");
 
             await db.ref('competidores/' + num).set({ nome, categoria: cat, pontos: 150000 });
             document.getElementById('setup').style.display = 'none';
