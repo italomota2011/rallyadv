@@ -2,30 +2,53 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Visualização</title>
+    <title>Telemetria Detalhada - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; z-index: 1000; }
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; overflow-y: auto; border-right: 1px solid #333; }
         #map { flex-grow: 1; }
-        h2 { color: #e67e22; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; border: none; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; }
+        .card { background: #2a2a2a; padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 5px solid #e67e22; }
+        h3 { margin-top: 0; color: #e67e22; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: none; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
+        .legenda { font-size: 11px; color: #aaa; margin-top: 10px; }
+        .leg-item { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+        .box { width: 12px; height: 12px; border-radius: 2px; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>🛰️ Rastro GPS</h2>
-        <select id="carSelect"><option>Carregando...</option></select>
-        <button onclick="drawTrack()">VER TRAJETO</button>
-        <div id="details">Selecione um carro.</div>
-        <button style="background:#7f8c8d; margin-top:10px;" onclick="location.href='admin.html'">VOLTAR</button>
+        <h3>🛰️ Telemetria</h3>
+        <select id="carSelect"><option>A carregar...</option></select>
+        <button onclick="analisar()">ANALISAR ROTA</button>
+        
+        <div id="infoPiloto" style="display:none;">
+            <div class="card">
+                <strong>PILOTO:</strong> <span id="txtNome">-</span><br>
+                <strong>CATEGORIA:</strong> <span id="txtCat">-</span>
+            </div>
+            <div class="card" style="border-left-color: #e74c3c;">
+                <strong>PENALIZAÇÃO ATUAL:</strong><br>
+                <span id="txtPen" style="font-size: 20px; color: #e74c3c;">0 pts</span>
+            </div>
+        </div>
+
+        <div class="legenda">
+            <div class="leg-item"><div class="box" style="background:#2ecc71"></div> Velocidade OK</div>
+            <div class="leg-item"><div class="box" style="background:#e74c3c"></div> Excesso (>10%)</div>
+            <div class="leg-item"><div class="box" style="background:#3498db"></div> Rota Oficial / PCs</div>
+            <div class="leg-item"><div class="box" style="background:#f39c12"></div> Radares Definidos</div>
+        </div>
+        <button style="background:#444; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
     <div id="map"></div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
@@ -38,25 +61,65 @@
         const db = firebase.database();
         const map = L.map('map').setView([-12.26, -38.96], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let poly = L.polyline([], {color: '#e67e22', weight: 5}).addTo(map);
+        
+        let camadaRastro = L.featureGroup().addTo(map);
+        let camadaOficial = L.featureGroup().addTo(map);
 
         db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione...</option>';
-            const data = snap.val();
-            if(data) Object.keys(data).sort((a,b)=>a-b).forEach(id => opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`);
-            document.getElementById('carSelect').innerHTML = opt;
+            let options = '<option value="">Selecione o Veículo</option>';
+            snap.forEach(c => { options += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
+            document.getElementById('carSelect').innerHTML = options;
         });
 
-        async function drawTrack() {
+        async function analisar() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
-            const snap = await db.ref('rastros/' + id).once('value');
-            const data = snap.val();
-            if(!data) return alert("Sem rastro.");
-            const path = Object.values(data).map(p => [p.lat, p.lng]);
-            poly.setLatLngs(path);
-            map.fitBounds(poly.getBounds());
-            document.getElementById('details').innerHTML = `Carro: ${id}<br>Pontos: ${path.length}`;
+
+            camadaRastro.clearLayers();
+            camadaOficial.clearLayers();
+
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastroSnap = await db.ref('rastros/' + id).once('value');
+            const compSnap = await db.ref('competidores/' + id).once('value');
+            
+            if(!rastroSnap.exists()) return alert("Sem dados de rastro.");
+            const rastroArr = Object.values(rastroSnap.val()).sort((a,b) => a.ts - b.ts);
+            const comp = compSnap.val();
+
+            // Mostrar Info
+            document.getElementById('infoPiloto').style.display = 'block';
+            document.getElementById('txtNome').innerText = comp.nome;
+            document.getElementById('txtCat').innerText = comp.categoria;
+            document.getElementById('txtPen').innerText = (150000 - comp.pontos) + " pts";
+
+            // Desenhar Rota Oficial
+            if(config) {
+                L.geoJSON(config, {
+                    style: (f) => f.geometry.type === 'Polygon' ? { color: '#f39c12', fillOpacity: 0.2 } : { color: '#3498db' },
+                    pointToLayer: (f, latlng) => L.circle(latlng, { radius: f.properties.radius, color: '#3498db' })
+                }).addTo(camadaOficial);
+            }
+
+            // Desenhar Rastro Colorido
+            for(let i = 1; i < rastroArr.length; i++) {
+                const p1 = rastroArr[i-1];
+                const p2 = rastroArr[i];
+                let cor = '#2ecc71';
+
+                config?.features.forEach(feat => {
+                    if(feat.geometry.type === 'Polygon') {
+                        const vMaxTol = (feat.properties.velocidade || 60) * 1.1;
+                        if(p2.vel > vMaxTol && turf.booleanPointInPolygon(turf.point([p2.lng, p2.lat]), feat)) {
+                            cor = '#e74c3c';
+                        }
+                    }
+                });
+
+                L.polyline([[p1.lat, p1.lng], [p2.lat, p2.lng]], { color: cor, weight: 4 })
+                 .addTo(camadaRastro)
+                 .bindPopup(`<b>Velocidade:</b> ${p2.vel.toFixed(1)} km/h<br><b>Hora:</b> ${new Date(p2.ts).toLocaleTimeString()}`);
+            }
+            map.fitBounds(camadaRastro.getBounds());
         }
     </script>
 </body>
