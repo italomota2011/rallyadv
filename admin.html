@@ -57,15 +57,16 @@
             draw: { marker: true, circlemarker: false, circle: true, polygon: true, polyline: true } 
         }).addTo(map);
 
+        // Carregar percurso com verificação de segurança
         db.ref('configuracoes/percurso').once('value', snap => {
             if(snap.exists()) {
                 L.geoJSON(snap.val(), { 
                     pointToLayer: (f, l) => {
-                        if(f.properties.type === 'circle') return L.circle(l, {radius: f.properties.radius});
+                        if(f.properties && f.properties.type === 'circle') return L.circle(l, {radius: f.properties.radius});
                         return L.marker(l);
                     },
                     onEachFeature: (f, l) => {
-                        if(f.properties.velocidade) l.bindPopup("Limite: " + f.properties.velocidade + " km/h");
+                        if(f.properties && f.properties.velocidade) l.bindPopup("Limite: " + f.properties.velocidade + " km/h");
                         drawnItems.addLayer(l);
                     }
                 });
@@ -76,9 +77,10 @@
             const layer = e.layer;
             const type = e.layerType;
             
+            layer.feature = layer.feature || {type: "Feature", properties: {}};
+
             if(type === 'polygon' || type === 'circle') {
                 const vel = prompt("Limite de Velocidade para esta zona (km/h):", "60");
-                layer.feature = layer.feature || {type: "Feature", properties: {}};
                 layer.feature.properties.velocidade = parseInt(vel) || 0;
                 if(type === 'circle') {
                     layer.feature.properties.type = 'circle';
@@ -110,32 +112,34 @@
         }
 
         async function runApuracao() {
-            if(!confirm("Iniciar apuração? Isso recalculará os pontos de todos.")) return;
+            if(!confirm("Iniciar apuração?")) return;
             
             try {
-                const config = (await db.ref('configuracoes/percurso').once('value')).val();
-                const rastros = (await db.ref('rastros').once('value')).val();
-                const comps = (await db.ref('competidores').once('value')).val();
+                const configSnap = await db.ref('configuracoes/percurso').once('value');
+                const rastrosSnap = await db.ref('rastros').once('value');
+                const compsSnap = await db.ref('competidores').once('value');
 
-                if(!config || !rastros) return alert("Dados insuficientes.");
+                if(!configSnap.exists() || !rastrosSnap.exists()) return alert("Dados insuficientes.");
+
+                const config = configSnap.val();
+                const rastros = rastrosSnap.val();
+                const comps = compsSnap.val();
 
                 for(let id in comps) {
                     let penalidadeTotal = 0;
                     const rastro = rastros[id];
                     if(!rastro) continue;
 
-                    // Converter rastro em array de pontos Turf
                     const rastroArray = Object.values(rastro);
 
-                    config.features.forEach(feat => {
-                        const limite = parseInt(feat.properties.velocidade);
-                        if(!limite) return; // Pula se não for radar (ex: waypoint comum)
+                    // Filtrar apenas áreas que possuem velocidade definida
+                    const zonasRadar = config.features.filter(f => f.properties && f.properties.velocidade > 0);
 
+                    zonasRadar.forEach(feat => {
                         let violou = false;
+                        const limite = parseInt(feat.properties.velocidade);
 
-                        rastroArray.forEach(p => {
-                            if(violou) return; // Se já violou este radar, não precisa checar o resto deste rastro
-
+                        for(let p of rastroArray) {
                             const pt = turf.point([p.lng, p.lat]);
                             let inside = false;
 
@@ -144,28 +148,24 @@
                             } else if(feat.properties.type === 'circle') {
                                 const center = turf.point(feat.geometry.coordinates);
                                 const distance = turf.distance(pt, center, {units: 'meters'});
-                                if(distance <= feat.properties.radius) inside = true;
+                                if(distance <= (feat.properties.radius || 0)) inside = true;
                             }
 
-                            // Se estiver dentro e a velocidade do rastro for maior que o limite
                             if(inside && parseFloat(p.vel) > limite) {
                                 violou = true;
+                                break; // Para de checar este rastro para esta zona
                             }
-                        });
-
-                        if(violou) {
-                            penalidadeTotal += 10000;
-                            console.log(`Carro ${id} violou radar de ${limite}km/h`);
                         }
+
+                        if(violou) penalidadeTotal += 10000;
                     });
 
-                    // Atualizar no Firebase: Base de 150.000 pontos
                     await db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
                 }
-                alert("Apuração concluída com sucesso!");
+                alert("Apuração concluída!");
             } catch (err) {
-                console.error(err);
-                alert("Erro durante a apuração. Verifique o console.");
+                console.error("Erro detalhado:", err);
+                alert("Erro na apuração. Veja o console.");
             }
         }
 
