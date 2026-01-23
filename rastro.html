@@ -2,35 +2,41 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Rastro Rally - Visualização</title>
+    <title>Rastro Rally - Analítico</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 1000; }
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.5); z-index: 1000; overflow-y: auto; }
         #map { flex-grow: 1; }
         h2 { color: #e67e22; margin-top: 0; }
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 16px; }
         select { background: #333; color: white; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #d35400; }
-        #details { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 14px; }
-        .back-btn { background: #7f8c8d; margin-top: 10px; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
+        .legend { background: #252525; padding: 10px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+        .dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>🛰️ Rastro GPS</h2>
-        <label>Selecione o Competidor:</label>
-        <select id="carSelect">
-            <option value="">Carregando...</option>
-        </select>
-        <button onclick="drawTrack()">VER TRAJETO NO MAPA</button>
-        <div id="details">Selecione um carro para ver os detalhes do percurso.</div>
-        <button class="back-btn" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+        <h2>🛰️ Rastro Analítico</h2>
+        <label>Competidor:</label>
+        <select id="carSelect"><option value="">Carregando...</option></select>
+        <button onclick="drawTrack()">ANALISAR TRAJETO</button>
+        
+        <div class="legend">
+            <strong>Legenda:</strong><br>
+            <span class="dot" style="background: #95a5a6;"></span> Percurso Oficial<br>
+            <span class="dot" style="background: #3498db;"></span> Rastro do Piloto<br>
+            <span class="dot" style="background: #e74c3c;"></span> Radar (Zona de Controle)<br>
+            <span class="dot" style="background: #f1c40f;"></span> Waypoint (Ponto de Passagem)
+        </div>
+        <div id="details" style="margin-top:15px; font-size: 14px; color: #bdc3c7;"></div>
+        <button onclick="location.href='admin.html'" style="background:#7f8c8d; margin-top:20px;">Voltar</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
@@ -49,50 +55,83 @@
 
         const map = L.map('map').setView([-12.26, -38.96], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        // Camada para a linha do rastro
-        let poly = L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.7}).addTo(map);
 
-        // Escuta a lista de competidores e atualiza o Select
+        let trackLayer = L.layerGroup().addTo(map);
+        let routeLayer = L.layerGroup().addTo(map);
+
+        // Carregar competidores no select
         db.ref('competidores').on('value', snap => {
             const select = document.getElementById('carSelect');
-            const data = snap.val();
-            
-            let options = '<option value="">Selecione um carro...</option>';
-            if (data) {
-                // Converte para array para ordenar por número do carro
-                const ids = Object.keys(data).sort((a, b) => a - b);
-                ids.forEach(id => {
-                    options += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-                });
-            }
+            let options = '<option value="">Selecione...</option>';
+            snap.forEach(c => { options += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
             select.innerHTML = options;
         });
 
         async function drawTrack() {
             const id = document.getElementById('carSelect').value;
-            if(!id) return alert("Selecione um competidor primeiro.");
+            if(!id) return alert("Selecione um carro.");
 
-            const snap = await db.ref('rastros/' + id).once('value');
-            const data = snap.val();
-            
-            if(!data) {
-                poly.setLatLngs([]);
-                return alert("Nenhum dado de rastro encontrado para este veículo.");
+            trackLayer.clearLayers();
+            routeLayer.clearLayers();
+
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastroSnap = await db.ref('rastros/' + id).once('value');
+            const rastroData = rastroSnap.val();
+
+            // 1. Desenhar Percurso Oficial (Cinza)
+            if(config) {
+                L.geoJSON(config, {
+                    style: f => ({ color: '#95a5a6', weight: 3, dashArray: '5, 10', fillOpacity: 0.1 }),
+                    pointToLayer: (f, l) => {
+                        if(f.properties.type === 'circle') return L.circle(l, {radius: f.properties.radius, color: '#e74c3c'});
+                        return L.marker(l);
+                    },
+                    onEachFeature: (f, l) => {
+                        if(f.properties.velocidade) l.bindTooltip("Radar: " + f.properties.velocidade + " km/h", {permanent: true});
+                        if(f.properties.name) l.bindTooltip("WP: " + f.properties.name, {permanent: true});
+                    }
+                }).addTo(routeLayer);
             }
 
-            // Converter os dados do rastro (que é um objeto de pushes) em um array de coordenadas
-            const path = Object.values(data).map(p => [p.lat, p.lng]);
-            
-            poly.setLatLngs(path);
-            map.fitBounds(poly.getBounds(), { padding: [50, 50] });
+            // 2. Desenhar Rastro do Piloto (Azul) e checar velocidades nos radares
+            if(rastroData) {
+                const points = Object.values(rastroData);
+                const latlngs = points.map(p => [p.lat, p.lng]);
+                
+                // Linha do rastro
+                L.polyline(latlngs, {color: '#3498db', weight: 4}).addTo(trackLayer);
 
-            document.getElementById('details').innerHTML = `
-                <strong>Resumo do Trajeto:</strong><br>
-                🚗 Carro: ${id}<br>
-                📍 Pontos registrados: ${path.length}<br>
-                🕒 Última atualização: ${new Date(Object.values(data).pop().ts).toLocaleTimeString()}
-            `;
+                // Verificar pontos dentro de radares
+                points.forEach(p => {
+                    if(config) {
+                        config.features.forEach(feat => {
+                            if(feat.properties.velocidade) {
+                                const pt = turf.point([p.lng, p.lat]);
+                                let isInside = false;
+
+                                if(feat.geometry.type === 'Polygon') isInside = turf.booleanPointInPolygon(pt, feat);
+                                if(feat.properties.type === 'circle') {
+                                    const center = turf.point(feat.geometry.coordinates);
+                                    if(turf.distance(pt, center, {units: 'meters'}) <= feat.properties.radius) isInside = true;
+                                }
+
+                                if(isInside) {
+                                    const color = p.vel > feat.properties.velocidade ? '#e74c3c' : '#2ecc71';
+                                    L.circleMarker([p.lat, p.lng], {
+                                        radius: 5, color: color, fillOpacity: 1
+                                    }).bindPopup(`Velocidade capturada: ${p.vel.toFixed(1)} km/h<br>Limite: ${feat.properties.velocidade} km/h`)
+                                      .addTo(trackLayer);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                map.fitBounds(latlngs.length > 0 ? L.polyline(latlngs).getBounds() : map.getBounds());
+                document.getElementById('details').innerHTML = `Análise concluída: ${points.length} coordenadas processadas.`;
+            } else {
+                alert("Sem rastro para este carro.");
+            }
         }
     </script>
 </body>
