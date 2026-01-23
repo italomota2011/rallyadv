@@ -5,77 +5,33 @@
     <title>Rastro Rally - Monitoramento</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; font-family: sans-serif; }
         #map { height: 100vh; width: 100%; z-index: 1; }
-        
-        /* PAINEL DE CONTROLE - Ajustado para garantir visibilidade */
         #control-panel {
-            position: absolute;
-            top: 20px;
-            left: 60px; /* Deslocado para não ficar atrás dos botões de zoom do Leaflet */
-            z-index: 2000; /* Z-index alto para ficar sobre o mapa */
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            width: 250px;
-            display: block !important;
+            position: absolute; top: 20px; left: 70px; z-index: 2000;
+            background: white; padding: 20px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3); width: 220px;
         }
-
         .car-icon { 
-            background: #2980b9; 
-            color: white; 
-            border: 2px solid white; 
-            border-radius: 50%; 
-            text-align: center; 
-            line-height: 26px; 
-            font-weight: bold; 
-            font-size: 11px; 
-            box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            background: #2980b9; color: white; border: 2px solid white; 
+            border-radius: 50%; text-align: center; line-height: 26px; 
+            font-weight: bold; font-size: 11px;
         }
-
-        select { 
-            width: 100%; 
-            padding: 10px; 
-            margin-top: 10px; 
-            border-radius: 6px; 
-            border: 1px solid #ccc;
-            font-size: 14px;
-            cursor: pointer;
-            background-color: #f9f9f9;
-        }
-
-        h3 { margin: 0 0 10px 0; font-size: 16px; color: #2c3e50; }
-        .stats { font-size: 14px; color: #7f8c8d; margin-bottom: 10px; display: block; }
-        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
-        
-        button {
-            width: 100%;
-            padding: 8px;
-            margin-top: 10px;
-            background: #ecf0f1;
-            border: 1px solid #bdc3c7;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        button:hover { background: #dfe6e9; }
+        select { width: 100%; padding: 10px; margin-top: 10px; border-radius: 6px; }
+        button { width: 100%; margin-top: 10px; padding: 8px; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <div id="control-panel">
-    <h3>📊 Monitoramento</h3>
-    <span class="stats">Carros Online: <strong id="count">0</strong></span>
-    
+    <strong>Monitoramento</strong><br>
+    Online: <span id="count">0</span>
     <hr>
-    
-    <label for="carSelector">🔍 Rastrear Histórico:</label>
+    <label>Rastrear Carro:</label>
     <select id="carSelector" onchange="exibirTrajeto()">
-        <option value="">Selecione um carro...</option>
+        <option value="">Selecione...</option>
     </select>
-    
-    <button onclick="limparTrajeto()">Limpar Linha de Trajeto</button>
+    <button onclick="limparTrajeto()">Limpar Trajeto</button>
 </div>
 
 <div id="map"></div>
@@ -85,45 +41,5 @@
 <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
 <script>
-    // 1. Sua Configuração
     const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        storageBucket: "cronometro-rally.firebasestorage.app",
-        messagingSenderId: "341731891354",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // 2. Inicializar Mapa
-    const map = L.map('map').setView([-23.5505, -46.6333], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    const markers = {};
-    const trajetoLinha = L.polyline([], {color: '#d35400', weight: 6, opacity: 0.7}).addTo(map);
-
-    // 3. Preencher o Seletor de Carros (Garantindo que execute ao carregar)
-    window.onload = function() {
-        const sel = document.getElementById('carSelector');
-        for(let i=1; i<=100; i++) {
-            let opt = document.createElement('option');
-            opt.value = i;
-            opt.innerText = "Carro " + i;
-            sel.appendChild(opt);
-        }
-    };
-
-    // 4. Monitoramento em Tempo Real
-    db.ref('prova/carros').on('value', snapshot => {
-        const data = snapshot.val();
-        if(!data) return;
-        
-        let online = 0;
-        for(let key in data) {
-            const c = data[key];
-            if(c.lat && c.lng) {
-                online
+        apiKey: "AIzaSyBPJkehV9
