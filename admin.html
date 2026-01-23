@@ -8,18 +8,49 @@
     <style>
         body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
         #map { flex-grow: 1; width: 100%; }
-        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; z-index: 1000; }
-        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; }
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
+        .menu { 
+            background: #2c3e50; 
+            color: white; 
+            padding: 10px; 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+            z-index: 1000; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .marker-label { 
+            background: #e67e22; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            color: white; 
+            font-weight: bold; 
+            text-align: center; 
+            line-height: 30px; 
+            width: 30px; 
+            height: 30px; 
+        }
+        button { 
+            padding: 8px 12px; 
+            cursor: pointer; 
+            border-radius: 4px; 
+            border: none; 
+            font-weight: bold; 
+            transition: 0.2s;
+        }
+        button:hover { opacity: 0.8; }
+        .btn-reset { background: #c0392b; color: white; margin-left: auto; }
+        .btn-save { background: #27ae60; color: white; }
+        .btn-process { background: #e67e22; color: white; }
     </style>
 </head>
 <body>
     <div class="menu">
         <button onclick="toggleMap()">Satélite/Mapa</button>
-        <button onclick="saveRoute()" style="background:#27ae60; color:white;">Salvar Percurso</button>
-        <button onclick="runApuracao()" style="background:#e67e22; color:white;">Rodar Apuração</button>
+        <button class="btn-save" onclick="saveRoute()">Salvar Percurso</button>
+        <button class="btn-process" onclick="runApuracao()">Rodar Apuração</button>
         <button onclick="location.href='resultados.html'">Ranking</button>
         <button onclick="location.href='rastro.html'">Rastro</button>
+        <button class="btn-reset" onclick="resetSystem()">Limpar Tudo (Reset)</button>
     </div>
     <div id="map"></div>
 
@@ -48,14 +79,22 @@
         let isSat = false;
 
         const drawnItems = new L.FeatureGroup().addTo(map);
-        new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { marker: false, circlemarker: false }}).addTo(map);
+        new L.Control.Draw({ 
+            edit: { featureGroup: drawnItems }, 
+            draw: { marker: false, circlemarker: false }
+        }).addTo(map);
 
+        // Carregamento Seguro (Correção de Erro de GeoJSON)
         db.ref('configuracoes/percurso').once('value', snap => {
             const data = snap.val();
-            if(data && data.features) L.geoJSON(data, { 
-                pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
-                onEachFeature: (f, l) => drawnItems.addLayer(l) 
-            });
+            if(data && data.features && data.features.length > 0) { 
+                try {
+                    L.geoJSON(data, { 
+                        pointToLayer: (f, l) => f.properties.type === 'circle' ? L.circle(l, {radius: f.properties.radius}) : null,
+                        onEachFeature: (f, l) => drawnItems.addLayer(l) 
+                    });
+                } catch(e) { console.error("Erro ao carregar mapa:", e); }
+            }
         });
 
         const carMarkers = {};
@@ -81,24 +120,29 @@
         function saveRoute() {
             const data = drawnItems.toGeoJSON();
             data.features.forEach((f, i) => {
-                const layer = Object.values(drawnItems._layers)[i];
-                if(layer instanceof L.Circle) { f.properties.type = 'circle'; f.properties.radius = layer.getRadius(); }
+                const layers = Object.values(drawnItems._layers);
+                const layer = layers[i];
+                if(layer instanceof L.Circle) { 
+                    f.properties.type = 'circle'; 
+                    f.properties.radius = layer.getRadius(); 
+                }
             });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Salvo!"));
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso Salvo com Sucesso!"));
         }
 
         async function runApuracao() {
-            if(!confirm("Processar pontuações?")) return;
+            if(!confirm("Deseja processar os pontos de todos os carros agora?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
 
-            if(!config || !rastros) return alert("Sem dados.");
+            if(!config || !rastros) return alert("Sem dados para apuração.");
 
             for(let id in comps) {
                 let perdidos = 0;
                 if(!rastros[id]) continue;
                 const rastroArr = Object.values(rastros[id]);
+                
                 config.features.forEach(feat => {
                     let violou = false;
                     rastroArr.forEach(p => {
@@ -111,7 +155,22 @@
                 });
                 db.ref(`competidores/${id}`).update({ pontos: 150000 - perdidos });
             }
-            alert("Fim da apuração!");
+            alert("Apuração concluída!");
+        }
+
+        // Função Reset Restaurada
+        function resetSystem() {
+            const senha = prompt("Digite a senha para APAGAR TUDO (Competidores e Percurso):");
+            if(senha === "261291") {
+                if(confirm("TEM CERTEZA? Isso não pode ser desfeito.")) {
+                    db.ref('/').remove().then(() => {
+                        alert("Sistema limpo!");
+                        location.reload();
+                    });
+                }
+            } else {
+                alert("Senha incorreta.");
+            }
         }
     </script>
 </body>
