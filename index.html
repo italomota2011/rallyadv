@@ -1,54 +1,69 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Competidor - GPS</title>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Competidor</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; text-align: center; background: #ecf0f1; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #ccc; }
+        button { width: 100%; padding: 15px; background: #2980b9; color: white; border: none; border-radius: 8px; font-size: 1.1em; }
+    </style>
 </head>
 <body>
-    <h2>Registro do Competidor</h2>
-    <div id="form">
-        <input type="text" id="nome" placeholder="Seu Nome"><br>
-        <input type="number" id="numero" placeholder="Nº do Carro (1-100)"><br>
-        <select id="categoria">
-            <option value="4x2">4x2</option>
-            <option value="4x4">4x4</option>
-        </select><br>
-        <button onclick="iniciarRastreio()">Iniciar Corrida</button>
+    <h2>Rally - GPS Ativo</h2>
+    <div id="login">
+        <input type="text" id="nome" placeholder="Seu Nome">
+        <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
+        <select id="cat">
+            <option value="4x2">Categoria 4x2</option>
+            <option value="4x4">Categoria 4x4</option>
+        </select>
+        <button onclick="conectar()">INICIAR PROVA</button>
     </div>
-    <p id="status"></p>
+    <div id="info" style="display:none;">
+        <h3 id="display_carro">Carro #--</h3>
+        <p id="vel">0.0 km/h</p>
+        <div style="color: green; font-weight: bold;">● TRANSMITINDO</div>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, update, push, get } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        const firebaseConfig = { /* MESMA CONFIG DO ADMIN */ };
+        const firebaseConfig = { /* SEU CONFIG */ };
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        window.iniciarRastreio = () => {
-            const num = document.getElementById('numero').value;
+        window.conectar = async () => {
+            const id = document.getElementById('carro').value;
             const nome = document.getElementById('nome').value;
-            const cat = document.getElementById('categoria').value;
+            const cat = document.getElementById('cat').value;
 
-            if(!num || num < 1 || num > 100) return alert("Número inválido");
+            if(!id || id < 1 || id > 100) return alert("Número de carro inválido (1-100)");
 
-            document.getElementById('form').style.display = 'none';
-            document.getElementById('status').innerText = "Rastreando...";
+            const check = await get(ref(db, `competidores/${id}`));
+            if(check.exists()) return alert("Este carro já está em uso!");
 
-            navigator.geolocation.watchPosition((pos) => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                const vel = (pos.coords.speed || 0) * 3.6; // conv para km/h
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('info').style.display = 'block';
+            document.getElementById('display_carro').innerText = `Carro #${id} - ${nome}`;
 
-                // Update Realtime
-                set(ref(db, 'competidores/' + num), {
-                    nome, numero: num, categoria: cat, lat, lng, vel, pontos: 150000
+            navigator.geolocation.watchPosition(pos => {
+                const { latitude, longitude, speed } = pos.coords;
+                const kmh = (speed * 3.6) || 0;
+                
+                document.getElementById('vel').innerText = kmh.toFixed(1) + " km/h";
+
+                update(ref(db, `competidores/${id}`), {
+                    lat: latitude, lng: longitude, velocidade: kmh.toFixed(1),
+                    nome: nome, categoria: cat, pontos: 150000
                 });
 
-                // Salva histórico para a página de rastro
-                push(ref(db, 'historico/' + num), { lat, lng, vel, time: Date.now() });
-                
-            }, err => console.error(err), { enableHighAccuracy: true });
+                push(ref(db, `logs/${id}`), {
+                    lat: latitude, lng: longitude, vel: kmh, ts: Date.now()
+                });
+            }, null, { enableHighAccuracy: true });
         };
     </script>
 </body>
