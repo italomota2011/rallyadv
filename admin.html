@@ -17,23 +17,17 @@
     </style>
 </head>
 <body>
-
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Cidade...">
         <button onclick="buscar()">🔍 Buscar</button>
-        
         <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-
         <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
         <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
-        
         <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-
         <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Ver Rastro</button>
         <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Ranking</button>
         <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
     </div>
-
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -58,36 +52,17 @@
         let map, drawnItems;
 
         window.onload = function() {
-            // CAMADAS
             const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
             const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-
-            // INICIALIZA MAPA
-            map = L.map('map', {
-                center: [-12.26, -38.96],
-                zoom: 13,
-                layers: [camadaRuas]
-            });
-
-            // CONTROLE DE SATÉLITE (ÍCONE NO CANTO DO MAPA)
-            const baseLayers = {
-                "Mapa": camadaRuas,
-                "Satélite": camadaSat
-            };
-            L.control.layers(baseLayers).addTo(map);
-
-            // FERRAMENTAS DE DESENHO
+            map = L.map('map', { center: [-12.26, -38.96], zoom: 13, layers: [camadaRuas] });
+            L.control.layers({ "Mapa": camadaRuas, "Satélite": camadaSat }).addTo(map);
             drawnItems = new L.FeatureGroup().addTo(map);
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
-                draw: {
-                    polyline: true, polygon: true, circle: true,
-                    rectangle: false, marker: false, circlemarker: false
-                }
+                draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
             });
             map.addControl(drawControl);
 
-            // EVENTO DE CRIAÇÃO
             map.on(L.Draw.Event.CREATED, (e) => {
                 const layer = e.layer;
                 layer.feature = layer.feature || { type: "Feature", properties: {} };
@@ -101,12 +76,10 @@
                 }
                 drawnItems.addLayer(layer);
             });
-
             carregarTrajeto();
             rastrearCarros();
         };
 
-        // FUNÇÕES GLOBAIS
         window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
             if(!q) return;
@@ -123,8 +96,6 @@
                 if (layer instanceof L.Circle) {
                     gj.properties.type = 'circle';
                     gj.properties.radius = layer.getRadius();
-                } else if (layer instanceof L.Polygon) {
-                    if(!gj.properties.velocidade) gj.properties.velocidade = 60;
                 }
                 data.features.push(gj);
             });
@@ -135,11 +106,7 @@
             db.ref('configuracoes/percurso').once('value', snap => {
                 if(snap.exists()) {
                     L.geoJSON(snap.val(), {
-                        pointToLayer: (f, latlng) => {
-                            if (f.properties && f.properties.type === 'circle') {
-                                return L.circle(latlng, { radius: f.properties.radius });
-                            }
-                        },
+                        pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, { radius: f.properties.radius }) : null,
                         onEachFeature: (f, l) => { drawnItems.addLayer(l); }
                     });
                 }
@@ -160,7 +127,7 @@
         }
 
         window.apurar = async function() {
-            if(!confirm("Deseja rodar a apuração final?")) return;
+            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
@@ -168,26 +135,5 @@
 
             for(let id in comps) {
                 let pen = 0;
-                const rastroArr = Object.values(rastros[id] || {}).map(p => turf.point([p.lng, p.lat], {vel: p.vel}));
-                if(rastroArr.length === 0) continue;
-
-                config.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        if(rastroArr.some(pt => turf.booleanPointInPolygon(pt, feat) && pt.properties.vel > (feat.properties.velocidade || 60))) pen += 10000;
-                    } else if(feat.properties?.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raio = feat.properties.radius / 1000;
-                        if(!rastroArr.some(pt => turf.distance(pt, turf.point(centro)) <= raio)) pen += 20000;
-                    }
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 150000 - pen });
-            }
-            alert("✅ Apuração concluída!");
-        };
-
-        window.resetar = function() {
-            if(prompt("Senha de Segurança:") === "261291") db.ref('/').remove().then(() => location.reload());
-        };
-    </script>
-</body>
-</html>
+                const rastroArr = Object.values(rastros[id] || {}).sort((a, b) => a.ts - b.ts);
+                if(rastroArr.length ===
