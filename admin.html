@@ -6,11 +6,14 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
-        body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #map { flex-grow: 1; width: 100%; height: 100%; }
-        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1000; }
-        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.4); }
-        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; }
+        /* Garantindo que o mapa ocupe a tela toda */
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+        body { display: flex; flex-direction: column; }
+        #map { flex-grow: 1; width: 100%; background: #ddd; } /* Fundo cinza caso falhe o tile */
+        .menu { background: #2c3e50; color: white; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; z-index: 1001; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+        .marker-label { background: #e67e22; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 30px; width: 30px; height: 30px; font-size: 14px; }
+        button { padding: 8px 12px; cursor: pointer; border-radius: 4px; border: none; font-weight: bold; background: #ecf0f1; }
+        button:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -45,43 +48,149 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        // Inicialização do Mapa
+        // 1. Inicializa o mapa primeiro
         const map = L.map('map').setView([-12.26, -38.96], 13);
         const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
         let isSat = false;
 
         const drawnItems = new L.FeatureGroup().addTo(map);
-        
-        // Configuração do Draw (Sem retângulo)
+
+        // 2. Configura os controles de desenho
         const drawControl = new L.Control.Draw({ 
             edit: { featureGroup: drawnItems }, 
-            draw: { marker: false, circlemarker: false, rectangle: false, polyline: false }
+            draw: { 
+                marker: false, 
+                circlemarker: false, 
+                rectangle: false, // Removido como pedido
+                polyline: false,
+                circle: true,     // Para Waypoints
+                polygon: true     // Para Radares
+            } 
         }).addTo(map);
 
-        // Carregar percurso salvo com verificação de tipo de geometria
+        // 3. Carregar dados do Firebase corrigindo a geometria dos círculos
         db.ref('configuracoes/percurso').once('value', snap => {
             if(snap.exists()) {
-                const data = snap.val();
-                L.geoJSON(data, {
-                    style: function (feature) { return { color: '#3498db' }; },
-                    pointToLayer: function (feature, latlng) {
+                const geoData = snap.val();
+                L.geoJSON(geoData, {
+                    pointToLayer: (feature, latlng) => {
                         if (feature.properties && feature.properties.type === 'circle') {
                             return L.circle(latlng, { radius: feature.properties.radius });
                         }
-                        return null;
                     },
-                    onEachFeature: function (feature, layer) {
+                    onEachFeature: (feature, layer) => {
                         drawnItems.addLayer(layer);
                     }
                 });
             }
         });
 
-        // Atualização dos carros em tempo real
+        // 4. Gestão de Carros no Mapa
         const carMarkers = {};
         db.ref('posicoes').on('value', snap => {
             snap.forEach(c => {
                 const id = c.key; const p = c.val();
                 if(carMarkers[id]) { 
-                    carMarkers[id].set
+                    carMarkers[id].setLatLng([p.lat, p.lng]); 
+                } else { 
+                    carMarkers[id] = L.marker([p.lat, p.lng], { 
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize: [30, 30], iconAnchor: [15, 15] }) 
+                    }).addTo(map); 
+                }
+            });
+        });
+
+        // 5. Eventos de Criação
+        map.on(L.Draw.Event.CREATED, e => {
+            const layer = e.layer;
+            if(e.layerType === 'polygon') {
+                const vel = prompt("Limite de Velocidade para este Radar (KM/H):", "60");
+                layer.feature = layer.feature || {type: 'Feature', properties: {}};
+                layer.feature.properties.velocidade = parseInt(vel);
+            }
+            if(e.layerType === 'circle') {
+                layer.feature = layer.feature || {type: 'Feature', properties: {}};
+                layer.feature.properties.type = 'circle';
+                layer.feature.properties.radius = layer.getRadius();
+            }
+            drawnItems.addLayer(layer);
+        });
+
+        // Funções de Menu
+        function toggleMap() { isSat ? map.removeLayer(sat) : sat.addTo(map); isSat = !isSat; }
+
+        async function searchCity() {
+            const q = document.getElementById('cityInput').value;
+            if(!q) return;
+            try {
+                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                if(data[0]) map.setView([data[0].lat, data[0].lon], 13);
+            } catch(e) { console.error("Erro na busca"); }
+        }
+
+        function saveRoute() {
+            const data = drawnItems.toGeoJSON();
+            // Injetar manualmente propriedades de círculo que o GeoJSON padrão ignora
+            let i = 0;
+            drawnItems.eachLayer(layer => {
+                if(layer instanceof L.Circle) {
+                    data.features[i].properties.type = 'circle';
+                    data.features[i].properties.radius = layer.getRadius();
+                }
+                i++;
+            });
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Trajeto Salvo!"));
+        }
+
+        async function runApuracao() {
+            if(!confirm("Deseja processar as penalidades agora?")) return;
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastros = (await db.ref('rastros').once('value')).val();
+            const comps = (await db.ref('competidores').once('value')).val();
+
+            if(!config || !rastros) return alert("Dados insuficientes para apuração.");
+
+            for(let id in comps) {
+                let penalidadeTotal = 0;
+                const rastroData = Object.values(rastros[id] || {});
+                if(rastroData.length === 0) continue;
+
+                const rastroPts = rastroData.map(p => turf.point([p.lng, p.lat], { vel: p.vel }));
+
+                config.features.forEach(feat => {
+                    if(feat.geometry.type === 'Polygon') {
+                        // Radar
+                        let excesso = false;
+                        rastroPts.forEach(pt => {
+                            if(turf.booleanPointInPolygon(pt, feat)) {
+                                if(pt.properties.vel > (feat.properties.velocidade || 60)) excesso = true;
+                            }
+                        });
+                        if(excesso) penalidadeTotal += 10000;
+                    } 
+                    else if(feat.properties.type === 'circle') {
+                        // Waypoint
+                        let passou = false;
+                        const centro = feat.geometry.coordinates;
+                        const raioKm = feat.properties.radius / 1000;
+                        rastroPts.forEach(pt => {
+                            if(turf.distance(pt, turf.point(centro)) <= raioKm) passou = true;
+                        });
+                        if(!passou) penalidadeTotal += 20000;
+                    }
+                });
+                db.ref(`competidores/${id}`).update({ pontos: 150000 - penalidadeTotal });
+            }
+            alert("Apuração finalizada!");
+        }
+
+        function resetSystem() { 
+            if(prompt("Senha de segurança:") === "261291") {
+                db.ref('/').remove().then(() => location.reload());
+            }
+        }
+    </script>
+</body>
+</html>
