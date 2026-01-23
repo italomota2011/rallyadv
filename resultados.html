@@ -2,39 +2,57 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Análise de Rastro</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-    <style>#map { height: 90vh; }</style>
+    <title>Ranking Oficial</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f4; padding: 20px; }
+        .card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #333; color: white; }
+        tr:nth-child(even) { background: #fafafa; }
+        .posicao { font-weight: bold; color: #e67e22; }
+    </style>
 </head>
 <body>
-    <input type="number" id="carroBusca" placeholder="Nº do Carro">
-    <button onclick="verRastro()">Ver Histórico</button>
-    <div id="map"></div>
+    <h1>Ranking de Competição</h1>
+    <div id="container"></div>
 
-    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script>
-        const firebaseConfig = { /* ... mesma config ... */ };
+        // Configuração Firebase idêntica...
+        const firebaseConfig = { /* ... */ };
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        let map = L.map('map').setView([-12.26, -38.96], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        firebase.database().ref('competidores').on('value', snap => {
+            const data = snap.val();
+            let categorias = {};
+            
+            for(let id in data) {
+                let c = data[id];
+                c.carro = id;
+                if(!categorias[c.categoria]) categorias[c.categoria] = [];
+                categorias[c.categoria].push(c);
+            }
 
-        function verRastro() {
-            let num = document.getElementById('carroBusca').value;
-            db.ref('rastros/' + num).once('value', snapshot => {
-                let pontos = [];
-                snapshot.forEach(p => {
-                    let d = p.val();
-                    pontos.push([d.lat, d.lng]);
-                    L.circleMarker([d.lat, d.lng], {radius: 3, color: d.vel > 80 ? 'red' : 'blue'}).addTo(map)
-                        .bindPopup(`Vel: ${d.vel} km/h`);
+            let html = "";
+            for(let cat in categorias) {
+                categorias[cat].sort((a,b) => b.pontos - a.pontos);
+                html += `<div class="card"><h2>${cat}</h2><table>
+                    <tr><th>Pos</th><th>Carro</th><th>Piloto</th><th>Pontos</th></tr>`;
+                
+                categorias[cat].forEach((p, i) => {
+                    html += `<tr>
+                        <td class="posicao">${i+1}º</td>
+                        <td>#${p.carro}</td>
+                        <td>${p.nome}</td>
+                        <td>${p.pontos.toLocaleString()}</td>
+                    </tr>`;
                 });
-                L.polyline(pontos, {color: 'black'}).addTo(map);
-                map.fitBounds(pontos);
-            });
-        }
+                html += `</table></div>`;
+            }
+            document.getElementById('container').innerHTML = html;
+        });
     </script>
 </body>
 </html>
