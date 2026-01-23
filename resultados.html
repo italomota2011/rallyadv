@@ -2,35 +2,23 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Rally - Oficial</title>
+    <title>Ranking Rally</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; color: #2c3e50; }
-        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 3px solid #e67e22; padding-bottom: 10px; }
-        .cat { background: white; margin-bottom: 25px; border-radius: 8px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h2 { color: #e67e22; margin-top: 0; text-transform: uppercase; font-size: 1.2rem; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
         td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-        th { background: #f8f9fa; color: #7f8c8d; font-size: 0.9rem; }
+        th { background: #f8f9fa; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
-        .pos-col { width: 60px; font-weight: bold; color: #e67e22; font-size: 1.1rem; }
-        button { background: #27ae60; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        button:hover { background: #219150; transform: scale(1.05); }
     </style>
 </head>
 <body>
-
-    <div class="header-actions">
-        <h1>🏆 Ranking Geral</h1>
-        <button onclick="gerarPDF()">Baixar PDF</button>
-    </div>
-
-    <div id="conteudo-ranking">
-        <div id="results" style="text-align: center; padding: 40px; font-size: 1.2rem;">Conectando ao servidor...</div>
-    </div>
+    <h1>🏆 Classificação Oficial</h1>
+    <div id="results">Carregando...</div>
 
     <script>
         const firebaseConfig = {
@@ -42,79 +30,46 @@
             messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            if (!data) {
-                document.getElementById('results').innerHTML = "Aguardando processamento dos pontos...";
-                return;
-            }
-
             let html = "";
             const cats = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
             
             cats.forEach(c => {
                 let list = [];
-                for(let id in data) {
-                    if(data[id].categoria === c) {
-                        list.push({id, ...data[id]});
-                    }
-                }
+                for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
                 
-                // Ordenação decrescente por pontos
-                list.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+                // Ordena por maior pontuação
+                list.sort((a,b) => b.pontos - a.pontos);
 
                 if(list.length > 0) {
-                    html += `
-                    <div class="cat">
-                        <h2>${c}</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th class="pos-col">POS</th>
-                                    <th>Nº</th>
-                                    <th>Piloto</th>
-                                    <th>Penalidade</th>
-                                    <th>Pontuação Final</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
+                    html += `<div class="cat">
+                                <h2>${c}</h2>
+                                <table>
+                                    <tr>
+                                        <th>Nº</th>
+                                        <th>Piloto</th>
+                                        <th>Penalidades</th>
+                                        <th>Pontuação Final</th>
+                                    </tr>`;
                     
-                    list.forEach((p, index) => {
-                        const pontos = p.pontos || 0;
-                        const penalidade = 150000 - pontos;
-                        html += `
-                                <tr>
-                                    <td class="pos-col">${index + 1}º</td>
+                    list.forEach(p => {
+                        const penalidade = 150000 - p.pontos;
+                        html += `<tr>
                                     <td>${p.id}</td>
                                     <td>${p.nome}</td>
                                     <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
-                                    <td class="total">${pontos.toLocaleString('pt-BR')}</td>
+                                    <td class="total">${p.pontos.toLocaleString('pt-BR')}</td>
                                 </tr>`;
                     });
-                    html += `</tbody></table></div>`;
+                    html += `</table></div>`;
                 }
             });
-            document.getElementById('results').innerHTML = html || "Nenhum competidor encontrado nas categorias.";
-        }, error => {
-            document.getElementById('results').innerHTML = "Erro de Permissão: Verifique as regras do Firebase Database.";
-            console.error(error);
+            document.getElementById('results').innerHTML = html || "Nenhum competidor registrado.";
         });
-
-        function gerarPDF() {
-            const element = document.getElementById('conteudo-ranking');
-            const opt = {
-                margin: 10,
-                filename: 'Resultado_Rally.pdf',
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2 },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-            };
-            html2pdf().set(opt).from(element).save();
-        }
     </script>
 </body>
 </html>
