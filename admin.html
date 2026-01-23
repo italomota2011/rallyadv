@@ -1,88 +1,114 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Admin - Tracker Rally</title>
+    <title>Rally Admin - Controle</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
         #map { height: 600px; width: 100%; }
-        .controls { padding: 10px; background: #f4f4f4; display: flex; gap: 10px; flex-wrap: wrap; }
-        .status-panel { margin-top: 10px; border: 1px solid #ccc; padding: 10px; max-height: 200px; overflow-y: auto; }
+        .controls { padding: 10px; background: #eee; display: flex; gap: 10px; flex-wrap: wrap; }
+        .stats-panel { position: absolute; top: 10px; right: 10px; z-index: 1000; background: white; padding: 10px; max-height: 400px; overflow-y: auto; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
 
-    <div class="controls">
-        <button onclick="saveCourse()">Salvar Percurso e Regras</button>
-        <button onclick="calculateResults()" style="background: #ffcc00;">Finalizar e Apurar Resultados</button>
-    </div>
-    <div id="map"></div>
-    <div id="status" class="status-panel">Aguardando dados dos competidores...</div>
+<div class="controls">
+    <button onclick="saveCompetitionConfig()">Salvar Configuração de Prova</button>
+    <button onclick="processResults()" style="background: #4CAF50; color: white;">Finalizar e Apurar Resultados</button>
+    <button onclick="resetSystem()" style="background: #f44336; color: white;">Zerar Tudo (Reset)</button>
+</div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<div id="map"></div>
+<div class="stats-panel" id="stats">
+    <h4>Status dos Carros</h4>
+    <div id="car-list"></div>
+</div>
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-        // Inicializar Mapa
-        const map = L.map('map').setView([-23.5505, -46.6333], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        storageBucket: "cronometro-rally.firebasestorage.app"
+    };
 
-        const drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-        const drawControl = new L.Control.Draw({
-            draw: { polyline: true, rectangle: true, marker: true, circle: false, polygon: false },
-            edit: { featureGroup: drawnItems }
+    // Configuração do Mapa com Satélite
+    const map = L.map('map').setView([-23.55, -46.63], 13);
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri'
+    }).addTo(map);
+
+    // Ferramentas de Desenho
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    const drawControl = new L.Control.Draw({
+        draw: { polygon: false, marker: true, polyline: true, circle: true, rectangle: false },
+        edit: { featureGroup: drawnItems }
+    });
+    map.addControl(drawControl);
+
+    let markers = {};
+
+    // Salvar Roteiro, Waypoints e Radares
+    window.saveCompetitionConfig = () => {
+        const config = { route: [], waypoints: [], radars: [] };
+        drawnItems.eachLayer(layer => {
+            if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) config.route.push(layer.getLatLngs());
+            if (layer instanceof L.Marker) config.waypoints.push(layer.getLatLng());
+            if (layer instanceof L.Circle) config.radars.push({center: layer.getLatLng(), radius: layer.getRadius()});
         });
-        map.addControl(drawControl);
+        set(ref(db, 'config'), config);
+        alert("Configuração salva!");
+    };
 
-        let markers = {}; // Guardar marcadores dos carros
-
-        // Escutar carros em tempo real
-        db.ref('competidores').on('value', snapshot => {
-            const data = snapshot.val();
-            const statusDiv = document.getElementById('status');
-            statusDiv.innerHTML = "<h4>Carros Ativos:</h4>";
-
-            for (let id in data) {
-                const { lat, lng, speed, nome, carNumber } = data[id];
-                
-                // Atualizar ou criar marcador
-                if (markers[id]) {
-                    markers[id].setLatLng([lat, lng]);
-                } else {
-                    markers[id] = L.marker([lat, lng]).addTo(map).bindPopup(`Carro ${carNumber}: ${nome}`);
-                }
-                statusDiv.innerHTML += `Carro ${carNumber} (${nome}): ${speed.toFixed(2)} km/h<br>`;
+    // Monitoramento em Tempo Real
+    onValue(ref(db, 'cars'), (snapshot) => {
+        const data = snapshot.val();
+        const listDiv = document.getElementById('car-list');
+        listDiv.innerHTML = '';
+        
+        for (let id in data) {
+            const car = data[id];
+            // Atualizar Marcador no Mapa
+            if (markers[id]) {
+                markers[id].setLatLng([car.lat, car.lng]);
+            } else {
+                const icon = L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background:blue; color:white; border-radius:50%; width:25px; height:25px; text-align:center; line-height:25px; font-weight:bold;">${id}</div>`,
+                    iconSize: [30, 42]
+                });
+                markers[id] = L.marker([car.lat, car.lng], {icon: icon}).addTo(map)
+                    .bindPopup(`Carro: ${id}<br>Velocidade: ${car.speed} km/h<br>Piloto: ${car.name}`);
             }
-        });
-
-        function saveCourse() {
-            const geojson = drawnItems.toGeoJSON();
-            db.ref('configuracao/prova').set(geojson);
-            alert("Percurso e áreas de radar salvos!");
+            
+            // Lista lateral
+            listDiv.innerHTML += `<p>Carro ${id}: ${car.speed} km/h</p>`;
         }
+    });
 
-        async function calculateResults() {
-            // Lógica de apuração: Compara o histórico de cada carro com as áreas do DrawnItems
-            // Para uma apuração real, você deve salvar o histórico (breadcrumbs) no Firebase
-            alert("Iniciando processamento de penalidades... Verifique o console.");
-            // Aqui entraria o loop comparando cada coordenada do histórico com L.GeometryUtil.contains(layer, latlng)
+    window.processResults = async () => {
+        // Lógica de apuração: Compara trajetórias salvas no car/history com as config/
+        alert("Processando penalidades... Verifique o console para o relatório (Simulação).");
+        // Aqui você implementaria o loop comparando cada ponto de GPS com os raios dos radares.
+    };
+
+    window.resetSystem = () => {
+        if(confirm("Deseja apagar todos os dados da prova?")) {
+            remove(ref(db, 'cars'));
+            remove(ref(db, 'config'));
+            location.reload();
         }
-    </script>
+    };
+</script>
 </body>
 </html>
