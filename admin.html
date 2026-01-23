@@ -3,152 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Rally Tracker</title>
+    <title>Admin - Sistema de Controle de Prova</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
     
     <style>
-        /* CSS FUNDAMENTAL PARA O MAPA APARECER */
-        html, body {
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            font-family: sans-serif;
-        }
+        :root { --primary: #2c3e50; --accent: #3498db; --success: #27ae60; --danger: #c0392b; }
+        body { margin: 0; display: flex; flex-direction: column; height: 100vh; font-family: 'Segoe UI', sans-serif; }
         
-        .panel {
-            height: 60px;
-            background: #1a1a1a;
-            color: white;
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
-            gap: 10px;
-            z-index: 1000;
-            position: relative;
-        }
+        #header { background: var(--primary); color: white; padding: 10px 20px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 1000; }
+        #map { flex-grow: 1; z-index: 1; }
 
-        #map {
-            height: calc(100vh - 60px); /* Ocupa o resto da tela */
-            width: 100%;
-            background: #222; /* Cor de fundo para teste */
-        }
+        .controls-group { display: flex; gap: 8px; align-items: center; border-right: 1px solid #555; padding-right: 15px; }
+        input[type="text"] { padding: 8px; border-radius: 4px; border: none; width: 200px; }
+        
+        .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-blue { background: var(--accent); }
+        .btn-green { background: var(--success); }
+        .btn-red { background: var(--danger); }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
 
-        button {
-            padding: 8px 12px;
-            cursor: pointer;
-            border-radius: 4px;
-            border: none;
-            font-weight: bold;
-        }
-        .btn-danger { background: #ff4444; color: white; }
-        .btn-success { background: #00c851; color: white; }
+        /* Estilo para os popups de configuração de radar */
+        .leaflet-popup-content input { width: 80px; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-    <div class="panel">
-        <strong>ADMIN RALLY</strong>
-        <button onclick="window.toggleMap()">Satélite/Rua</button>
-        <button class="btn-success" onclick="window.saveConfig()">Salvar Prova</button>
-        <button onclick="window.apurarResultados()">Apurar Dados</button>
-        <button class="btn-danger" onclick="window.resetRace()">REINICIAR TUDO</button>
+<header id="header">
+    <div class="controls-group">
+        <input type="text" id="cityInput" placeholder="Buscar cidade (Ex: São Paulo)">
+        <button class="btn btn-blue" onclick="searchCity()">Buscar</button>
     </div>
 
-    <div id="map"></div>
+    <div class="controls-group">
+        <button class="btn btn-blue" onclick="toggleSatellite()">🛰️ Satélite</button>
+        <button class="btn btn-green" onclick="saveToFirebase()">💾 Salvar Configuração</button>
+    </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <div class="controls-group">
+        <button class="btn btn-blue" onclick="window.location.href='rastro.html'">📍 Rastro</button>
+        <button class="btn btn-blue" onclick="window.location.href='resultados.html'">📊 Resultados</button>
+    </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, remove, get, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <button class="btn btn-red" onclick="resetSystem()">⚠️ Reiniciar Prova</button>
+</header>
 
-        // SUA CONFIGURAÇÃO DO FIREBASE
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
+<div id="map"></div>
 
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
 
-        // INICIALIZAÇÃO DO MAPA
-        const map = L.map('map').setView([-23.55, -46.63], 12);
+<script>
+    // 1. FIREBASE CONFIG
+    const firebaseConfig = {
+        apiKey: "SUA_API_KEY",
+        authDomain: "SEU_PROJETO.firebaseapp.com",
+        databaseURL: "https://SEU_PROJETO.firebaseio.com",
+        projectId: "SEU_PROJETO",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19
-        }).addTo(map);
+    // 2. MAPA E LAYERS
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+    const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    
+    const map = L.map('map', {
+        center: [-23.5505, -46.6333],
+        zoom: 13,
+        layers: [osm]
+    });
 
-        const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
+    function toggleSatellite() {
+        if (map.hasLayer(osm)) {
+            map.removeLayer(osm);
+            satellite.addTo(map);
+        } else {
+            map.removeLayer(satellite);
+            osm.addTo(map);
+        }
+    }
 
-        const drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
+    // 3. BUSCA DE CIDADE (Nominatim API gratuita)
+    async function searchCity() {
+        const city = document.getElementById('cityInput').value;
+        if(!city) return;
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${city}`);
+        const data = await resp.json();
+        if(data.length > 0) {
+            map.setView([data[0].lat, data[0].lon], 13);
+        } else {
+            alert("Cidade não encontrada.");
+        }
+    }
 
-        const drawControl = new L.Control.Draw({
-            draw: { marker: false, circlemarker: false, polyline: true },
-            edit: { featureGroup: drawnItems }
+    // 4. FERRAMENTAS DE DESENHO
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+        edit: { featureGroup: drawnItems },
+        draw: {
+            polygon: false,
+            marker: false,
+            circlemarker: false,
+            polyline: { shapeOptions: { color: '#3498db', weight: 5 }, title: 'Desenhar Percurso' },
+            rectangle: { shapeOptions: { color: '#e74c3c', fillOpacity: 0.3 }, title: 'Radar de Velocidade' },
+            circle: { shapeOptions: { color: '#f1c40f' }, title: 'Waypoint (Obrigatório)' }
+        }
+    });
+    map.addControl(drawControl);
+
+    // Manipulação do que foi desenhado
+    map.on(L.Draw.Event.CREATED, function (e) {
+        const layer = e.layer;
+        const type = e.layerType;
+
+        if (type === 'rectangle') {
+            const vel = prompt("Velocidade máxima permitida neste radar (km/h):", "60");
+            layer.options.speedLimit = parseInt(vel);
+            layer.bindPopup(`<b>Radar Virtual</b><br>Limite: ${vel} km/h`).openPopup();
+        }
+        
+        if (type === 'circle') {
+            layer.bindPopup(`<b>Waypoint</b><br>Passagem Obrigatória`).openPopup();
+        }
+
+        drawnItems.addLayer(layer);
+    });
+
+    // 5. PERSISTÊNCIA E SEGURANÇA
+    function saveToFirebase() {
+        const geoData = drawnItems.toGeoJSON();
+        
+        // Adicionamos as propriedades customizadas (velocidade e raio) que o toGeoJSON nativo pode omitir
+        geoData.features.forEach((feature, index) => {
+            const layer = Object.values(drawnItems._layers)[index];
+            if(layer.options.speedLimit) feature.properties.speedLimit = layer.options.speedLimit;
+            if(layer._mRadius) feature.properties.radius = layer._mRadius;
         });
-        map.addControl(drawControl);
 
-        map.on(L.Draw.Event.CREATED, (e) => {
-            const layer = e.layer;
-            if (e.layerType === 'rectangle') {
-                layer.options.speedLimit = prompt("Velocidade Máxima (km/h):", "60");
-            }
-            drawnItems.addLayer(layer);
-        });
+        db.ref('prova/configuracao').set({
+            desenhos: geoData,
+            atualizadoEm: Date.now()
+        }).then(() => alert("Configurações de percurso, radares e waypoints salvas!"));
+    }
 
-        // RESOLVENDO O ERRO DE "NOT DEFINED" - ANEXANDO AO WINDOW
-        window.toggleMap = () => {
-            if (map.hasLayer(osm)) {
-                map.removeLayer(osm);
-                sat.addTo(map);
-            } else {
-                map.removeLayer(sat);
-                osm.addTo(map);
-            }
-        };
-
-        window.saveConfig = async () => {
-            const data = drawnItems.toGeoJSON();
-            data.features.forEach((feature, index) => {
-                const layer = Object.values(drawnItems._layers)[index];
-                if (layer instanceof L.Circle) {
-                    feature.properties.radius = layer.getRadius();
-                    feature.properties.type = 'waypoint';
-                } else if (layer instanceof L.Rectangle) {
-                    feature.properties.type = 'radar';
-                    feature.properties.speedLimit = layer.options.speedLimit;
+    function resetSystem() {
+        const pass = prompt("Para APAGAR TUDO e reiniciar, digite a senha:");
+        if (pass === "261291") {
+            db.ref('prova').remove().then(() => {
+                // Criar os 100 carros iniciais
+                const updates = {};
+                for(let i=1; i<=100; i++) {
+                    updates[`carros/carro_${i}`] = {
+                        id: i,
+                        pontos: 150000,
+                        lat: 0,
+                        lng: 0,
+                        velocidade: 0,
+                        historico: [] // Onde serão salvos os rastros
+                    };
                 }
+                db.ref('prova').update(updates);
+                drawnItems.clearLayers();
+                alert("Sistema reiniciado com sucesso!");
             });
-            await set(ref(db, 'config/mapa'), data);
-            alert("Configurações salvas!");
-        };
+        } else {
+            alert("Senha incorreta!");
+        }
+    }
+</script>
 
-        window.resetRace = async () => {
-            if (confirm("ATENÇÃO: Isso apagará TODOS os dados da prova e competidores. Confirmar?")) {
-                await remove(ref(db, '/'));
-                location.reload();
-            }
-        };
-
-        window.apurarResultados = () => {
-            alert("Iniciando apuração... Verifique o console ou a página de resultados.");
-            // Lógica de apuração aqui...
-        };
-
-        // Garante que o mapa redimensione corretamente
-        setTimeout(() => { map.invalidateSize(); }, 500);
-
-    </script>
 </body>
 </html>
