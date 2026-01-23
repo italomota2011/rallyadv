@@ -11,8 +11,11 @@
         h2 { color: #e67e22; border-bottom: 2px solid #e67e22; padding-bottom: 10px; }
         table { width: 100%; border-collapse: collapse; }
         td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; }
         .penalidade { color: #c0392b; font-weight: bold; }
         .total { font-weight: bold; color: #2c3e50; }
+        /* Estilo opcional para a coluna de posição */
+        .pos { font-weight: bold; width: 50px; color: #7f8c8d; } 
     </style>
 </head>
 <body>
@@ -40,17 +43,35 @@
             cats.forEach(c => {
                 let list = [];
                 for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
+                
+                // Ordena por maior pontuação (do maior para o menor)
                 list.sort((a,b) => b.pontos - a.pontos);
 
                 if(list.length > 0) {
-                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>POS</th><th>Nº</th><th>Piloto</th><th>Penalidade</th><th>Pontos</th></tr>`;
-                    list.forEach((p, i) => {
-                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">-${(150000-p.pontos)}</td><td class="total">${p.pontos}</td></tr>`;
+                    html += `<div class="cat">
+                                <h2>${c}</h2>
+                                <table>
+                                    <tr>
+                                        <th>POS</th> <th>Nº</th>
+                                        <th>Piloto</th>
+                                        <th>Penalidades</th>
+                                        <th>Pontuação Final</th>
+                                    </tr>`;
+                    
+                    // O segundo parâmetro "index" nos dá a posição no array (começando em 0)
+                    list.forEach((p, index) => {
+                        const penalidade = 150000 - p.pontos;
+                        html += `<tr>
+                                    <td class="pos">${index + 1}º</td> <td>${p.id}</td>
+                                    <td>${p.nome}</td>
+                                    <td class="penalidade">-${penalidade.toLocaleString('pt-BR')}</td>
+                                    <td class="total">${p.pontos.toLocaleString('pt-BR')}</td>
+                                </tr>`;
                     });
                     html += `</table></div>`;
                 }
             });
-            document.getElementById('results').innerHTML = html || "Sem inscritos.";
+            document.getElementById('results').innerHTML = html || "Nenhum competidor registrado.";
         });
     </script>
 </body>
