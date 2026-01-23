@@ -1,43 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Classificação Final - Rally</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Ranking Oficial</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; padding: 20px; }
-        .container { max-width: 600px; margin: auto; }
-        h1 { text-align: center; color: #ffc107; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; border-radius: 10px; overflow: hidden; }
-        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #333; }
-        th { background: #333; color: #ffc107; text-transform: uppercase; font-size: 14px; }
-        tr:nth-child(even) { background: #252525; }
-        .pos { font-weight: bold; width: 40px; }
-        .points { text-align: right; font-weight: bold; color: #28a745; }
-        .penalties { font-size: 0.8em; color: #dc3545; }
-        .gold { color: gold; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #333; color: white; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h1>🏆 Líderes do Rally</h1>
-    <table id="rankingTable">
-        <thead>
-            <tr>
-                <th>Pos</th>
-                <th>Carro</th>
-                <th>Infrações</th>
-                <th style="text-align:right">Pontos</th>
-            </tr>
-        </thead>
-        <tbody id="rankingBody">
-            <tr><td colspan="4" style="text-align:center">Carregando resultados...</td></tr>
-        </tbody>
+    <h1>Ranking Rally</h1>
+    <h2>Categoria 4x4</h2>
+    <table id="table4x4">
+        <thead><tr><th>Pos</th><th>Carro</th><th>Piloto</th><th>Pontos</th></tr></thead>
+        <tbody></tbody>
     </table>
-</div>
 
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = { /* SEU CONFIG AQUI */ };
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        onValue(ref(db, 'competidores'), (snapshot) => {
+            const lista = [];
+            snapshot.forEach(child => { lista.push({id: child.key, ...child.val()}); });
+            
+            // Ordenar por pontos (Maior para menor)
+            lista.sort((a, b) => b.pontos - a.pontos);
+
+            const tbody = document.querySelector("#table4x4 tbody");
+            tbody.innerHTML = "";
+            lista.forEach((c, index) => {
+                tbody.innerHTML += `<tr><td>${index+1}º</td><td>${c.id}</td><td>${c.nome}</td><td>${c.pontos}</td></tr>`;
+            });
+        });
+    </script>
+</body>
+</html>
