@@ -13,34 +13,23 @@
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; }
-        .cor-radar { color: #3498db; } /* Azul */
-        .cor-waypoint { color: #f1c40f; } /* Amarelo */
-        .cor-infracao { color: #e74c3c; } /* Vermelho */
+        .legenda { font-size: 11px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; }
     </style>
 </head>
 <body>
     <div id="sidebar">
-        <h2>🛰️ Análise de Telemetria</h2>
-        <select id="carSelect"><option>Carregando competidores...</option></select>
-        <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
-        
-        <div id="resumo">
-            <div class="stats-card">Selecione um carro para ver os detalhes da prova.</div>
-        </div>
-
+        <h2>🛰️ Telemetria</h2>
+        <select id="carSelect"><option>Carregando...</option></select>
+        <button onclick="analisarRastro()">ANALISAR</button>
+        <div id="resumo"><div class="stats-card">Selecione um carro.</div></div>
         <div class="legenda">
-            <strong>Legenda do Mapa:</strong><br>
-            <span style="color:#38a169">⬛</span> Percurso Ideal (Verde)<br>
-            <span style="color:#e67e22">━━</span> Rastro do Carro (Laranja)<br>
-            <span style="color:#e74c3c">⬤</span> Infração de Velocidade<br>
-            <span style="color:#3498db">⬢</span> Radar (Polígono)<br>
-            <span style="color:#f1c40f">◯</span> Waypoint (Círculo)
+            <span style="color:#38a169">━━</span> Percurso Ideal<br>
+            <span style="color:#e67e22">━━</span> Rastro do Carro<br>
+            <span style="color:#e74c3c">⬤</span> Radar/Excesso<br>
+            <span style="color:#000000">⬤</span> Fora da Rota (>50m)
         </div>
-        
-        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
-
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -58,110 +47,64 @@
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-
         const map = L.map('map').setView([-12.26, -38.96], 13);
-        const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
         let layers = {
-            rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
+            rastro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
             percurso: L.featureGroup().addTo(map),
             penalidades: L.featureGroup().addTo(map)
         };
 
-        // Carregar lista de competidores
         db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione um Piloto...</option>';
+            let opt = '<option value="">Selecione...</option>';
             const data = snap.val();
-            if(data) Object.keys(data).sort((a,b)=>a-b).forEach(id => {
-                opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-            });
+            if(data) Object.keys(data).forEach(id => { opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`; });
             document.getElementById('carSelect').innerHTML = opt;
         });
 
         async function analisarRastro() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
-
-            // Limpar mapa anterior
             layers.percurso.clearLayers();
             layers.penalidades.clearLayers();
-            layers.rastro.setLatLngs([]);
 
-            // Buscar dados simultâneos
             const [snapRastro, snapConfig] = await Promise.all([
                 db.ref('rastros/' + id).once('value'),
                 db.ref('configuracoes/percurso').once('value')
             ]);
 
-            const rastroData = snapRastro.val();
+            const rastroArr = Object.values(snapRastro.val() || {}).sort((a, b) => a.ts - b.ts);
             const config = snapConfig.val();
+            if(!rastroArr.length || !config) return alert("Dados insuficientes.");
 
-            if(!rastroData) return alert("Este carro não possui dados de rastro.");
-            if(!config) return alert("Percurso não configurado no Admin.");
+            layers.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
+            L.geoJSON(config, { style: { color: '#38a169', weight: 3 } }).addTo(layers.percurso);
 
-            const rastroArr = Object.values(rastroData).sort((a, b) => a.ts - b.ts);
-            const path = rastroArr.map(p => [p.lat, p.lng]);
-            
-            // 1. Desenhar Rastro do Carro
-            layers.rastro.setLatLngs(path);
+            const linhaOficial = config.features.find(f => f.geometry.type === 'LineString');
+            let totalPen = 0; let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
 
-            // 2. Desenhar Percurso (Radares e Waypoints)
-            L.geoJSON(config, {
-                style: (f) => ({ color: f.geometry.type === 'Polygon' ? '#3498db' : '#38a169', weight: 3, fillOpacity: 0.1 }),
-                pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, { radius: f.properties.radius, color: '#f1c40f' }) : null
-            }).addTo(layers.percurso);
-
-            // 3. Processar Análise Técnica
-            let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
-            let totalPenalidades = 0;
-            let infracoesVel = [];
-            let waypointsNaoVisitados = [];
-
-            config.features.forEach((feat, idx) => {
-                if(feat.geometry.type === 'Polygon') {
-                    // Lógica de Radar
-                    const vMaxPermitida = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
-                    let tempoExcessoMs = 0;
-
-                    for(let i = 1; i < rastroArr.length; i++) {
-                        const p = rastroArr[i];
-                        const duration = p.ts - rastroArr[i-1].ts;
-                        const pontoTurf = turf.point([p.lng, p.lat]);
-
-                        if(turf.booleanPointInPolygon(pontoTurf, feat)) {
-                            if(p.vel > vMaxPermitida) {
-                                tempoExcessoMs += duration;
-                                // Marcar ponto de infração no mapa
-                                L.circleMarker([p.lat, p.lng], { radius: 5, color: 'red', fillOpacity: 1 })
-                                 .bindPopup(`<b>EXCESSO</b><br>Vel: ${p.vel.toFixed(1)} km/h<br>Limite: ${feat.properties.velocidade}km/h`)
-                                 .addTo(layers.penalidades);
-                            }
-                        }
+            // Análise de Desvio
+            if(linhaOficial) {
+                let tempoForaMs = 0;
+                rastroArr.forEach((p, i) => {
+                    if(i === 0) return;
+                    const dist = turf.pointToLineDistance(turf.point([p.lng, p.lat]), linhaOficial, {units: 'kilometers'}) * 1000;
+                    if(dist > 50) {
+                        tempoForaMs += (p.ts - rastroArr[i-1].ts);
+                        L.circleMarker([p.lat, p.lng], { radius: 3, color: 'black' }).addTo(layers.penalidades);
                     }
-
-                    if(tempoExcessoMs > 10000) { // Carência 10s
-                        const pontosPerdidos = (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                        totalPenalidades += pontosPerdidos;
-                        resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: ${pontosPerdidos} pts<br>(${(tempoExcessoMs/1000).toFixed(1)}s acima do limite)</div>`;
-                    }
-
-                } else if(feat.properties?.type === 'circle') {
-                    // Lógica de Waypoint
-                    const centro = feat.geometry.coordinates;
-                    const raioKm = feat.properties.radius / 1000;
-                    const visitou = rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raioKm);
-
-                    if(!visitou) {
-                        totalPenalidades += 20000;
-                        resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: 20.000 pts</div>`;
-                    }
+                });
+                if(tempoForaMs >= 60000) {
+                    const pDesvio = Math.floor(tempoForaMs / 60000) * 200;
+                    totalPen += pDesvio;
+                    resumoHtml += `<div class="penalidade-item">⚠️ Desvio Rota: ${pDesvio} pts (${Math.floor(tempoForaMs/60000)} min)</div>`;
                 }
-            });
+            }
 
-            resumoHtml += `<br><b>Total Penalizado:</b> -${totalPenalidades} pts</div>`;
+            resumoHtml += `<br><b>Total Penalizado:</b> -${totalPen} pts</div>`;
             document.getElementById('resumo').innerHTML = resumoHtml;
-
-            map.fitBounds(layers.rastro.getBounds(), { padding: [50, 50] });
+            map.fitBounds(layers.rastro.getBounds());
         }
     </script>
 </body>
