@@ -6,46 +6,44 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; text-align: center; padding: 40px; }
-        .card { background: #2d3748; padding: 30px; border-radius: 15px; display: inline-block; min-width: 300px; }
-        .tempo { font-size: 3rem; color: #f6e05e; font-family: monospace; }
-        .pontos { font-size: 1.5rem; color: #fc8181; }
+        body { font-family: sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
+        select { padding: 15px; width: 100%; max-width: 300px; border-radius: 8px; margin-bottom: 20px; }
+        .res-box { background: #2d3748; padding: 20px; border-radius: 12px; display: none; }
+        .val { font-size: 2rem; color: #f6e05e; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Seu Desempenho</h2>
-        <select id="carSelect" style="padding:10px; margin-bottom:20px;" onchange="exibir()">
-            <option>Selecione seu Carro</option>
-        </select>
-        <div id="res" style="display:none">
-            <p>Tempo de Prova:</p>
-            <div class="tempo" id="tTxt">--:--:--</div>
-            <p>Penalidades de Rastro:</p>
-            <div class="pontos" id="pTxt">0</div>
-        </div>
+    <h1>Resultados Técnicos</h1>
+    <select id="carSelect" onchange="mostrar()">
+        <option value="">Selecione seu Carro</option>
+    </select>
+    <div id="resBox" class="res-box">
+        <p>Tempo de Prova:</p>
+        <div id="t" class="val">--:--:--</div>
+        <p>Penalidades GPS:</p>
+        <div id="p" style="color:#fc8181; font-size: 1.5rem;">0</div>
     </div>
 
     <script>
-        /* Mesma FirebaseConfig */
-        firebase.initializeApp(firebaseConfig);
+        const firebaseConfig = { /* ... Mesma config ... */ };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
             let h = '<option value="">Selecione seu Carro</option>';
-            for(let id in data) h += `<option value="${id}">Carro ${id}</option>`;
+            for(let id in data) h += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
             document.getElementById('carSelect').innerHTML = h;
         });
 
-        function exibir() {
+        function mostrar() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
             db.ref('competidores/' + id).on('value', snap => {
                 const p = snap.val();
-                document.getElementById('res').style.display = 'block';
-                document.getElementById('tTxt').innerText = p.tempoFormatado || '--:--:--';
-                document.getElementById('pTxt').innerText = p.pontos || 0;
+                document.getElementById('resBox').style.display = 'block';
+                document.getElementById('t').innerText = p.tempoFormatado || '--:--:--';
+                document.getElementById('p').innerText = p.pontos || 0;
             });
         }
     </script>
