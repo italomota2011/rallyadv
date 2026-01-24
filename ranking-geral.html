@@ -166,4 +166,29 @@
                     finalY = 20;
                 }
 
-                doc.setFontSize(
+                doc.setFontSize(14);
+                doc.setTextColor(0, 0, 0);
+                doc.text(titulo, 14, finalY);
+
+                doc.autoTable({
+                    html: tabela,
+                    startY: finalY + 5,
+                    theme: 'striped',
+                    headStyles: { fillColor: [230, 126, 34] },
+                    styles: { fontSize: 10 },
+                    margin: { left: 14, right: 14 }
+                });
+
+                finalY = doc.lastAutoTable.finalY + 15;
+            });
+
+            doc.save(`Ranking_${cidade.replace(/\s+/g, '_')}.pdf`);
+        } catch (err) {
+            console.error("Erro ao gerar PDF:", err);
+            alert("Erro ao gerar o PDF. Verifique o console.");
+        }
+    }
+</script>
+
+</body>
+</html>
