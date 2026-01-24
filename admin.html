@@ -2,83 +2,63 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Admin - Apuração de Penalidades</title>
+    <title>Admin - Apuração</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
-        .panel { background: #2d3748; padding: 30px; border-radius: 15px; max-width: 600px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        button { background: #e67e22; color: white; border: none; padding: 20px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; width: 100%; transition: 0.3s; }
-        button:hover { background: #d35400; transform: scale(1.02); }
-        #log { margin-top: 20px; text-align: left; background: #1a202c; padding: 15px; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto; font-size: 13px; }
+        body { font-family: sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
+        .panel { background: #2d3748; padding: 30px; border-radius: 12px; max-width: 500px; margin: auto; }
+        button { background: #e67e22; color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #log { margin-top: 20px; text-align: left; font-family: monospace; font-size: 12px; background: #000; padding: 10px; border-radius: 5px; height: 150px; overflow-y: auto; }
     </style>
 </head>
 <body>
     <div class="panel">
-        <h2>🚀 Apuração Técnica</h2>
-        <p>Calcula penalidades de GPS (Waypoints e Radares) como pontos negativos.</p>
-        <button onclick="processarPenalidades()">EXECUTAR APURAÇÃO AGORA</button>
-        <div id="log">Aguardando início...</div>
+        <h2>Apuração Técnica</h2>
+        <button onclick="apurar()">CALCULAR PENALIDADES GPS</button>
+        <div id="log">Console: Aguardando...</div>
     </div>
 
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
-        firebase.initializeApp(firebaseConfig);
+        const firebaseConfig = { /* ... Mesma config ... */ };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        async function processarPenalidades() {
+        async function apurar() {
             const log = document.getElementById('log');
             log.innerHTML = "Iniciando...";
-
-            const [snapComp, snapConf] = await Promise.all([
-                db.ref('competidores').once('value'),
-                db.ref('configuracoes/percurso').once('value')
-            ]);
-
-            const competidores = snapComp.val();
-            const percurso = snapConf.val();
+            const compSnap = await db.ref('competidores').once('value');
+            const confSnap = await db.ref('configuracoes/percurso').once('value');
+            const competidores = compSnap.val();
+            const percurso = confSnap.val();
 
             for (let id in competidores) {
-                let penTotal = 0;
-                const rastroSnap = await db.ref('rastros/' + id).once('value');
-                const rastro = rastroSnap.val();
-
+                let pen = 0;
+                const rSnap = await db.ref('rastros/' + id).once('value');
+                const rastro = rSnap.val();
                 if (rastro && percurso) {
-                    const rastroArr = Object.values(rastro).sort((a,b) => a.ts - b.ts);
-                    
-                    percurso.features.forEach(feat => {
-                        if (feat.geometry.type === 'Polygon') {
-                            const vMax = (feat.properties.velocidade || 60) * 1.1;
-                            let excessoMs = 0;
-                            rastroArr.forEach((p, i) => {
-                                if (i === 0) return;
-                                if (turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if (p.vel > vMax) excessoMs += (p.ts - rastroArr[i-1].ts);
+                    const rArr = Object.values(rastro).sort((a,b) => a.ts - b.ts);
+                    percurso.features.forEach(f => {
+                        if (f.geometry.type === 'Polygon') {
+                            const vMax = (f.properties.velocidade || 60) * 1.1;
+                            let excesso = 0;
+                            rArr.forEach((p, i) => {
+                                if (i > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), f)) {
+                                    if (p.vel > vMax) excesso += (p.ts - rArr[i-1].ts);
                                 }
                             });
-                            if (excessoMs > 10000) penTotal += (Math.floor((excessoMs - 10000) / 30000) + 1) * 300;
-                        } else if (feat.properties?.type === 'circle') {
-                            const coords = feat.geometry.coordinates;
-                            const visitou = rastroArr.some(pt => 
-                                turf.distance(turf.point([pt.lng, pt.lat]), turf.point(coords)) <= (feat.properties.radius / 1000)
-                            );
-                            if (!visitou) penTotal += 20000;
+                            if (excesso > 10000) pen += (Math.floor((excesso-10000)/30000)+1)*300;
+                        } else if (f.properties?.type === 'circle') {
+                            const v = rArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(f.geometry.coordinates)) <= (f.properties.radius/1000));
+                            if (!v) pen += 20000;
                         }
                     });
                 }
-
-                // Grava como valor NEGATIVO
-                await db.ref('competidores/' + id).update({ pontos: (penTotal * -1) });
-                log.innerHTML += `<br>✅ Carro ${id}: ${penTotal * -1} pts penalidade.`;
+                await db.ref('competidores/' + id).update({ pontos: (pen * -1) });
+                log.innerHTML += `<br>Carro ${id}: ${pen * -1} pts`;
             }
-            log.innerHTML += "<br>--- FIM ---";
+            log.innerHTML += "<br>Concluído!";
         }
     </script>
 </body>
