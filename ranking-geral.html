@@ -8,13 +8,25 @@
     <style>
         body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
         .container { max-width: 1100px; margin: auto; }
-        .no-print { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        
+        /* Cabeçalho com Logo */
+        .header-ranking { text-align: center; margin-bottom: 30px; }
+        .logo { width: 150px; margin-bottom: 10px; border-radius: 8px; }
+
+        .no-print { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        
         .cat-card { background: #2d3748; border-radius: 12px; padding: 25px; margin-bottom: 30px; border-top: 4px solid #ecc94b; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        h2 { color: #ecc94b; margin: 0 0 15px 0; font-size: 1.5rem; }
+        h2 { color: #ecc94b; margin: 0 0 15px 0; font-size: 1.5rem; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
+        
         table { width: 100%; border-collapse: collapse; background: #1a202c; border-radius: 8px; overflow: hidden; }
-        th { background: #4a5568; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #a0aec0; }
+        th { background: #4a5568; padding: 12px; text-align: left; font-size: 11px; text-transform: uppercase; color: #cbd5e0; }
         td { padding: 12px; border-bottom: 1px solid #2d3748; font-size: 14px; }
-        .pos-1 { background: rgba(236, 201, 75, 0.1); font-weight: bold; color: #ecc94b; }
+        
+        /* Destaque para Tempo e Pontos */
+        .val-tempo { color: #68d391; font-weight: bold; font-family: monospace; font-size: 1.1rem; }
+        .val-pontos { color: #63b3ed; }
+        .pos-1 { background: rgba(236, 201, 75, 0.15); font-weight: bold; color: #ecc94b; }
+
         .btn-print { background: #38a169; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-back { background: #4a5568; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; }
 
@@ -26,7 +38,8 @@
             th { background: #eee; color: black; border-bottom: 2px solid #333; }
             td { border-bottom: 1px solid #eee; color: black; }
             h2 { color: black; border-bottom: 1px solid #333; }
-            .pos-1 { background: #f0f0f0 !important; }
+            .val-tempo, .val-pontos { color: black; }
+            .logo { filter: grayscale(0); } /* Garante que a logo saia colorida se a impressora for colorida */
         }
     </style>
 </head>
@@ -34,59 +47,56 @@
     <div class="container">
         <div class="no-print">
             <a href="admin.html" class="btn-back">⬅ Voltar ao Painel</a>
-            <h1 style="margin:0;">🏆 Ranking Final</h1>
             <button onclick="window.print()" class="btn-print">🖨️ Gerar PDF / Imprimir</button>
         </div>
+
+        <div class="header-ranking">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" alt="Logo Rally" class="logo">
+            <h1 style="margin:5px 0;">Classificação Final</h1>
+            <p style="color: #a0aec0; margin: 0;">Critério: 1º Tempo Total | 2º Pontos GPS</p>
+        </div>
         
-        <div id="geralContent">Aguardando dados dos competidores...</div>
+        <div id="geralContent">
+            <p style="text-align: center; padding: 50px;">A carregar resultados...</p>
+        </div>
     </div>
 
     <script>
-        // Configuração do seu Firebase (Verificada conforme seus arquivos)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
+            projectId: "cronometro-rally"
         };
         
-        // Inicialização garantida
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Escuta os dados em tempo real
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            if (!data) {
-                document.getElementById('geralContent').innerHTML = "Nenhum competidor encontrado no banco de dados.";
-                return;
-            }
+            if (!data) return;
 
             let html = "";
             const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
             categorias.forEach(cat => {
                 let lista = [];
-                // Converte o objeto do Firebase em Array
                 for (let id in data) {
                     if (data[id].categoria === cat) {
-                        lista.push({ id: id, ...data[id] });
+                        lista.push({ id, ...data[id] });
                     }
                 }
 
-                // Lógica de Ordenação:
-                // 1º Quem tem MAIS pontos (precisão GPS)
-                // 2º Quem tem MENOR tempo total (velocidade) em caso de empate nos pontos
+                // INVERSÃO DE CRITÉRIO:
+                // 1º Menor Tempo Total (Velocidade)
+                // 2º Mais Pontos (Precisão) como desempate
                 lista.sort((a, b) => {
-                    const pontosA = a.pontos || 0;
-                    const pontosB = b.pontos || 0;
-                    if (pontosA !== pontosB) return pontosB - pontosA;
-
                     const tempoA = a.tempoTotalMs || Infinity;
                     const tempoB = b.tempoTotalMs || Infinity;
-                    return tempoA - tempoB;
+                    if (tempoA !== tempoB) return tempoA - tempoB;
+
+                    const pontosA = a.pontos || 0;
+                    const pontosB = b.pontos || 0;
+                    return pontosB - pontosA;
                 });
 
                 if (lista.length > 0) {
@@ -96,38 +106,13 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th style="width: 50px;">Pos</th>
+                                    <th style="width: 60px;">Pos</th>
                                     <th style="width: 60px;">Nº</th>
                                     <th>Piloto</th>
+                                    <th>Tempo Final</th>
                                     <th>Pontos (GPS)</th>
-                                    <th>Tempo Total</th>
                                 </tr>
                             </thead>
                             <tbody>`;
                     
                     lista.forEach((p, i) => {
-                        const pontosFormatados = (p.pontos || 0).toLocaleString('pt-BR');
-                        const tempoFormatado = p.tempoFormatado || "--:--:--";
-                        const classePodio = (i === 0) ? 'pos-1' : '';
-
-                        html += `
-                            <tr class="${classePodio}">
-                                <td>${i + 1}º</td>
-                                <td><b>${p.id}</b></td>
-                                <td>${p.nome || 'Sem Nome'}</td>
-                                <td>${pontosFormatados}</td>
-                                <td>${tempoFormatado}</td>
-                            </tr>`;
-                    });
-                    html += `</tbody></table></div>`;
-                }
-            });
-
-            document.getElementById('geralContent').innerHTML = html || "Nenhum competidor com categoria definida.";
-        }, error => {
-            console.error(error);
-            document.getElementById('geralContent').innerHTML = "Erro ao conectar ao Firebase: " + error.message;
-        });
-    </script>
-</body>
-</html>
