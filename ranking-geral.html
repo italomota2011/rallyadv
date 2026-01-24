@@ -6,31 +6,27 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        /* Estilos para Visualização em Tela */
         body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
         .container { max-width: 1100px; margin: auto; }
         .no-print { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        
-        .cat-card { background: #2d3748; border-radius: 12px; padding: 25px; margin-bottom: 30px; border-top: 4px solid #ecc94b; }
-        h2 { color: #ecc94b; margin: 0 0 15px 0; }
-        
-        table { width: 100%; border-collapse: collapse; background: #1a202c; }
-        th { background: #4a5568; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }
-        td { padding: 12px; border-bottom: 1px solid #2d3748; }
-        
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 25px; margin-bottom: 30px; border-top: 4px solid #ecc94b; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        h2 { color: #ecc94b; margin: 0 0 15px 0; font-size: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; background: #1a202c; border-radius: 8px; overflow: hidden; }
+        th { background: #4a5568; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; color: #a0aec0; }
+        td { padding: 12px; border-bottom: 1px solid #2d3748; font-size: 14px; }
+        .pos-1 { background: rgba(236, 201, 75, 0.1); font-weight: bold; color: #ecc94b; }
         .btn-print { background: #38a169; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
         .btn-back { background: #4a5568; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; }
 
-        /* Estilos Exclusivos para Impressão (PDF) */
         @media print {
             body { background: white; color: black; padding: 0; }
             .no-print { display: none; }
-            .cat-card { border: 1px solid #ccc; page-break-inside: avoid; background: white; color: black; margin-bottom: 20px; }
+            .cat-card { border: 1px solid #ccc; page-break-inside: avoid; background: white; color: black; margin-bottom: 20px; box-shadow: none; }
             table { background: white; border: 1px solid #eee; }
             th { background: #eee; color: black; border-bottom: 2px solid #333; }
             td { border-bottom: 1px solid #eee; color: black; }
             h2 { color: black; border-bottom: 1px solid #333; }
-            .pos-1 { background: #f9f9f9 !important; font-weight: bold; }
+            .pos-1 { background: #f0f0f0 !important; }
         }
     </style>
 </head>
@@ -42,15 +38,96 @@
             <button onclick="window.print()" class="btn-print">🖨️ Gerar PDF / Imprimir</button>
         </div>
         
-        <div id="geralContent">Carregando pódio...</div>
+        <div id="geralContent">Aguardando dados dos competidores...</div>
     </div>
 
     <script>
+        // Configuração do seu Firebase (Verificada conforme seus arquivos)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        firebase.initializeApp(firebaseConfig);
+        
+        // Inicialização garantida
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const db = firebase.database();
+
+        // Escuta os dados em tempo real
+        db.ref('competidores').on('value', snap => {
+            const data = snap.val();
+            if (!data) {
+                document.getElementById('geralContent').innerHTML = "Nenhum competidor encontrado no banco de dados.";
+                return;
+            }
+
+            let html = "";
+            const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
+            categorias.forEach(cat => {
+                let lista = [];
+                // Converte o objeto do Firebase em Array
+                for (let id in data) {
+                    if (data[id].categoria === cat) {
+                        lista.push({ id: id, ...data[id] });
+                    }
+                }
+
+                // Lógica de Ordenação:
+                // 1º Quem tem MAIS pontos (precisão GPS)
+                // 2º Quem tem MENOR tempo total (velocidade) em caso de empate nos pontos
+                lista.sort((a, b) => {
+                    const pontosA = a.pontos || 0;
+                    const pontosB = b.pontos || 0;
+                    if (pontosA !== pontosB) return pontosB - pontosA;
+
+                    const tempoA = a.tempoTotalMs || Infinity;
+                    const tempoB = b.tempoTotalMs || Infinity;
+                    return tempoA - tempoB;
+                });
+
+                if (lista.length > 0) {
+                    html += `
+                    <div class="cat-card">
+                        <h2>${cat}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width: 50px;">Pos</th>
+                                    <th style="width: 60px;">Nº</th>
+                                    <th>Piloto</th>
+                                    <th>Pontos (GPS)</th>
+                                    <th>Tempo Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    lista.forEach((p, i) => {
+                        const pontosFormatados = (p.pontos || 0).toLocaleString('pt-BR');
+                        const tempoFormatado = p.tempoFormatado || "--:--:--";
+                        const classePodio = (i === 0) ? 'pos-1' : '';
+
+                        html += `
+                            <tr class="${classePodio}">
+                                <td>${i + 1}º</td>
+                                <td><b>${p.id}</b></td>
+                                <td>${p.nome || 'Sem Nome'}</td>
+                                <td>${pontosFormatados}</td>
+                                <td>${tempoFormatado}</td>
+                            </tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                }
+            });
+
+            document.getElementById('geralContent').innerHTML = html || "Nenhum competidor com categoria definida.";
+        }, error => {
+            console.error(error);
+            document.getElementById('geralContent').innerHTML = "Erro ao conectar ao Firebase: " + error.message;
+        });
+    </script>
+</body>
+</html>
