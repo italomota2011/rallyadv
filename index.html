@@ -9,6 +9,15 @@
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
+        
+        /* Estilo da Logomarca */
+        .logo {
+            display: block;
+            margin: 0 auto 20px auto;
+            max-width: 150px; /* Você pode ajustar o tamanho aqui */
+            height: auto;
+        }
+
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
         .tracking { text-align: center; display: none; }
@@ -17,7 +26,9 @@
 <body>
     <div class="card">
         <div id="setup">
-            <h2 style="color:#e67e22; text-align:center;">REGISTRO</h2>
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" alt="Logo Rally" class="logo">
+            <h2 style="color:#e67e22; text-align:center; margin-top: 0;">REGISTRO</h2>
+            
             <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
@@ -27,6 +38,7 @@
             <input type="number" id="carro" placeholder="Nº do Carro" min="1" max="100">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
+
         <div id="ativo" class="tracking">
             <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
             <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
@@ -34,7 +46,9 @@
             <p style="color:#2ecc71;">● TRANSMITINDO GPS</p>
         </div>
     </div>
+
     <script>
+        // Configuração do Firebase (mantida a sua original)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -54,6 +68,7 @@
             
             try {
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat, pontos: 150000 });
+                // Ao ocultar a div 'setup', a logo desaparece automaticamente
                 document.getElementById('setup').style.display = 'none';
                 document.getElementById('ativo').style.display = 'block';
                 document.getElementById('viewCarro').innerText = "Carro " + num;
