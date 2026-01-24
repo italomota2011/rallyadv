@@ -2,23 +2,24 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Painel Admin - Apuração</title>
+    <title>Admin - Apuração de Penalidades</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
-        .card { background: #2d3748; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
-        button { background: #e67e22; color: white; border: none; padding: 15px; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; }
-        .status { margin-top: 10px; padding: 10px; background: #222; border-radius: 5px; font-family: monospace; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
+        .panel { background: #2d3748; padding: 30px; border-radius: 15px; max-width: 600px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        button { background: #e67e22; color: white; border: none; padding: 20px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; width: 100%; transition: 0.3s; }
+        button:hover { background: #d35400; transform: scale(1.02); }
+        #log { margin-top: 20px; text-align: left; background: #1a202c; padding: 15px; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto; font-size: 13px; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>⚙️ Apuração Técnica</h2>
-        <p>Esta ação calcula as penalidades de todos os pilotos (Radares e Waypoints).</p>
-        <button onclick="apurarTudo()">INICIAR APURAÇÃO GERAL</button>
-        <div id="statusLog" class="status">Aguardando comando...</div>
+    <div class="panel">
+        <h2>🚀 Apuração Técnica</h2>
+        <p>Calcula penalidades de GPS (Waypoints e Radares) como pontos negativos.</p>
+        <button onclick="processarPenalidades()">EXECUTAR APURAÇÃO AGORA</button>
+        <div id="log">Aguardando início...</div>
     </div>
 
     <script>
@@ -32,55 +33,52 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        async function apurarTudo() {
-            const log = document.getElementById('statusLog');
-            log.innerHTML = "Iniciando processamento...";
+        async function processarPenalidades() {
+            const log = document.getElementById('log');
+            log.innerHTML = "Iniciando...";
 
-            const [snapCompetidores, snapConfig] = await Promise.all([
+            const [snapComp, snapConf] = await Promise.all([
                 db.ref('competidores').once('value'),
                 db.ref('configuracoes/percurso').once('value')
             ]);
 
-            const competidores = snapCompetidores.val();
-            const config = snapConfig.val();
+            const competidores = snapComp.val();
+            const percurso = snapConf.val();
 
             for (let id in competidores) {
-                let totalPenalidades = 0;
+                let penTotal = 0;
                 const rastroSnap = await db.ref('rastros/' + id).once('value');
-                const rastroData = rastroSnap.val();
+                const rastro = rastroSnap.val();
 
-                if (rastroData) {
-                    const rastroArr = Object.values(rastroData).sort((a,b) => a.ts - b.ts);
+                if (rastro && percurso) {
+                    const rastroArr = Object.values(rastro).sort((a,b) => a.ts - b.ts);
                     
-                    config.features.forEach(feat => {
+                    percurso.features.forEach(feat => {
                         if (feat.geometry.type === 'Polygon') {
-                            // Lógica de Radar
                             const vMax = (feat.properties.velocidade || 60) * 1.1;
-                            let tempoExcesso = 0;
+                            let excessoMs = 0;
                             rastroArr.forEach((p, i) => {
                                 if (i === 0) return;
                                 if (turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if (p.vel > vMax) tempoExcesso += (p.ts - rastroArr[i-1].ts);
+                                    if (p.vel > vMax) excessoMs += (p.ts - rastroArr[i-1].ts);
                                 }
                             });
-                            if (tempoExcesso > 10000) {
-                                totalPenalidades += (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
-                            }
+                            if (excessoMs > 10000) penTotal += (Math.floor((excessoMs - 10000) / 30000) + 1) * 300;
                         } else if (feat.properties?.type === 'circle') {
-                            // Lógica de Waypoint
+                            const coords = feat.geometry.coordinates;
                             const visitou = rastroArr.some(pt => 
-                                turf.distance(turf.point([pt.lng, pt.lat]), turf.point(feat.geometry.coordinates)) <= (feat.properties.radius / 1000)
+                                turf.distance(turf.point([pt.lng, pt.lat]), turf.point(coords)) <= (feat.properties.radius / 1000)
                             );
-                            if (!visitou) totalPenalidades += 20000;
+                            if (!visitou) penTotal += 20000;
                         }
                     });
                 }
 
-                // SALVA APENAS AS PENALIDADES (COMEÇA EM 0)
-                await db.ref('competidores/' + id).update({ pontos: totalPenalidades });
-                log.innerHTML += `<br>Carro ${id}: ${totalPenalidades} pts penalidade.`;
+                // Grava como valor NEGATIVO
+                await db.ref('competidores/' + id).update({ pontos: (penTotal * -1) });
+                log.innerHTML += `<br>✅ Carro ${id}: ${penTotal * -1} pts penalidade.`;
             }
-            alert("Apuração Concluída!");
+            log.innerHTML += "<br>--- FIM ---";
         }
     </script>
 </body>
