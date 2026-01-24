@@ -152,8 +152,8 @@
                     const visitou = rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raioKm);
 
                     if(!visitou) {
-                        totalPenalidades += 20000;
-                        resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: 20.000 pts</div>`;
+                        totalPenalidades += 800;
+                        resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: 800 pts</div>`;
                     }
                 }
             });
@@ -166,3 +166,4 @@
     </script>
 </body>
 </html>
+
