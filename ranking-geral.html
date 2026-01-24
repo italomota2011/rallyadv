@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Ranking Geral - Rally</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: auto; }
+        .cat-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h2 { color: #2c3e50; border-bottom: 3px solid #e67e22; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #f8f9fa; padding: 12px; text-align: left; font-size: 13px; color: #7f8c8d; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        .col-pontos { font-weight: bold; color: #2980b9; }
+        .col-tempo { font-weight: bold; color: #27ae60; }
+        .badge-pos { background: #e67e22; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 style="text-align:center;">🏆 Resultado Consolidado</h1>
+        <div id="geralContent">Carregando dados...</div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        db.ref('competidores').on('value', snap => {
+            const data = snap.val();
+            if(!data) return;
+
+            let html = "";
+            const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
+            categorias.forEach(cat => {
+                let lista = [];
+                for(let id in data) {
+                    if(data[id].categoria === cat) {
+                        lista.push({ id, ...data[id] });
+                    }
+                }
+
+                // Critério de Desempate: 1º Pontos (maior), 2º Tempo (menor)
+                lista.sort((a, b) => {
+                    if (b.pontos !== a.pontos) return b.pontos - a.pontos;
+                    return (a.tempoTotalMs || Infinity) - (b.tempoTotalMs || Infinity);
+                });
+
+                if(lista.length > 0) {
+                    html += `
+                    <div class="cat-card">
+                        <h2>${cat}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Pos</th>
+                                    <th>Nº</th>
+                                    <th>Piloto</th>
+                                    <th>Pontos (Precisão)</th>
+                                    <th>Tempo (Velocidade)</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    lista.forEach((p, i) => {
+                        const tempoStr = p.tempoFormatado || "--:--:--";
+                        const pontos = p.pontos || 0;
+                        html += `
+                            <tr>
+                                <td><span class="badge-pos">${i+1}º</span></td>
+                                <td><b>${p.id}</b></td>
+                                <td>${p.nome}</td>
+                                <td class="col-pontos">${pontos.toLocaleString()} pts</td>
+                                <td class="col-tempo">${tempoStr}</td>
+                            </tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                }
+            });
+            document.getElementById('geralContent').innerHTML = html || "Sem dados para exibir.";
+        });
+    </script>
+</body>
+</html>
