@@ -2,64 +2,46 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Final - Rally</title>
+    <title>Ranking Geral - Rally</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .container { width: 100%; max-width: 800px; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h2 { color: #e67e22; text-align: center; margin-bottom: 25px; }
-        
-        /* Campo da Cidade */
-        .config-section { background: #252525; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e67e22; }
-        label { display: block; margin-bottom: 8px; font-size: 14px; color: #bbb; }
-        input[type="text"] { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #333; background: #121212; color: white; box-sizing: border-box; }
-
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; }
-        th { background: #e67e22; color: white; padding: 12px; text-align: left; }
-        td { padding: 12px; border-bottom: 1px solid #333; }
-        tr:nth-child(even) { background: #252525; }
-        
-        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
-        button { flex: 1; padding: 15px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        .btn-pdf { background: #27ae60; color: white; }
-        .btn-voltar { background: #4a5568; color: white; }
-        button:hover { opacity: 0.8; }
+        body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
+        .container { max-width: 900px; margin: auto; }
+        .config-section { background: #2d3748; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #e67e22; }
+        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 4px; border: none; background: #1a202c; color: white; }
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        h2 { color: #e67e22; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; }
+        td { padding: 12px; border-bottom: 1px solid #2d3748; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; }
+        .btn-pdf { background: #38a169; }
+        .btn-voltar { background: #4a5568; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2>🏆 Classificação Final</h2>
+        <h2>🏆 Classificação Oficial</h2>
 
         <div class="config-section">
-            <label for="inputCidade">Nome da Cidade / Etapa:</label>
+            <label>Cidade / Nome da Etapa:</label>
             <input type="text" id="inputCidade" placeholder="Ex: Feira de Santana - BA">
         </div>
 
-        <table id="tabelaRanking">
-            <thead>
-                <tr>
-                    <th>Pos</th>
-                    <th>Carro</th>
-                    <th>Piloto</th>
-                    <th>Pontos</th>
-                </tr>
-            </thead>
-            <tbody id="corpoRanking">
-                </tbody>
-        </table>
-
         <div class="btn-group">
-            <button class="btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
-            <button class="btn-pdf" onclick="exportarPDF()">EXPORTAR PDF</button>
+            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
+            <button class="btn btn-pdf" onclick="exportarPDF()">EXPORTAR PDF</button>
         </div>
+
+        <div id="rankingContent">Carregando resultados...</div>
     </div>
 
     <script>
-        // Configuração do Firebase (mesma do rastro.html)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -70,34 +52,58 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Carregar dados e montar ranking
+        // Lista de categorias oficiais do seu sistema
+        const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            const lista = [];
-            
-            if(data) {
-                Object.keys(data).forEach(id => {
-                    lista.push({
-                        id: id,
-                        nome: data[id].nome,
-                        pontos: data[id].pontos || 0
-                    });
-                });
+            if(!data) {
+                document.getElementById('rankingContent').innerHTML = "Nenhum dado encontrado.";
+                return;
             }
 
-            // Ordenar por pontos (ajuste se a lógica for menor ponto ganha)
-            lista.sort((a, b) => b.pontos - a.pontos);
-
             let html = "";
-            lista.forEach((comp, index) => {
-                html += `<tr>
-                    <td>${index + 1}º</td>
-                    <td>${comp.id}</td>
-                    <td>${comp.nome}</td>
-                    <td>${comp.pontos}</td>
-                </tr>`;
+            categorias.forEach(cat => {
+                let list = [];
+                for(let id in data) {
+                    if(data[id].categoria === cat) {
+                        list.push({ id, ...data[id] });
+                    }
+                }
+
+                // Ordenação: Maior pontuação primeiro
+                list.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+
+                if(list.length > 0) {
+                    html += `
+                    <div class="cat-card">
+                        <h2>${cat}</h2>
+                        <table class="tabela-categoria">
+                            <thead>
+                                <tr>
+                                    <th>Pos</th>
+                                    <th>Nº</th>
+                                    <th>Piloto</th>
+                                    <th>Total Pontos</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    list.forEach((p, i) => {
+                        html += `
+                        <tr>
+                            <td>${i + 1}º</td>
+                            <td><b>${p.id}</b></td>
+                            <td>${p.nome}</td>
+                            <td>${(p.pontos || 0).toLocaleString('pt-BR')}</td>
+                        </tr>`;
+                    });
+
+                    html += `</tbody></table></div>`;
+                }
             });
-            document.getElementById('corpoRanking').innerHTML = html;
+
+            document.getElementById('rankingContent').innerHTML = html || "Aguardando processamento dos pontos...";
         });
 
         async function exportarPDF() {
@@ -105,25 +111,36 @@
             const doc = new jsPDF();
             const cidade = document.getElementById('inputCidade').value || "Resultado Oficial";
 
-            // Cabeçalho do PDF
             doc.setFontSize(18);
-            doc.setTextColor(230, 126, 34); // Cor Laranja similar ao layout
-            doc.text("RANKING FINAL DE RALLY", 105, 15, { align: "center" });
-            
-            // Texto da Cidade (Inserido pelo usuário)
-            doc.setFontSize(14);
-            doc.setTextColor(100, 100, 100);
-            doc.text(cidade, 105, 25, { align: "center" });
+            doc.text("RANKING GERAL - RALLY", 105, 15, { align: "center" });
+            doc.setFontSize(12);
+            doc.text(cidade, 105, 22, { align: "center" });
 
-            // Gerar Tabela
-            doc.autoTable({
-                startY: 35,
-                head: [['Pos', 'Carro', 'Piloto', 'Pontos']],
-                body: Array.from(document.querySelectorAll("#corpoRanking tr")).map(tr => {
-                    return Array.from(tr.querySelectorAll("td")).map(td => td.innerText);
-                }),
-                headStyles: { fillColor: [230, 126, 34] }, // Laranja do sistema
-                theme: 'striped'
+            let yPos = 30;
+
+            // Busca todas as tabelas geradas na tela
+            const tabelas = document.querySelectorAll('.cat-card');
+            
+            tabelas.forEach((card, index) => {
+                const titulo = card.querySelector('h2').innerText;
+                const tabelaData = card.querySelector('table');
+
+                doc.setFontSize(14);
+                doc.text(titulo, 14, yPos);
+
+                doc.autoTable({
+                    html: tabelaData,
+                    startY: yPos + 5,
+                    theme: 'striped',
+                    headStyles: { fillColor: [230, 126, 34] },
+                    didDrawPage: (data) => { yPos = data.cursor.y + 15; }
+                });
+                
+                yPos = doc.lastAutoTable.finalY + 15;
             });
 
-            doc.
+            doc.save(`Ranking_${cidade.replace(/\s+/g, '_')}.pdf`);
+        }
+    </script>
+</body>
+</html>
