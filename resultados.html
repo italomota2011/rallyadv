@@ -37,7 +37,7 @@
                 if(list.length > 0) {
                     html += `<div class="cat"><h2>${c}</h2><table><tr><th>POS</th><th>Nº</th><th>Piloto</th><th>Penalidade</th><th>Total</th></tr>`;
                     list.forEach((p, i) => {
-                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">-${150000 - p.pontos}</td><td>${p.pontos}</td></tr>`;
+                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">${p.pontos}</td><td>${p.pontos}</td></tr>`;
                     });
                     html += `</table></div>`;
                 }
@@ -47,3 +47,4 @@
     </script>
 </body>
 </html>
+
