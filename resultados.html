@@ -7,43 +7,52 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
-        select { padding: 15px; width: 100%; max-width: 300px; border-radius: 8px; margin-bottom: 20px; }
-        .res-box { background: #2d3748; padding: 20px; border-radius: 12px; display: none; }
-        .val { font-size: 2rem; color: #f6e05e; }
+        .card { background: #2d3748; padding: 30px; border-radius: 15px; display: inline-block; min-width: 320px; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        select { padding: 12px; width: 100%; border-radius: 8px; border: none; margin-bottom: 25px; }
+        .tempo { font-size: 3rem; color: #f6e05e; font-family: monospace; margin: 10px 0; }
+        .pontos { font-size: 1.5rem; color: #fc8181; }
     </style>
 </head>
 <body>
-    <h1>Resultados Técnicos</h1>
-    <select id="carSelect" onchange="mostrar()">
-        <option value="">Selecione seu Carro</option>
-    </select>
-    <div id="resBox" class="res-box">
-        <p>Tempo de Prova:</p>
-        <div id="t" class="val">--:--:--</div>
-        <p>Penalidades GPS:</p>
-        <div id="p" style="color:#fc8181; font-size: 1.5rem;">0</div>
+    <div class="card">
+        <h2>Consultar Resultado</h2>
+        <select id="carSelect" onchange="exibir()">
+            <option value="">Selecione seu Carro</option>
+        </select>
+        <div id="resBox" style="display:none">
+            <p>Tempo Final:</p>
+            <div id="tTxt" class="tempo">--:--:--</div>
+            <p>Penalidades GPS:</p>
+            <div id="pTxt" class="pontos">0</div>
+        </div>
     </div>
 
     <script>
-        const firebaseConfig = { /* ... Mesma config ... */ };
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            let h = '<option value="">Selecione seu Carro</option>';
-            for(let id in data) h += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-            document.getElementById('carSelect').innerHTML = h;
+            let html = '<option value="">Selecione seu Carro</option>';
+            for(let id in data) html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
+            document.getElementById('carSelect').innerHTML = html;
         });
 
-        function mostrar() {
+        function exibir() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
             db.ref('competidores/' + id).on('value', snap => {
                 const p = snap.val();
                 document.getElementById('resBox').style.display = 'block';
-                document.getElementById('t').innerText = p.tempoFormatado || '--:--:--';
-                document.getElementById('p').innerText = p.pontos || 0;
+                document.getElementById('tTxt').innerText = p.tempoFormatado || '--:--:--';
+                document.getElementById('pTxt').innerText = p.pontos || 0;
             });
         }
     </script>
