@@ -2,162 +2,128 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Geral - Rally Oficial</title>
+    <title>Ranking Final - Rally</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 20px; margin: 0; }
-        .container { max-width: 1000px; margin: auto; }
+        body { margin: 0; font-family: sans-serif; background: #121212; color: white; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { width: 100%; max-width: 800px; background: #1e1e1e; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { color: #e67e22; text-align: center; margin-bottom: 25px; }
         
-        /* Cabeçalho de Impressão */
-        .header-print { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
-        .logo { width: 150px; margin-bottom: 10px; border-radius: 8px; }
-        
-        .no-print { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .btn { padding: 10px 20px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; text-decoration: none; color: white; transition: 0.2s; }
-        .btn-print { background: #38a169; }
-        .btn-print:hover { background: #2f855a; }
-        .btn-back { background: #4a5568; }
+        /* Campo da Cidade */
+        .config-section { background: #252525; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #e67e22; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; color: #bbb; }
+        input[type="text"] { width: 100%; padding: 12px; border-radius: 6px; border: 1px solid #333; background: #121212; color: white; box-sizing: border-box; }
 
-        .cat-card { background: #2d3748; border-radius: 12px; padding: 25px; margin-bottom: 40px; border-top: 5px solid #ecc94b; box-shadow: 0 10px 15px rgba(0,0,0,0.3); }
-        h2 { color: #ecc94b; margin: 0 0 15px 0; text-transform: uppercase; letter-spacing: 1px; font-size: 1.3rem; }
-
-        table { width: 100%; border-collapse: collapse; background: #1a202c; border-radius: 8px; overflow: hidden; }
-        th { background: #4a5568; color: #cbd5e0; padding: 15px; text-align: left; font-size: 12px; text-transform: uppercase; }
-        td { padding: 15px; border-bottom: 1px solid #2d3748; font-size: 15px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; }
+        th { background: #e67e22; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #333; }
+        tr:nth-child(even) { background: #252525; }
         
-        .pos-col { width: 60px; font-weight: bold; color: #ecc94b; font-size: 1.2rem; }
-        .tempo-col { color: #68d391; font-weight: bold; font-family: monospace; font-size: 1.2rem; }
-        .pontos-col { color: #63b3ed; font-weight: bold; text-align: right; font-size: 1.2rem; }
-        
-        tr:last-child td { border-bottom: none; }
-        .primeiro-lugar { background: rgba(236, 201, 75, 0.1) !important; }
-
-        @media print {
-            body { background: white; color: black; padding: 0; }
-            .no-print { display: none; }
-            .container { max-width: 100%; }
-            .cat-card { border: 1px solid #000; background: white; color: black; box-shadow: none; page-break-inside: avoid; }
-            table { background: white; color: black; border: 1px solid #ccc; }
-            th { background: #eee; color: black; border-bottom: 2px solid #000; }
-            td { border-bottom: 1px solid #eee; color: black; }
-            .tempo-col, .pontos-col, .pos-col { color: black !important; }
-            .logo { filter: brightness(0.5); }
-        }
+        .btn-group { display: flex; gap: 10px; margin-top: 20px; }
+        button { flex: 1; padding: 15px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-pdf { background: #27ae60; color: white; }
+        .btn-voltar { background: #4a5568; color: white; }
+        button:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="no-print">
-        <a href="admin.html" class="btn btn-back">⬅ Voltar ao Painel</a>
-        <button onclick="window.print()" class="btn btn-print">🖨️ Gerar PDF de Resultados</button>
+    <div class="container">
+        <h2>🏆 Classificação Final</h2>
+
+        <div class="config-section">
+            <label for="inputCidade">Nome da Cidade / Etapa:</label>
+            <input type="text" id="inputCidade" placeholder="Ex: Feira de Santana - BA">
+        </div>
+
+        <table id="tabelaRanking">
+            <thead>
+                <tr>
+                    <th>Pos</th>
+                    <th>Carro</th>
+                    <th>Piloto</th>
+                    <th>Pontos</th>
+                </tr>
+            </thead>
+            <tbody id="corpoRanking">
+                </tbody>
+        </table>
+
+        <div class="btn-group">
+            <button class="btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
+            <button class="btn-pdf" onclick="exportarPDF()">EXPORTAR PDF</button>
+        </div>
     </div>
 
-    <div class="header-print">
-        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo">
-        <h1>CLASSIFICAÇÃO FINAL RALLY</h1>
-        <p style="color: #cbd5e0;">Critérios: 1º Tempo Total (Menor) | 2º Pontos Totais (Rastro + Fotos)</p>
-    </div>
-
-    <div id="rankingContent">
-        <p style="text-align: center; padding: 40px; font-style: italic; color: #a0aec0;">Carregando e calculando posições...</p>
-    </div>
-</div>
-
-<script>
-    // Configuração do Firebase extraída do seu sistema
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-
-    // Inicialização
-    if (!firebase.apps.length) {
+    <script>
+        // Configuração do Firebase (mesma do rastro.html)
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
         firebase.initializeApp(firebaseConfig);
-    }
-    const db = firebase.database();
+        const db = firebase.database();
 
-    // Função principal de processamento
-    db.ref('competidores').on('value', snap => {
-        const data = snap.val();
-        if (!data) {
-            document.getElementById('rankingContent').innerHTML = "<p style='text-align:center;'>Nenhum dado encontrado no banco de dados.</p>";
-            return;
-        }
-
-        const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-        let html = "";
-
-        categorias.forEach(cat => {
-            let competidores = [];
+        // Carregar dados e montar ranking
+        db.ref('competidores').on('value', snap => {
+            const data = snap.val();
+            const lista = [];
             
-            // Processa cada competidor da categoria
-            for (let id in data) {
-                const comp = data[id];
-                if (comp.categoria === cat) {
-                    // Soma pontos de rastro (GPS) + pontos de fotos
-                    const pRastro = comp.pontos || 0;
-                    const pFotos = comp.pontosFotos || 0;
-                    
-                    competidores.push({
+            if(data) {
+                Object.keys(data).forEach(id => {
+                    lista.push({
                         id: id,
-                        nome: comp.nome || "Piloto sem nome",
-                        tempoMs: comp.tempoTotalMs || Infinity, // Se não tiver tempo, vai para o fim
-                        tempoFormatado: comp.tempoFormatado || "--:--:--",
-                        pontosTotais: pRastro + pFotos
+                        nome: data[id].nome,
+                        pontos: data[id].pontos || 0
                     });
-                }
-            }
-
-            // APLICAÇÃO DOS CRITÉRIOS DE RANKING
-            // 1º Menor Tempo
-            // 2º Maior Pontuação (Soma)
-            competidores.sort((a, b) => {
-                if (a.tempoMs !== b.tempoMs) {
-                    return a.tempoMs - b.tempoMs; // Ordem crescente de tempo
-                }
-                return b.pontosTotais - a.pontosTotais; // Ordem decrescente de pontos
-            });
-
-            if (competidores.length > 0) {
-                html += `
-                <div class="cat-card">
-                    <h2>Categoria: ${cat}</h2>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="pos-col">Pos</th>
-                                <th>Nº</th>
-                                <th>Piloto</th>
-                                <th>Tempo Total</th>
-                                <th style="text-align: right;">Pontuação Final</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-                
-                competidores.forEach((c, i) => {
-                    const rowClass = i === 0 ? 'primeiro-lugar' : '';
-                    html += `
-                    <tr class="${rowClass}">
-                        <td class="pos-col">${i + 1}º</td>
-                        <td><b>${c.id}</b></td>
-                        <td>${c.nome}</td>
-                        <td class="tempo-col">${c.tempoFormatado}</td>
-                        <td class="pontos-col">${c.pontosTotais.toLocaleString('pt-BR')} pts</td>
-                    </tr>`;
                 });
-
-                html += `</tbody></table></div>`;
             }
+
+            // Ordenar por pontos (ajuste se a lógica for menor ponto ganha)
+            lista.sort((a, b) => b.pontos - a.pontos);
+
+            let html = "";
+            lista.forEach((comp, index) => {
+                html += `<tr>
+                    <td>${index + 1}º</td>
+                    <td>${comp.id}</td>
+                    <td>${comp.nome}</td>
+                    <td>${comp.pontos}</td>
+                </tr>`;
+            });
+            document.getElementById('corpoRanking').innerHTML = html;
         });
 
-        document.getElementById('rankingContent').innerHTML = html || "<p style='text-align:center;'>Nenhum competidor com categoria definida encontrada.</p>";
-    });
-</script>
+        async function exportarPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const cidade = document.getElementById('inputCidade').value || "Resultado Oficial";
 
-</body>
-</html>
+            // Cabeçalho do PDF
+            doc.setFontSize(18);
+            doc.setTextColor(230, 126, 34); // Cor Laranja similar ao layout
+            doc.text("RANKING FINAL DE RALLY", 105, 15, { align: "center" });
+            
+            // Texto da Cidade (Inserido pelo usuário)
+            doc.setFontSize(14);
+            doc.setTextColor(100, 100, 100);
+            doc.text(cidade, 105, 25, { align: "center" });
+
+            // Gerar Tabela
+            doc.autoTable({
+                startY: 35,
+                head: [['Pos', 'Carro', 'Piloto', 'Pontos']],
+                body: Array.from(document.querySelectorAll("#corpoRanking tr")).map(tr => {
+                    return Array.from(tr.querySelectorAll("td")).map(td => td.innerText);
+                }),
+                headStyles: { fillColor: [230, 126, 34] }, // Laranja do sistema
+                theme: 'striped'
+            });
+
+            doc.
