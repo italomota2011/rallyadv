@@ -2,33 +2,25 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Analise de Rastro - Rally</title>
+    <title>Análise de Rastro</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
+        #sidebar { width: 350px; background: #1e1e1e; padding: 20px; overflow-y: auto; }
         #map { flex-grow: 1; }
-        h2 { color: #e67e22; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
-        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 11px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; }
+        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; }
+        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: none; }
+        button { background: #e67e22; color: white; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <h2>🛰️ Telemetria</h2>
-        <select id="carSelect"><option>Carregando...</option></select>
-        <button onclick="analisarRastro()">ANALISAR</button>
-        <div id="resumo"><div class="stats-card">Selecione um carro.</div></div>
-        <div class="legenda">
-            <span style="color:#38a169">━━</span> Percurso Ideal<br>
-            <span style="color:#e67e22">━━</span> Rastro do Carro<br>
-            <span style="color:#e74c3c">⬤</span> Radar/Excesso<br>
-            <span style="color:#000000">⬤</span> Fora da Rota (>50m)
-        </div>
-        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
+        <select id="carSelect"><option>Aguarde...</option></select>
+        <button onclick="analisar()">ANALISAR</button>
+        <div id="resumo"></div>
+        <button style="background:#4a5568" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
     <div id="map"></div>
 
@@ -49,61 +41,57 @@
         const db = firebase.database();
         const map = L.map('map').setView([-12.26, -38.96], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
+
         let layers = {
-            rastro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
+            rastro: L.polyline([], {color: '#e67e22'}).addTo(map),
             percurso: L.featureGroup().addTo(map),
             penalidades: L.featureGroup().addTo(map)
         };
 
         db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione...</option>';
-            const data = snap.val();
-            if(data) Object.keys(data).forEach(id => { opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`; });
-            document.getElementById('carSelect').innerHTML = opt;
+            let html = '<option value="">Selecione um carro...</option>';
+            snap.forEach(c => { html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
+            document.getElementById('carSelect').innerHTML = html;
         });
 
-        async function analisarRastro() {
+        async function analisar() {
             const id = document.getElementById('carSelect').value;
             if(!id) return;
             layers.percurso.clearLayers();
             layers.penalidades.clearLayers();
 
-            const [snapRastro, snapConfig] = await Promise.all([
-                db.ref('rastros/' + id).once('value'),
+            const [sRastro, sPercurso] = await Promise.all([
+                db.ref('rastros/'+id).once('value'),
                 db.ref('configuracoes/percurso').once('value')
             ]);
 
-            const rastroArr = Object.values(snapRastro.val() || {}).sort((a, b) => a.ts - b.ts);
-            const config = snapConfig.val();
-            if(!rastroArr.length || !config) return alert("Dados insuficientes.");
+            const rastroArr = Object.values(sRastro.val() || {}).sort((a,b) => a.ts - b.ts);
+            const config = sPercurso.val();
+            if(!rastroArr.length || !config) return;
 
             layers.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-            L.geoJSON(config, { style: { color: '#38a169', weight: 3 } }).addTo(layers.percurso);
+            L.geoJSON(config, { style: { color: '#38a169', weight: 2 } }).addTo(layers.percurso);
 
             const linhaOficial = config.features.find(f => f.geometry.type === 'LineString');
-            let totalPen = 0; let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
+            let tempoForaMs = 0;
 
-            // Análise de Desvio
             if(linhaOficial) {
-                let tempoForaMs = 0;
                 rastroArr.forEach((p, i) => {
                     if(i === 0) return;
-                    const dist = turf.pointToLineDistance(turf.point([p.lng, p.lat]), linhaOficial, {units: 'kilometers'}) * 1000;
+                    const dist = turf.pointToLineDistance(turf.point([p.lng, p.lat]), linhaOficial, {units:'kilometers'}) * 1000;
                     if(dist > 50) {
                         tempoForaMs += (p.ts - rastroArr[i-1].ts);
                         L.circleMarker([p.lat, p.lng], { radius: 3, color: 'black' }).addTo(layers.penalidades);
                     }
                 });
-                if(tempoForaMs >= 60000) {
-                    const pDesvio = Math.floor(tempoForaMs / 60000) * 200;
-                    totalPen += pDesvio;
-                    resumoHtml += `<div class="penalidade-item">⚠️ Desvio Rota: ${pDesvio} pts (${Math.floor(tempoForaMs/60000)} min)</div>`;
-                }
             }
 
-            resumoHtml += `<br><b>Total Penalizado:</b> -${totalPen} pts</div>`;
-            document.getElementById('resumo').innerHTML = resumoHtml;
+            let penTotal = (tempoForaMs >= 60000) ? Math.floor(tempoForaMs / 60000) * 200 : 0;
+            document.getElementById('resumo').innerHTML = `
+                <div class="stats-card">
+                    <b>Desvio de Rota:</b> -${penTotal} pts<br>
+                    <small>Tempo fora: ${Math.floor(tempoForaMs/1000)}s</small>
+                </div>`;
             map.fitBounds(layers.rastro.getBounds());
         }
     </script>
