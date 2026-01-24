@@ -2,145 +2,167 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Geral - Rally</title>
+    <title>Ranking Geral - Rally Oficial</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
-        .container { max-width: 900px; margin: auto; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 20px; margin: 0; }
+        .container { max-width: 1000px; margin: auto; }
+        
+        .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
+        h1 { color: #e67e22; margin: 0; }
+        
         .config-section { background: #2d3748; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 5px solid #e67e22; }
-        input[type="text"] { width: 100%; padding: 10px; margin-top: 5px; border-radius: 4px; border: none; background: #1a202c; color: white; }
-        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        h2 { color: #e67e22; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; }
-        td { padding: 12px; border-bottom: 1px solid #2d3748; }
+        label { font-size: 14px; color: #a0aec0; }
+        input[type="text"] { width: 100%; padding: 12px; margin-top: 8px; border-radius: 6px; border: none; background: #1a202c; color: white; box-sizing: border-box; }
+
         .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn { padding: 12px 20px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; }
-        .btn-pdf { background: #38a169; }
+        .btn { padding: 12px 25px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; color: white; transition: 0.2s; }
+        .btn-print { background: #38a169; }
         .btn-voltar { background: #4a5568; }
+        .btn:hover { opacity: 0.8; }
+
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        h2 { color: #e67e22; margin-top: 0; font-size: 1.2rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
+        td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
+        .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
+        .pontos-col { text-align: right; font-weight: bold; color: #48bb78; }
+
+        /* Esconde a logo da tela, ela será usada apenas pelo script do PDF */
+        #logoInvisivel { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>🏆 Classificação Oficial</h2>
+<div class="container">
+    <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
-        <div class="config-section">
-            <label>Cidade / Nome da Etapa:</label>
-            <input type="text" id="inputCidade" placeholder="Ex: Feira de Santana - BA">
-        </div>
-
-        <div class="btn-group">
-            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
-            <button class="btn btn-pdf" onclick="exportarPDF()">EXPORTAR PDF</button>
-        </div>
-
-        <div id="rankingContent">Carregando resultados...</div>
+    <div class="header-ranking">
+        <h1>🏆 Classificação Oficial</h1>
     </div>
 
-    <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    <div class="config-section">
+        <label>Cidade / Nome da Etapa:</label>
+        <input type="text" id="inputCidade" placeholder="Ex: Feira de Santana - BA">
+    </div>
 
-        // Lista de categorias oficiais do seu sistema
-        const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+    <div class="btn-group">
+        <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
+        <button class="btn btn-print" onclick="exportarPDF()">EXPORTAR PDF COM LOGO</button>
+    </div>
 
-        db.ref('competidores').on('value', snap => {
-            const data = snap.val();
-            if(!data) {
-                document.getElementById('rankingContent').innerHTML = "Nenhum dado encontrado.";
-                return;
+    <div id="rankingContent">Buscando resultados...</div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
+    db.ref('competidores').on('value', snap => {
+        const data = snap.val();
+        if(!data) return document.getElementById('rankingContent').innerHTML = "Nenhum dado encontrado.";
+
+        let html = "";
+        categorias.forEach(cat => {
+            let list = [];
+            for(let id in data) if(data[id].categoria === cat) list.push({ id, ...data[id] });
+            
+            list.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+
+            if(list.length > 0) {
+                html += `
+                <div class="cat-card">
+                    <h2>Categoria: ${cat}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="pos-col">Pos</th>
+                                <th>Nº</th>
+                                <th>Piloto</th>
+                                <th style="text-align: right;">Pontuação Final</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                list.forEach((p, i) => {
+                    html += `
+                    <tr>
+                        <td class="pos-col">${i + 1}º</td>
+                        <td><b>${p.id}</b></td>
+                        <td>${p.nome}</td>
+                        <td class="pontos-col">${(p.pontos || 0).toLocaleString('pt-BR')} pts</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+        });
+        document.getElementById('rankingContent').innerHTML = html;
+    });
+
+    async function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const cidade = document.getElementById('inputCidade').value || "Resultado Geral";
+        const img = document.getElementById('logoInvisivel');
+
+        // 1. Adiciona a Logo (apenas no PDF)
+        try {
+            // Posicionamento: x=85, y=10, largura=40, altura=30
+            doc.addImage(img, 'JPEG', 85, 10, 40, 30);
+        } catch (e) {
+            console.error("Erro ao incluir logo no PDF:", e);
+        }
+
+        // 2. Título e Cidade
+        doc.setFontSize(18);
+        doc.setTextColor(230, 126, 34); // Laranja Rally
+        doc.text("RANKING GERAL - RALLY", 105, 50, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text(cidade, 105, 58, { align: "center" });
+
+        let finalY = 65;
+
+        // 3. Gerar Tabelas por Categoria
+        const cards = document.querySelectorAll('.cat-card');
+        cards.forEach((card) => {
+            const titulo = card.querySelector('h2').innerText;
+            const tabela = card.querySelector('table');
+
+            // Verifica se precisa de nova página antes de começar uma categoria
+            if (finalY > 240) {
+                doc.addPage();
+                finalY = 20;
             }
 
-            let html = "";
-            categorias.forEach(cat => {
-                let list = [];
-                for(let id in data) {
-                    if(data[id].categoria === cat) {
-                        list.push({ id, ...data[id] });
-                    }
-                }
+            doc.setFontSize(14);
+            doc.setTextColor(0, 0, 0);
+            doc.text(titulo, 14, finalY);
 
-                // Ordenação: Maior pontuação primeiro
-                list.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
-
-                if(list.length > 0) {
-                    html += `
-                    <div class="cat-card">
-                        <h2>${cat}</h2>
-                        <table class="tabela-categoria">
-                            <thead>
-                                <tr>
-                                    <th>Pos</th>
-                                    <th>Nº</th>
-                                    <th>Piloto</th>
-                                    <th>Total Pontos</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                    
-                    list.forEach((p, i) => {
-                        html += `
-                        <tr>
-                            <td>${i + 1}º</td>
-                            <td><b>${p.id}</b></td>
-                            <td>${p.nome}</td>
-                            <td>${(p.pontos || 0).toLocaleString('pt-BR')}</td>
-                        </tr>`;
-                    });
-
-                    html += `</tbody></table></div>`;
-                }
+            doc.autoTable({
+                html: tabela,
+                startY: finalY + 5,
+                theme: 'striped',
+                headStyles: { fillColor: [230, 126, 34] },
+                styles: { fontSize: 10 },
+                margin: { left: 14, right: 14 }
             });
 
-            document.getElementById('rankingContent').innerHTML = html || "Aguardando processamento dos pontos...";
+            finalY = doc.lastAutoTable.finalY + 15;
         });
 
-        async function exportarPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const cidade = document.getElementById('inputCidade').value || "Resultado Oficial";
-
-            doc.setFontSize(18);
-            doc.text("RANKING GERAL - RALLY", 105, 15, { align: "center" });
-            doc.setFontSize(12);
-            doc.text(cidade, 105, 22, { align: "center" });
-
-            let yPos = 30;
-
-            // Busca todas as tabelas geradas na tela
-            const tabelas = document.querySelectorAll('.cat-card');
-            
-            tabelas.forEach((card, index) => {
-                const titulo = card.querySelector('h2').innerText;
-                const tabelaData = card.querySelector('table');
-
-                doc.setFontSize(14);
-                doc.text(titulo, 14, yPos);
-
-                doc.autoTable({
-                    html: tabelaData,
-                    startY: yPos + 5,
-                    theme: 'striped',
-                    headStyles: { fillColor: [230, 126, 34] },
-                    didDrawPage: (data) => { yPos = data.cursor.y + 15; }
-                });
-                
-                yPos = doc.lastAutoTable.finalY + 15;
-            });
-
-            doc.save(`Ranking_${cidade.replace(/\s+/g, '_')}.pdf`);
-        }
-    </script>
-</body>
-</html>
+        // 4. Salvar o arquivo
+        doc
