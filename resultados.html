@@ -2,31 +2,21 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Meus Resultados</title>
+    <title>Ranking Rally</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; padding: 40px; text-align: center; }
-        .card { background: #2d3748; padding: 30px; border-radius: 15px; display: inline-block; min-width: 320px; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
-        select { padding: 12px; width: 100%; border-radius: 8px; border: none; margin-bottom: 25px; }
-        .tempo { font-size: 3rem; color: #f6e05e; font-family: monospace; margin: 10px 0; }
-        .pontos { font-size: 1.5rem; color: #fc8181; }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 20px; }
+        .cat { background: white; margin-bottom: 20px; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #e67e22; border-bottom: 2px solid #e67e22; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .penalidade { color: #c0392b; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2>Consultar Resultado</h2>
-        <select id="carSelect" onchange="exibir()">
-            <option value="">Selecione seu Carro</option>
-        </select>
-        <div id="resBox" style="display:none">
-            <p>Tempo Final:</p>
-            <div id="tTxt" class="tempo">--:--:--</div>
-            <p>Penalidades GPS:</p>
-            <div id="pTxt" class="pontos">0</div>
-        </div>
-    </div>
-
+    <h1>🏆 Classificação Oficial</h1>
+    <div id="results">Carregando...</div>
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
@@ -35,26 +25,25 @@
             projectId: "cronometro-rally",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
-            let html = '<option value="">Selecione seu Carro</option>';
-            for(let id in data) html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-            document.getElementById('carSelect').innerHTML = html;
-        });
-
-        function exibir() {
-            const id = document.getElementById('carSelect').value;
-            if(!id) return;
-            db.ref('competidores/' + id).on('value', snap => {
-                const p = snap.val();
-                document.getElementById('resBox').style.display = 'block';
-                document.getElementById('tTxt').innerText = p.tempoFormatado || '--:--:--';
-                document.getElementById('pTxt').innerText = p.pontos || 0;
+            let html = "";
+            ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"].forEach(c => {
+                let list = [];
+                for(let id in data) if(data[id].categoria === c) list.push({id, ...data[id]});
+                list.sort((a,b) => b.pontos - a.pontos);
+                if(list.length > 0) {
+                    html += `<div class="cat"><h2>${c}</h2><table><tr><th>POS</th><th>Nº</th><th>Piloto</th><th>Penalidade</th><th>Total</th></tr>`;
+                    list.forEach((p, i) => {
+                        html += `<tr><td>${i+1}º</td><td>${p.id}</td><td>${p.nome}</td><td class="penalidade">-${150000 - p.pontos}</td><td>${p.pontos}</td></tr>`;
+                    });
+                    html += `</table></div>`;
+                }
             });
-        }
+            document.getElementById('results').innerHTML = html || "Sem dados.";
+        });
     </script>
 </body>
 </html>
