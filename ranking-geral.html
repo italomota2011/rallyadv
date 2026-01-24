@@ -2,91 +2,55 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Geral - Rally</title>
+    <title>Ranking Final - Rally Oficial</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; color: #333; }
-        .container { max-width: 1000px; margin: auto; }
-        .cat-card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 30px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        h2 { color: #2c3e50; border-bottom: 3px solid #e67e22; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th { background: #f8f9fa; padding: 12px; text-align: left; font-size: 13px; color: #7f8c8d; }
-        td { padding: 12px; border-bottom: 1px solid #eee; }
-        .col-pontos { font-weight: bold; color: #2980b9; }
-        .col-tempo { font-weight: bold; color: #27ae60; }
-        .badge-pos { background: #e67e22; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        /* Estilos para Visualização em Tela */
+        body { font-family: sans-serif; background: #1a202c; color: white; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; }
+        .no-print { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 25px; margin-bottom: 30px; border-top: 4px solid #ecc94b; }
+        h2 { color: #ecc94b; margin: 0 0 15px 0; }
+        
+        table { width: 100%; border-collapse: collapse; background: #1a202c; }
+        th { background: #4a5568; padding: 12px; text-align: left; font-size: 12px; text-transform: uppercase; }
+        td { padding: 12px; border-bottom: 1px solid #2d3748; }
+        
+        .btn-print { background: #38a169; color: white; border: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .btn-back { background: #4a5568; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; }
+
+        /* Estilos Exclusivos para Impressão (PDF) */
+        @media print {
+            body { background: white; color: black; padding: 0; }
+            .no-print { display: none; }
+            .cat-card { border: 1px solid #ccc; page-break-inside: avoid; background: white; color: black; margin-bottom: 20px; }
+            table { background: white; border: 1px solid #eee; }
+            th { background: #eee; color: black; border-bottom: 2px solid #333; }
+            td { border-bottom: 1px solid #eee; color: black; }
+            h2 { color: black; border-bottom: 1px solid #333; }
+            .pos-1 { background: #f9f9f9 !important; font-weight: bold; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 style="text-align:center;">🏆 Resultado Consolidado</h1>
-        <div id="geralContent">Carregando dados...</div>
+        <div class="no-print">
+            <a href="admin.html" class="btn-back">⬅ Voltar ao Painel</a>
+            <h1 style="margin:0;">🏆 Ranking Final</h1>
+            <button onclick="window.print()" class="btn-print">🖨️ Gerar PDF / Imprimir</button>
+        </div>
+        
+        <div id="geralContent">Carregando pódio...</div>
     </div>
 
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally"
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-
-        db.ref('competidores').on('value', snap => {
-            const data = snap.val();
-            if(!data) return;
-
-            let html = "";
-            const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-
-            categorias.forEach(cat => {
-                let lista = [];
-                for(let id in data) {
-                    if(data[id].categoria === cat) {
-                        lista.push({ id, ...data[id] });
-                    }
-                }
-
-                // Critério de Desempate: 1º Pontos (maior), 2º Tempo (menor)
-                lista.sort((a, b) => {
-                    if (b.pontos !== a.pontos) return b.pontos - a.pontos;
-                    return (a.tempoTotalMs || Infinity) - (b.tempoTotalMs || Infinity);
-                });
-
-                if(lista.length > 0) {
-                    html += `
-                    <div class="cat-card">
-                        <h2>${cat}</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Pos</th>
-                                    <th>Nº</th>
-                                    <th>Piloto</th>
-                                    <th>Pontos (Precisão)</th>
-                                    <th>Tempo (Velocidade)</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                    
-                    lista.forEach((p, i) => {
-                        const tempoStr = p.tempoFormatado || "--:--:--";
-                        const pontos = p.pontos || 0;
-                        html += `
-                            <tr>
-                                <td><span class="badge-pos">${i+1}º</span></td>
-                                <td><b>${p.id}</b></td>
-                                <td>${p.nome}</td>
-                                <td class="col-pontos">${pontos.toLocaleString()} pts</td>
-                                <td class="col-tempo">${tempoStr}</td>
-                            </tr>`;
-                    });
-                    html += `</tbody></table></div>`;
-                }
-            });
-            document.getElementById('geralContent').innerHTML = html || "Sem dados para exibir.";
-        });
-    </script>
-</body>
-</html>
