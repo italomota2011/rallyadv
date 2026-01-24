@@ -26,6 +26,7 @@
         .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
         .tempo-col { color: #a0aec0; font-family: monospace; }
         .pen-col { color: #fc8181; font-weight: bold; }
+        .foto-col { color: #63b3ed; font-weight: bold; }
         .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
         #logoInvisivel { display: none; }
     </style>
@@ -49,7 +50,7 @@
         <button class="btn btn-print" onclick="exportarPDF()">EXPORTAR PDF COMPLETO</button>
     </div>
 
-    <div id="rankingContent">Calculando resultados...</div>
+    <div id="rankingContent">Calculando resultados totais...</div>
 </div>
 
 <script>
@@ -75,13 +76,25 @@
             for(let id in data) {
                 if(data[id].categoria === cat) {
                     const p = data[id];
-                    // Cálculo da penalidade (150.000 é a base do seu index.html)
-                    const penalidade = 150000 - (p.pontos || 150000);
-                    list.push({ id, ...p, penalidade });
+                    
+                    // LÓGICA DE SOMA:
+                    const pontosBase = p.pontos || 150000; // Pontos após penalidades GPS
+                    const penalidade = 150000 - pontosBase;
+                    const pontosFotos = p.pontosFotos || 0; // Pontos extras de fotos
+                    const totalFinal = pontosBase + pontosFotos; // SOMA TUDO
+
+                    list.push({ 
+                        id, 
+                        ...p, 
+                        penalidade, 
+                        pontosFotos, 
+                        totalFinal 
+                    });
                 }
             }
             
-            list.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+            // ORDENAÇÃO PELO TOTAL FINAL (GPS + FOTOS)
+            list.sort((a, b) => b.totalFinal - a.totalFinal);
 
             if(list.length > 0) {
                 html += `
@@ -93,9 +106,10 @@
                                 <th class="pos-col">Pos</th>
                                 <th>Nº</th>
                                 <th>Piloto</th>
-                                <th>Tempo Total</th>
-                                <th>Penalidades</th>
-                                <th style="text-align: right;">Pontos Finais</th>
+                                <th>Tempo</th>
+                                <th>Penal. GPS</th>
+                                <th>Bônus Fotos</th>
+                                <th style="text-align: right;">TOTAL FINAL</th>
                             </tr>
                         </thead>
                         <tbody>`;
@@ -107,7 +121,8 @@
                         <td>${p.nome}</td>
                         <td class="tempo-col">${p.tempoFormatado || '--:--:--'}</td>
                         <td class="pen-col">-${p.penalidade.toLocaleString('pt-BR')}</td>
-                        <td class="pontos-col">${(p.pontos || 0).toLocaleString('pt-BR')}</td>
+                        <td class="foto-col">+${p.pontosFotos.toLocaleString('pt-BR')}</td>
+                        <td class="pontos-col">${p.totalFinal.toLocaleString('pt-BR')}</td>
                     </tr>`;
                 });
                 html += `</tbody></table></div>`;
@@ -118,19 +133,19 @@
 
     async function exportarPDF() {
         const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
+        const doc = new jsPDF('l', 'mm', 'a4'); // 'l' para Paisagem, cabe mais colunas
         const cidade = document.getElementById('inputCidade').value || "Resultado Geral";
         const img = document.getElementById('logoInvisivel');
 
-        try { doc.addImage(img, 'JPEG', 85, 10, 40, 30); } catch (e) {}
+        try { doc.addImage(img, 'JPEG', 125, 10, 40, 30); } catch (e) {}
 
-        doc.setFontSize(18);
+        doc.setFontSize(22);
         doc.setTextColor(230, 126, 34);
-        doc.text("RANKING GERAL - RALLY", 105, 50, { align: "center" });
+        doc.text("RANKING GERAL - RALLY", 148, 50, { align: "center" });
         
-        doc.setFontSize(12);
+        doc.setFontSize(14);
         doc.setTextColor(100, 100, 100);
-        doc.text(cidade, 105, 58, { align: "center" });
+        doc.text(cidade, 148, 58, { align: "center" });
 
         let finalY = 65;
         const cards = document.querySelectorAll('.cat-card');
@@ -139,9 +154,9 @@
             const titulo = card.querySelector('h2').innerText;
             const tabela = card.querySelector('table');
 
-            if (finalY > 240) { doc.addPage(); finalY = 20; }
+            if (finalY > 170) { doc.addPage(); finalY = 20; }
 
-            doc.setFontSize(14);
+            doc.setFontSize(16);
             doc.setTextColor(0, 0, 0);
             doc.text(titulo, 14, finalY);
 
@@ -150,13 +165,13 @@
                 startY: finalY + 5,
                 theme: 'striped',
                 headStyles: { fillColor: [230, 126, 34] },
-                styles: { fontSize: 9 }
+                styles: { fontSize: 10 }
             });
 
             finalY = doc.lastAutoTable.finalY + 15;
         });
 
-        doc.save(`Ranking_Completo_${cidade.replace(/\s+/g, '_')}.pdf`);
+        doc.save(`Ranking_Geral_Completo.pdf`);
     }
 </script>
 </body>
