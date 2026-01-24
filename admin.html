@@ -175,7 +175,7 @@
                         const centro = feat.geometry.coordinates;
                         const raio = feat.properties.radius / 1000;
                         if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
-                            pen += 20000;
+                            pen += 800;
                         }
                     }
                 });
@@ -190,3 +190,4 @@
     </script>
 </body>
 </html>
+
