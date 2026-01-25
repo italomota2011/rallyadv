@@ -144,9 +144,9 @@
             }, null, { enableHighAccuracy: true });
         }
 
-        // CORREÇÃO DO BOTÃO INICIAR
+        // CORREÇÃO DO BOTÃO INICIAR COM VALIDAÇÃO DE DUPLICIDADE
         document.getElementById('btnIniciar').onclick = async function() {
-            const num = document.getElementById('carro').value;
+            const num = document.getElementById('carro').value.trim();
             const nome = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
 
@@ -154,15 +154,40 @@
                 alert("Por favor, preencha o Nome e o Número do Carro!");
                 return;
             }
+
+            // Bloqueia o botão para evitar múltiplos cliques
+            const btn = this;
+            btn.disabled = true;
+            btn.innerText = "VERIFICANDO...";
             
             try {
-                // Tenta salvar no Firebase, mas prossegue mesmo se houver erro de rede
-                db.ref('competidores/' + num).update({ nome, categoria: cat }).catch(e => console.log("Offline update"));
+                // 1. Verifica se o NÚMERO do carro já existe
+                const snapshotCarro = await db.ref('competidores/' + num).once('value');
+                if (snapshotCarro.exists()) {
+                    alert("Este NÚMERO de carro já está registrado!");
+                    btn.disabled = false;
+                    btn.innerText = "INICIAR PROVA";
+                    return;
+                }
+
+                // 2. Verifica se o NOME já existe (busca por valor no banco)
+                const snapshotNome = await db.ref('competidores').orderByChild('nome').equalTo(nome).once('value');
+                if (snapshotNome.exists()) {
+                    alert("Este NOME de piloto já está registrado!");
+                    btn.disabled = false;
+                    btn.innerText = "INICIAR PROVA";
+                    return;
+                }
+
+                // Se passou nas validações, salva e inicia
+                await db.ref('competidores/' + num).set({ nome, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
+
             } catch (e) {
                 console.error(e);
-                // Se o Firebase falhar drasticamente, ainda inicia o odômetro local
+                // Se estiver offline ou erro de permissão, permite iniciar localmente
+                localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
             }
         };
@@ -199,6 +224,7 @@
     </script>
 </body>
 </html>
+
 
 
 
