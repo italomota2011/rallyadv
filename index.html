@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rally Tracker Pro</title>
 
+    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#e67e22">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
     <link rel="apple-touch-icon" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s">
+    <meta name="mobile-web-app-capable" content="yes">
 
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
@@ -17,7 +21,7 @@
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; text-align: center; position: relative; z-index: 100; }
         .logo { display: block; margin: 0 auto 15px auto; max-width: 120px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; color: white; }
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
         
         #setup { display: block; } 
         #ativo { display: none; }
@@ -25,4 +29,93 @@
         .odo-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
         .odo-distancia { font-size: 3.2rem; font-weight: bold; color: #fff; line-height: 1; cursor: pointer; font-family: monospace; }
         #inputAjuste { display: none; background: #fff; color: #000; font-size: 2rem; font-weight: bold; text-align: center; margin: 0 auto 10px; width: 100%; border: none; }
-        .odo-controls { display: grid; grid-template-columns: 1fr 1fr
+        .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px; }
+        .btn-odo { padding: 12px 5px; font-size: 14px; margin: 0; }
+        .btn-minus { background: #c0392b; }
+        .btn-plus { background: #27ae60; }
+        .btn-reset { background: #7f8c8d; }
+        
+        .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
+        .status-offline { color: #f1c40f !important; }
+        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; width: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="setup">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo">
+            <h2 style="color:#e67e22; margin-top: 0;">RALLY DE AVENTURA</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+                <option>ANTIGOS</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro">
+            <button id="btnIniciar">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo">
+            <h2 id="viewCarro" style="color:#e67e22; margin-bottom: 5px; font-size: 16px;">--</h2>
+            <div id="viewVel" style="font-size: 3rem; font-weight: bold;">0.0</div>
+            <p style="margin: 0; color: #888; font-size: 12px; margin-bottom: 10px;">KM/H</p>
+            
+            <div class="odo-container">
+                <div style="color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">Distância (KM)</div>
+                <div id="viewDist" class="odo-distancia">0.000</div>
+                <input type="number" id="inputAjuste" step="0.001">
+                <p style="color: #555; font-size: 10px; margin: 10px 0;">Toque no número para editar</p>
+                <div class="odo-controls">
+                    <button class="btn-odo btn-minus" id="btnM1">-1m</button>
+                    <button class="btn-odo btn-reset" id="btnZerar">ZERAR</button>
+                    <button class="btn-odo btn-plus" id="btnP1">+1m</button>
+                </div>
+            </div>
+
+            <div id="msgGps" class="status-gps">● CONECTANDO...</div>
+            <button class="btn-sair" id="btnSair">Encerrar Sessão</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
+        }
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
+
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').then(l => wakeLock = l).catch(()=>{});
+            }
+
+            db.ref(".info/connected").on("value", s => {
+                const m = document.getElementById
