@@ -19,10 +19,9 @@
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; position: relative; z-index: 100; }
-        .logo { display: block; margin: 0 auto 15px auto; max-width: 100%; height: auto; }
+        .logo { display: block; margin: 0 auto 15px auto; max-width: 320px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; color: white; }
-        button:disabled { background: #555; opacity: 0.6; }
         
         #setup { display: block; } 
         #ativo { display: none; }
@@ -45,14 +44,14 @@
     <div class="card">
         <div id="setup">
             <img src="https://static.wixstatic.com/media/390dd5_474bd3f54e9b4da5af6aced0893ce858~mv2.png/v1/fill/w_668,h_191,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/RRB%20-%20Letra%20Branca.png" class="logo">
-            <h2 style="color:#0059FF; margin-top: 0; font-size: 20px;">RALLY DE AVENTURA</h2>
+            <h2 style="color:#0059FF; margin-top: 0;">RALLY DE AVENTURA</h2>
             <input type="text" id="nome" placeholder="Nome do Piloto">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
                 <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="text" id="carro" placeholder="Nº do Carro (Ex: 05)" maxlength="3">
+            <input type="number" id="carro" placeholder="Nº do Carro">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
 
@@ -80,4 +79,166 @@
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
+        }
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
+
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').catch(()=>{});
+            }
+
+            db.ref(".info/connected").on("value", s => {
+                const m = document.getElementById('msgGps');
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+            });
+
+            watchID = navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude;
+                const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6;
+                const accuracy = p.coords.accuracy;
+
+                document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
+
+                // FILTRO DE ESTABILIDADE
+                if (accuracy < 30) {
+                    if (ultimaPos && vel > 3.0) {
+                        const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                        if (trecho > 0.005 && trecho < 0.2) {
+                            distTotal += trecho;
+                            atualizarDisplay();
+                        }
+                    }
+                    ultimaPos = { lat, lng };
+                }
+
+                db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        // CORREÇÃO DO BOTÃO INICIAR
+        // CORREÇÃO DO BOTÃO INICIAR COM VALIDAÇÕES DE SEGURANÇA
+        document.getElementById('btnIniciar').onclick = async function() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+
+            // 1. Validação de preenchimento básico
+            if(!num || !nome) {
+                alert("Por favor, preencha o Nome e o Número do Carro!");
+                return;
+            }
+
+            // 2. Validação de intervalo do carro (Não 0, Máximo 100)
+            const numCarro = parseInt(num);
+            if (numCarro <= 0 || numCarro > 100) {
+                alert("O número do carro deve estar entre 1 e 100!");
+                return;
+            }
+
+            try {
+                // 3. Validação de duplicidade (Nome e Número)
+                const snapshot = await db.ref('competidores').once('value');
+                const competidores = snapshot.val();
+
+                if (competidores) {
+                    for (let id in competidores) {
+                        // Verifica se o número já existe
+                        if (id === num) {
+                            alert("Este número de carro já está em uso por outro piloto!");
+                            return;
+                        }
+                        // Verifica se o nome já existe (ignora maiúsculas/minúsculas)
+                        if (competidores[id].nome.toLowerCase() === nome.toLowerCase()) {
+                            alert("Este nome de piloto já está cadastrado!");
+                            return;
+                        }
+                    }
+                }
+
+                // Se passou em todas as travas, salva e inicia
+                await db.ref('competidores/' + num).set({ nome, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+                
+            } catch (e) {
+                console.error("Erro na validação:", e);
+                // Em caso de erro de rede, permite o início local para não travar o piloto
+                iniciarFluxoRastreio(num);
+            }
+        };
+
+        // Handlers de Odômetro
+        document.getElementById('viewDist').onclick = function() {
+            this.style.display = 'none';
+            const i = document.getElementById('inputAjuste');
+            i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
+        };
+
+        document.getElementById('inputAjuste').onblur = function() {
+            const n = parseFloat(this.value);
+            if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
+            this.style.display = 'none'; document.getElementById('viewDist').style.display = 'block';
+        };
+
+        document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
+        document.getElementById('btnM1').onclick = () => { if(distTotal > 0.001) distTotal -= 0.001; atualizarDisplay(); };
+        document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
+        
+        document.getElementById('btnSair').onclick = () => {
+            if(confirm("Encerrar Sessão?")) { 
+                if(watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.clear(); 
+                location.reload(); 
+            }
+        };
+
+        window.onload = () => {
+            const logado = localStorage.getItem('rally_carro_ativo');
+            if (logado) iniciarFluxoRastreio(logado);
+        };
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
