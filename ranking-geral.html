@@ -18,8 +18,8 @@
         th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
         td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
         .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
-        .penal-col { color: #fc8181; } /* Vermelho para penalidades */
-        .foto-col { color: #63b3ed; } /* Azul para bônus de fotos */
+        .penal-col { color: #fc8181; }
+        .foto-col { color: #63b3ed; }
         .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
         #logoInvisivel { display: none; }
     </style>
@@ -53,9 +53,83 @@
         projectId: "cronometro-rally",
         appId: "1:341731891354:web:d0c34265be68015e98a723"
     };
+    
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
     const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
     db.ref('competidores').on('value', snap => {
+        try {
+            const data = snap.val();
+            if(!data) {
+                document.getElementById('rankingContent').innerHTML = "Sem dados no banco de dados.";
+                return;
+            }
+
+            let html = "";
+            categorias.forEach(cat => {
+                let list = [];
+                for(let id in data) {
+                    const p = data[id];
+                    if(p && p.categoria === cat) {
+                        const pontosGPS = Number(p.pontos) || 0; 
+                        const bonusFotos = Number(p.pontosFotos) || 0;
+                        const totalFinal = pontosGPS + bonusFotos;
+                        
+                        // Busca o campo tempoFormatado que você usa no arquivo tempos.html
+                        const tempoProva = p.tempoFormatado || "--:--:--";
+
+                        list.push({ 
+                            id: id, 
+                            nome: p.nome || "Piloto sem nome",
+                            penalidadeGPS: 0 - pontosGPS, 
+                            bonusFotos: bonusFotos, 
+                            totalFinal: totalFinal,
+                            tempoTotal: tempoProva
+                        });
+                    }
+                }
+                
+                list.sort((a, b) => b.totalFinal - a.totalFinal);
+
+                if(list.length > 0) {
+                    html += `
+                    <div class="cat-card">
+                        <h2>Categoria: ${cat}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="pos-col">Pos</th>
+                                    <th>Nº</th>
+                                    <th>Piloto</th>
+                                    <th>Tempo Total</th>
+                                    <th>Penal. GPS</th>
+                                    <th>Bônus Fotos</th>
+                                    <th style="text-align: right;">TOTAL FINAL</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    list.forEach((p, i) => {
+                        html += `
+                        <tr>
+                            <td class="pos-col">${i + 1}º</td>
+                            <td><b>${p.id}</b></td>
+                            <td>${p.nome}</td>
+                            <td style="color: #cbd5e0; font-family: monospace;">${p.tempoTotal}</td>
+                            <td class="penal-col">-${p.penalidadeGPS.toLocaleString('pt-BR')}</td>
+                            <td class="foto-col">+${p.bonusFotos.toLocaleString('pt-BR')}</td>
+                            <td class="pontos-col">${p.totalFinal.toLocaleString('pt-BR')} pts</td>
+                        </tr>`;
+                    });
+                    html += `</tbody></table></div>`;
+                }
+            });
+            document.getElementById('rankingContent').innerHTML = html || "Nenhum competidor encontrado para as categorias.";
+        } catch (err) {
+            console.error(err);
+            document.getElementById('rankingContent').innerHTML = "Erro ao processar dados: " + err.message;
+        }
+    });
+
+    async function export
