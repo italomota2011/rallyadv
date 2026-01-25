@@ -1,0 +1,4 @@
+Página admin funcionando perfeitamente, todos os botões e páginas funcionando;
+Mapa funcionando;
+Todos os cálculos funcionando;
+Odometro precisa de ajustes;
