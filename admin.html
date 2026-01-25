@@ -9,38 +9,25 @@
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
-        /* GARANTE QUE O MAPA APAREÇA */
         #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
         button:hover { background: #718096; }
-        input { padding: 8px; border-radius: 4px; border: none; background: #1a202c; color: white; width: 150px; }
-        .marker-label { background: #ed8936; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 26px; width: 30px; height: 30px; font-size: 12px; }
+        .btn-apurar { background: #e67e22 !important; }
+        .btn-limpar { background: #e53e3e !important; }
     </style>
 </head>
 <body>
+
     <div id="toolbar">
-    <input type="text" id="cityInput" placeholder="Cidade...">
-    <button onclick="buscar()">🔍 Buscar</button>
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-    <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
-    <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Rastro</button>
-    <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
-    <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Pontos</button>
-    <button onclick="window.location.href='tempos.html'" style="background: #d69e2e;">⏱️ Hora Chegada</button>
-    <button onclick="window.location.href='ranking-tempo.html'" style="background: #2c7a7b;">⏱️ Tempos</button>
-    <button onclick="window.location.href='fotos.html'" style="background: #3182ce;">📸 Fotos</button>
-    <button onclick="window.location.href='ranking-fotos.html'" style="background: #2b6cb0;">📊 Ranking Fotos</button>
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-    <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f; border: 2px solid #f6e05e;">🏆 RANKING FINAL</button>
-    
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-      
-    <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
-</div>
-    
+        <button onclick="salvarPercurso()">💾 SALVAR PERCURSO</button>
+        <button class="btn-apurar" onclick="apurar()">📊 APURAR PENALIDADES (GPS)</button>
+        <button onclick="location.href='rastro.html'">🛰️ VER RASTROS</button>
+        <button onclick="location.href='tempos.html'">⏱️ CADASTRAR TEMPOS</button>
+        <button onclick="location.href='fotos.html'">📸 PONTOS FOTOS</button>
+        <button onclick="location.href='ranking-geral.html'">🏆 RANKING GERAL</button>
+        <button class="btn-limpar" onclick="resetar()">⚠️ ZERAR SISTEMA</button>
+    </div>
+
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -55,157 +42,110 @@
             authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally",
-            storageBucket: "cronometro-rally.firebasestorage.app",
-            messagingSenderId: "341731891354",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
-        let map, drawnItems;
+        const map = L.map('map').setView([-12.26, -38.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        function initMap() {
-            const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-            const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-            
-            map = L.map('map', { 
-                center: [-12.26, -38.96], 
-                zoom: 13, 
-                layers: [camadaRuas] 
+        const drawnItems = new L.FeatureGroup().addTo(map);
+        const drawControl = new L.Control.Draw({
+            edit: { featureGroup: drawnItems },
+            draw: { polyline: false, marker: false, circlemarker: false, rectangle: false }
+        }).addTo(map);
+
+        map.on(L.Draw.Event.CREATED, e => {
+            const layer = e.layer;
+            if(e.layerType === 'circle') {
+                layer.options.type = 'circle';
+                const v = prompt("Pontos por não visitar este Waypoint:", "20000");
+                layer.options.penalidade = parseInt(v) || 20000;
+            } else {
+                const v = prompt("Velocidade Máxima no Radar (km/h):", "60");
+                layer.options.velocidade = parseInt(v) || 60;
+            }
+            drawnItems.addLayer(layer);
+        });
+
+        window.salvarPercurso = function() {
+            const data = drawnItems.toGeoJSON();
+            data.features.forEach((f, i) => {
+                const layer = Object.values(drawnItems._layers)[i];
+                f.properties.velocidade = layer.options.velocidade;
+                f.properties.radius = layer._mRadius;
+                f.properties.type = layer.options.type;
             });
-
-            L.control.layers({ "Mapa": camadaRuas, "Satélite": camadaSat }).addTo(map);
-            drawnItems = new L.FeatureGroup().addTo(map);
-            
-            const drawControl = new L.Control.Draw({
-                edit: { featureGroup: drawnItems },
-                draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
-            });
-            map.addControl(drawControl);
-
-            map.on(L.Draw.Event.CREATED, (e) => {
-                const layer = e.layer;
-                layer.feature = layer.feature || { type: "Feature", properties: {} };
-                if (e.layerType === 'polygon') {
-                    const v = prompt("Velocidade Máxima Radar (KM/H):", "60");
-                    layer.feature.properties.velocidade = parseInt(v) || 60;
-                }
-                if (e.layerType === 'circle') {
-                    layer.feature.properties.type = 'circle';
-                    layer.feature.properties.radius = layer.getRadius();
-                }
-                drawnItems.addLayer(layer);
-            });
-
-            carregarTrajeto();
-            rastrearCarros();
-            
-            // Força o redimensionamento para garantir que o mapa apareça
-            setTimeout(() => { map.invalidateSize(); }, 500);
-        }
-
-        window.onload = initMap;
-
-        window.buscar = async function() {
-            const q = document.getElementById('cityInput').value;
-            if(!q) return;
-            try {
-                const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-                const data = await res.json();
-                if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
-            } catch(e) { alert("Erro na busca."); }
+            db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso Salvo!"));
         };
 
-        window.salvar = function() {
-            const data = { type: "FeatureCollection", features: [] };
-            drawnItems.eachLayer(layer => {
-                const gj = layer.toGeoJSON();
-                gj.properties = gj.properties || {};
-                if (layer instanceof L.Circle) {
-                    gj.properties.type = 'circle';
-                    gj.properties.radius = layer.getRadius();
-                }
-                data.features.push(gj);
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("✅ Trajeto salvo!"));
-        };
-
-        function carregarTrajeto() {
-            db.ref('configuracoes/percurso').once('value', snap => {
-                if(snap.exists()) {
-                    L.geoJSON(snap.val(), {
-                        pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, { radius: f.properties.radius }) : null,
-                        onEachFeature: (f, l) => { drawnItems.addLayer(l); }
-                    });
+        db.ref('configuracoes/percurso').once('value', snap => {
+            if(!snap.val()) return;
+            L.geoJSON(snap.val(), {
+                onEachFeature: (f, l) => {
+                    if(f.properties.type === 'circle') {
+                        const circle = L.circle([f.geometry.coordinates[1], f.geometry.coordinates[0]], { radius: f.properties.radius });
+                        circle.options.type = 'circle';
+                        circle.addTo(drawnItems);
+                    } else {
+                        l.options.velocidade = f.properties.velocidade;
+                        drawnItems.addLayer(l);
+                    }
                 }
             });
-        }
-
-        function rastrearCarros() {
-            const markers = {};
-            db.ref('posicoes').on('value', snap => {
-                snap.forEach(c => {
-                    const id = c.key; const p = c.val();
-                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
-                });
-            });
-        }
+        });
 
         window.apurar = async function() {
-            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-            if(!config || !rastros) return alert("Erro: Dados insuficientes.");
+            const snapRastros = await db.ref('rastros').once('value');
+            const snapPercurso = await db.ref('configuracoes/percurso').once('value');
+            const rastros = snapRastros.val();
+            const percurso = snapPercurso.val();
 
-            for(let id in comps) {
+            if(!rastros || !percurso) return alert("Dados insuficientes!");
+
+            for(let id in rastros) {
                 let pen = 0;
-                const rastroArr = Object.values(rastros[id] || {}).sort((a, b) => a.ts - b.ts);
-                if(rastroArr.length === 0) continue;
+                const rastroArr = Object.values(rastros[id]).sort((a,b) => a.ts - b.ts);
 
-                config.features.forEach(feat => {
+                percurso.features.forEach(feat => {
                     if(feat.geometry.type === 'Polygon') {
-                        const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
+                        const vMax = (feat.properties.velocidade || 60) * 1.1;
                         let tempoExcessoMs = 0;
-                        for(let i = 1; i < rastroArr.length; i++) {
+
+                        for(let i=1; i < rastroArr.length; i++) {
                             const p = rastroArr[i];
+                            const vAtual = parseFloat(p.vel) || 0; // CORREÇÃO AQUI
                             const duration = p.ts - rastroArr[i-1].ts;
-                            // Considera pontos dentro do polígono com velocidade acima da tolerância
-                            if(duration < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+
+                            if(duration < 15000 && vAtual > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
                                 tempoExcessoMs += duration;
                             }
                         }
-                        // Se passou de 10 segundos de carência
                         if(tempoExcessoMs > 10000) {
                             pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
                         }
                     } else if(feat.properties?.type === 'circle') {
                         const centro = feat.geometry.coordinates;
-                        const raio = feat.properties.radius / 1000;
-                        if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
-                            pen += 20000;
-                        }
+                        const raioKm = feat.properties.radius / 1000;
+                        
+                        const visitou = rastroArr.some(pt => 
+                            turf.distance(turf.point([pt.lng, pt.lat]), turf.point([centro[0], centro[1]])) <= raioKm
+                        );
+                        
+                        if(!visitou) pen += 20000;
                     }
                 });
                 db.ref(`competidores/${id}`).update({ pontos: 0 - pen });
             }
-            alert("✅ Apuração concluída!");
+            alert("✅ Apuração de telemetria concluída!");
         };
 
         window.resetar = function() {
-            if(prompt("Senha de Segurança:") === "261291") db.ref('/').remove().then(() => location.reload());
+            if(prompt("Senha de Segurança:") === "261291") {
+                db.ref('/').remove().then(() => location.reload());
+            }
         };
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
