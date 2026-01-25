@@ -19,6 +19,15 @@ ________________________________________
 🔵 PÁGINA RASTRO = 
 
 _________________________________________
+🔵 PÁGINA RANKING GERAL =
+
+Cálculos - ✅
+Botão exportar PDF - ✅
+PDF padronizado - ✅
+Campo para digitar nome e data do evento - ✅
+
+
+
 Mapa funcionando;
 Todos os cálculos funcionando;
 Odometro precisa de ajustes;
