@@ -5,38 +5,37 @@
     <title>Análise de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; overflow: hidden; }
         #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-        #map { flex-grow: 1; height: 100vh; }
+        #map { flex-grow: 1; height: 100vh !important; width: 100%; background: #222; }
         h2 { color: #e67e22; margin-top: 0; font-size: 1.2rem; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #d35400; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; line-height: 1.4; }
-        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 11px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; margin-top: 10px; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; display: block; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
+        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
+        .legenda { font-size: 11px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; }
     </style>
 </head>
 <body>
+
     <div id="sidebar">
         <h2>🛰️ Telemetria & Rota</h2>
-        <select id="carSelect"><option value="">Carregando competidores...</option></select>
-        <button onclick="analisarRastro()">COMPARAR COM ROTA OFICIAL</button>
+        <select id="carSelect">
+            <option value="">Aguardando Firebase...</option>
+        </select>
+        <button onclick="analisarRastro()">COMPARAR COM ROTA</button>
         
         <div id="resumo">
-            <div class="stats-card">Selecione um carro para validar se ele seguiu o trajeto correto.</div>
+            <div class="stats-card">Selecione um carro para iniciar.</div>
         </div>
 
         <div class="legenda">
-            <strong>Comparativo de Cores:</strong><br>
-            <span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial (Trajeto Planejado)<br>
-            <span style="color:#e67e22; font-weight:bold;">━━</span> Rastro do Carro (Trajeto Percorrido)<br>
-            <span style="color:#e74c3c; font-weight:bold;">⬤</span> Pontos de Excesso de Velocidade<br>
-            <span style="color:#38a169; font-weight:bold;">⬤</span> Waypoint Validado (Visitado)<br>
-            <span style="color:#e74c3c; font-weight:bold;">⬤</span> Waypoint Não Localizado
+            <strong>Cores:</strong><br>
+            <span style="color:#3498db">━━</span> Rota Oficial (Admin)<br>
+            <span style="color:#e67e22">━━</span> Rastro Real (GPS)<br>
+            <span style="color:red">⬤</span> Excesso de Velocidade
         </div>
         
-        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
 
     <div id="map"></div>
@@ -47,6 +46,9 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        console.log("Iniciando carregamento...");
+
+        // 1. Configurações (Certifique-se de que o DatabaseURL está correto)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -55,37 +57,60 @@
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
         
-        firebase.initializeApp(firebaseConfig);
+        // Inicialização com tratamento de erro
+        try {
+            if (!firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+                console.log("Firebase Inicializado com Sucesso");
+            }
+        } catch (e) {
+            console.error("Erro ao inicializar Firebase:", e);
+        }
+
         const db = firebase.database();
 
-        // Inicialização do Mapa
+        // 2. Inicialização Imediata do Mapa
+        console.log("Configurando Mapa...");
         const map = L.map('map').setView([-12.26, -38.96], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        
-        // Camadas Separadas
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(map);
+
         const camadas = {
             rotaOficial: L.featureGroup().addTo(map),
-            rastroCarro: L.polyline([], {color: '#e67e22', weight: 5, opacity: 0.9}).addTo(map),
+            rastroCarro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
             alertas: L.featureGroup().addTo(map)
         };
 
-        // Carregar lista de competidores
+        // Força o Leaflet a recalcular o tamanho da div
+        setTimeout(() => { map.invalidateSize(); }, 500);
+
+        // 3. Carregar Competidores com Log de Erro
+        console.log("Chamando competidores do banco...");
         db.ref('competidores').on('value', snap => {
+            console.log("Resposta do Firebase recebida:", snap.val());
             const data = snap.val();
+            const select = document.getElementById('carSelect');
             let html = '<option value="">Selecione o Piloto...</option>';
+            
             if(data) {
-                Object.keys(data).forEach(id => {
+                Object.keys(data).sort((a,b) => a - b).forEach(id => {
                     html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
                 });
+                select.innerHTML = html;
+            } else {
+                select.innerHTML = '<option value="">Nenhum competidor no banco</option>';
             }
-            document.getElementById('carSelect').innerHTML = html;
+        }, error => {
+            console.error("Erro de permissão ou conexão no Firebase:", error);
+            alert("Erro de conexão com o banco de dados.");
         });
 
+        // 4. Função de Análise
         async function analisarRastro() {
             const id = document.getElementById('carSelect').value;
             if(!id) return alert("Selecione um carro.");
 
-            // Limpeza Geral
             camadas.rotaOficial.clearLayers();
             camadas.alertas.clearLayers();
             camadas.rastroCarro.setLatLngs([]);
@@ -97,25 +122,7 @@
                 ]);
 
                 const rastroData = snapRastro.val();
-                const rotaOficial = snapConfig.val(); // Aqui está o GeoJSON do Admin
+                const rotaGeoJSON = snapConfig.val();
 
-                if(!rotaOficial) return alert("Nenhuma rota oficial foi desenhada no Admin.");
-                if(!rastroData) return alert("Este carro não possui dados de GPS enviados.");
-
-                // 1. DESENHAR ROTA OFICIAL (O que foi feito no Admin)
-                L.geoJSON(rotaOficial, {
-                    style: function(feature) {
-                        return { color: '#3498db', weight: 8, opacity: 0.3, dashArray: '10, 10' };
-                    }
-                }).addTo(camadas.rotaOficial);
-
-                // 2. DESENHAR RASTRO DO CARRO
-                const rastroArr = Object.values(rastroData).sort((a, b) => a.ts - b.ts);
-                const latLngs = rastroArr.map(p => [p.lat, p.lng]);
-                camadas.rastroCarro.setLatLngs(latLngs);
-
-                // 3. ANÁLISE DE DESEMPENHO (Radares e Waypoints)
-                let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
-                let pen = 0;
-
-                rotaOficial.features.forEach((feat, idx)
+                if(rotaGeoJSON) {
+                    L
