@@ -9,7 +9,6 @@
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
-        /* GARANTE QUE O MAPA APAREÇA */
         #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
         button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
         button:hover { background: #718096; }
@@ -19,27 +18,31 @@
 </head>
 <body>
     <div id="toolbar">
-    <input type="text" id="cityInput" placeholder="Cidade...">
-    <button onclick="buscar()">🔍 Buscar</button>
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-    <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
-    <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Rastro</button>
-    <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
-    <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Pontos</button>
-    <button onclick="window.location.href='tempos.html'" style="background: #d69e2e;">⏱️ Hora Chegada</button>
-    <button onclick="window.location.href='ranking-tempo.html'" style="background: #2c7a7b;">⏱️ Tempos</button>
-    <button onclick="window.location.href='fotos.html'" style="background: #3182ce;">📸 Fotos</button>
-    <button onclick="window.location.href='ranking-fotos.html'" style="background: #2b6cb0;">📊 Ranking Fotos</button>
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-    <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f; border: 2px solid #f6e05e;">🏆 RANKING FINAL</button>
-    
-    <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-    
-      
-    <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset</button>
-</div>
+        <input type="text" id="cityInput" placeholder="Cidade...">
+        <button onclick="buscar()">🔍 Buscar</button>
+        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+        
+        <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
+        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Rastro</button>
+        <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+        
+        <button onclick="abrirProva()" style="background: #2f855a;">🔓 Abrir Prova</button>
+        <button onclick="resetarCarros()" style="background: #c53030;">🚗 Resetar Carros</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+
+        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Pontos</button>
+        <button onclick="window.location.href='tempos.html'" style="background: #d69e2e;">⏱️ Hora Chegada</button>
+        <button onclick="window.location.href='ranking-tempo.html'" style="background: #2c7a7b;">⏱️ Tempos</button>
+        <button onclick="window.location.href='fotos.html'" style="background: #3182ce;">📸 Fotos</button>
+        <button onclick="window.location.href='ranking-fotos.html'" style="background: #2b6cb0;">📊 Ranking Fotos</button>
+        
+        <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f; border: 2px solid #f6e05e;">🏆 RANKING FINAL</button>
+        
+        <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset Geral</button>
+    </div>
     
     <div id="map"></div>
 
@@ -68,12 +71,7 @@
             const camadaRuas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
             const camadaSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
             
-            map = L.map('map', { 
-                center: [-12.26, -38.96], 
-                zoom: 13, 
-                layers: [camadaRuas] 
-            });
-
+            map = L.map('map', { center: [-12.26, -38.96], zoom: 13, layers: [camadaRuas] });
             L.control.layers({ "Mapa": camadaRuas, "Satélite": camadaSat }).addTo(map);
             drawnItems = new L.FeatureGroup().addTo(map);
             
@@ -99,12 +97,31 @@
 
             carregarTrajeto();
             rastrearCarros();
-            
-            // Força o redimensionamento para garantir que o mapa apareça
             setTimeout(() => { map.invalidateSize(); }, 500);
         }
 
         window.onload = initMap;
+
+        window.abrirProva = function() {
+            db.ref('configuracoes/prova_aberta').set(true)
+                .then(() => alert("✅ Prova aberta! Competidores agora podem iniciar."));
+        };
+
+        window.resetarCarros = function() {
+            if(confirm("Deseja apagar apenas os competidores e posições? (O trajeto será mantido)")) {
+                if(prompt("Senha de Segurança:") === "261291") {
+                    Promise.all([
+                        db.ref('competidores').remove(),
+                        db.ref('posicoes').remove(),
+                        db.ref('rastros').remove(),
+                        db.ref('configuracoes/prova_aberta').set(false)
+                    ]).then(() => {
+                        alert("✅ Dados de competidores limpos e prova fechada.");
+                        location.reload();
+                    });
+                }
+            }
+        };
 
         window.buscar = async function() {
             const q = document.getElementById('cityInput').value;
@@ -147,65 +164,4 @@
                 snap.forEach(c => {
                     const id = c.key; const p = c.val();
                     if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
-                });
-            });
-        }
-
-        window.apurar = async function() {
-            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
-            const config = (await db.ref('configuracoes/percurso').once('value')).val();
-            const rastros = (await db.ref('rastros').once('value')).val();
-            const comps = (await db.ref('competidores').once('value')).val();
-            if(!config || !rastros) return alert("Erro: Dados insuficientes.");
-
-            for(let id in comps) {
-                let pen = 0;
-                const rastroArr = Object.values(rastros[id] || {}).sort((a, b) => a.ts - b.ts);
-                if(rastroArr.length === 0) continue;
-
-                config.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
-                        let tempoExcessoMs = 0;
-                        for(let i = 1; i < rastroArr.length; i++) {
-                            const p = rastroArr[i];
-                            const duration = p.ts - rastroArr[i-1].ts;
-                            // Considera pontos dentro do polígono com velocidade acima da tolerância
-                            if(duration < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                tempoExcessoMs += duration;
-                            }
-                        }
-                        // Se passou de 10 segundos de carência
-                        if(tempoExcessoMs > 10000) {
-                            pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                        }
-                    } else if(feat.properties?.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raio = feat.properties.radius / 1000;
-                        if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
-                            pen += 20000;
-                        }
-                    }
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 0 - pen });
-            }
-            alert("✅ Apuração concluída!");
-        };
-
-        window.resetar = function() {
-            if(prompt("Senha de Segurança:") === "261291") db.ref('/').remove().then(() => location.reload());
-        };
-    </script>
-</body>
-</html>
-
-
-
-
-
-
-
-
+                    else markers[id] = L.marker([p
