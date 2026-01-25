@@ -5,25 +5,27 @@
     <title>Painel Admin Rally - Oficial</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         
-        /* Toolbar com scroll horizontal para não quebrar em telas menores */
+        /* Toolbar Corrigida */
         #toolbar { 
             height: 65px; 
             background: #2d3748; 
             display: flex; 
             align-items: center; 
             padding: 0 15px; 
-            gap: 10px; 
+            gap: 8px; 
             z-index: 9999; 
             position: relative;
-            overflow-x: auto;
+            overflow-x: auto; /* Permite scroll se os botões não couberem */
             white-space: nowrap;
         }
 
-        #map { height: calc(100vh - 65px); width: 100%; display: block; background: #a0aec0; }
+        /* Área do Mapa */
+        #map { height: calc(100vh - 65px); width: 100%; display: block; background: #2d3748; }
         
         button { 
             padding: 8px 12px; 
@@ -34,6 +36,7 @@
             cursor: pointer; 
             font-weight: bold; 
             font-size: 11px; 
+            flex-shrink: 0;
         }
         button:hover { background: #718096; }
         
@@ -43,7 +46,7 @@
             border: none; 
             background: #1a202c; 
             color: white; 
-            width: 140px; 
+            width: 130px; 
         }
 
         .marker-label { 
@@ -63,7 +66,7 @@
 <body>
 
     <div id="toolbar">
-        <input type="text" id="cityInput" placeholder="Buscar cidade...">
+        <input type="text" id="cityInput" placeholder="Cidade...">
         <button onclick="buscar()">🔍 Buscar</button>
         
         <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
@@ -74,4 +77,22 @@
         <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
 
         <button onclick="salvar()" style="background: #38a169;">💾 SALVAR TRAJETO</button>
-        <button onclick="window.location.href
+        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ VER RASTRO</button>
+        <button onclick="apurar()" style="background: #dd6b20;">🏁 APURAR</button>
+        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 PONTOS</button>
+        <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f;">🏆 RANKING</button>
+        <button onclick="resetar()" style="background: #e53e3e;">⚠️ RESET TOTAL</button>
+    </div>
+    
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
