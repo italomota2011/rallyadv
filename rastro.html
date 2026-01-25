@@ -7,25 +7,24 @@
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; overflow: hidden; }
         #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-        #map { flex-grow: 1; height: 100vh; background: #222; }
+        #map { flex-grow: 1; height: 100vh; background: #222; } /* Cor de fundo para teste */
         h2 { color: #e67e22; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; display: block; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; border: 1px solid #444; }
-        /* Garante que o seletor de satélite apareça branco no fundo escuro */
-        .leaflet-control-layers { background: #2d3748 !important; color: white !important; }
+        .leaflet-control-layers { background: white !important; color: black !important; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
     <h2>🛰️ Telemetria</h2>
-    <select id="carSelect"><option value="">Conectando banco...</option></select>
+    <select id="carSelect"><option value="">Buscando pilotos...</option></select>
     <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
     
     <div id="resumo">
-        <div class="stats-card">Selecione um carro para começar.</div>
+        <div class="stats-card">Selecione um carro para analisar.</div>
     </div>
 
     <div class="legenda">
@@ -34,7 +33,7 @@
         <span style="color:#e67e22">━━</span> Rastro Real (GPS)<br>
         <span style="color:#38a169">⬤</span> Waypoint OK<br>
         <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-        <span style="color:red">⬤</span> Excesso de Velocidade
+        <span style="color:red">⬤</span> Excesso Velocidade
     </div>
     
     <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
@@ -48,30 +47,30 @@
 <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
 <script>
-    // --- 1. CONFIGURAÇÃO DO MAPA (INÍCIO IMEDIATO) ---
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
-    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
+    // 1. INICIALIZAR MAPA IMEDIATAMENTE (SEM DEPENDÊNCIAS)
+    const map = L.map('map').setView([-12.26, -38.96], 13);
+    
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OSM'
+    }).addTo(map);
 
-    const map = L.map('map', {
-        center: [-12.26, -38.96],
-        zoom: 13,
-        layers: [osm] // Começa sempre com o de rua
+    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri'
     });
 
-    const baseLayers = {
-        "Mapa de Rua": osm,
-        "Satélite": sat
-    };
-    L.control.layers(baseLayers).addTo(map);
-
+    // Camadas de dados
     const camadas = {
         rotaOficial: L.featureGroup().addTo(map),
         rastroCarro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
         alertas: L.featureGroup().addTo(map)
     };
 
-    // --- 2. CONFIGURAÇÃO FIREBASE ---
+    // 2. ADICIONAR SELETOR DE SATÉLITE
+    try {
+        const baseMaps = { "Rua": osm, "Satélite": satelite };
+        L.control.layers(baseMaps).addTo(map);
+    } catch(e) { console.error("Erro no seletor:", e); }
+
+    // 3. CONFIGURAR FIREBASE
     const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-
+        apiKey: "AIzaSyBPJkehV9C1x0hiY
