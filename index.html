@@ -8,19 +8,15 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; position: relative; }
-        
+        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
         .logo { display: block; margin: 0 auto 20px auto; max-width: 150px; height: auto; }
-
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:active { transform: scale(0.98); }
-        
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
         .tracking { text-align: center; display: none; }
-        
         .status-gps { color: #2ecc71; font-weight: bold; font-size: 14px; margin-top: 10px; }
+        .offline { color: #e74c3c !important; }
         .wake-lock-status { color: #888; font-size: 11px; margin-top: 5px; }
-        .btn-sair { background: transparent; color: #666; font-size: 12px; margin-top: 25px; text-decoration: underline; cursor: pointer; border: none; }
+        .btn-sair { background: transparent; color: #666; font-size: 12px; margin-top: 25px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
     </style>
 </head>
 <body>
@@ -28,4 +24,111 @@
         <div id="setup">
             <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo">
             <h2 style="color:#e67e22; text-align:center; margin-top: 0;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value =
+            <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+                <option>ANTIGOS</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro" min="1" max="100">
+            <button id="btnIniciar">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo" class="tracking">
+            <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
+            <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
+            <p>KM/H</p>
+            <div id="msgGps" class="status-gps">● TRANSMITINDO GPS</div>
+            <div id="statusTela" class="wake-lock-status">Tela Bloqueada (Acesa)</div>
+            <button class="btn-sair" onclick="encerrarSessao()">Sair / Novo Registro</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuração
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
+
+        let wakeLock = null;
+        let watchID = null;
+
+        // Função para manter a tela acesa
+        async function solicitarWakeLock() {
+            if ('wakeLock' in navigator) {
+                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+            }
+        }
+
+        // Função de Rastreio
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "Carro " + num;
+            
+            solicitarWakeLock();
+
+            // Monitor de Conexão
+            db.ref(".info/connected").on("value", (snap) => {
+                const msg = document.getElementById('msgGps');
+                if (snap.val() === true) {
+                    msg.innerText = "● TRANSMITINDO GPS";
+                    msg.classList.remove('offline');
+                } else {
+                    msg.innerText = "○ SINAL DE INTERNET PERDIDO";
+                    msg.classList.add('offline');
+                }
+            });
+
+            watchID = navigator.geolocation.watchPosition(pos => {
+                const vel = (pos.coords.speed || 0) * 3.6;
+                document.getElementById('viewVel').innerText = vel.toFixed(1);
+                const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel.toFixed(1), ts: Date.now() };
+                db.ref('posicoes/' + num).set(coord);
+                db.ref('rastros/' + num).push(coord);
+            }, null, { enableHighAccuracy: true });
+        }
+
+        // --- INICIALIZAÇÃO SEGURA ---
+        window.onload = function() {
+            const salvo = localStorage.getItem('rally_carro_ativo');
+            if (salvo) {
+                iniciarFluxoRastreio(salvo);
+            }
+        };
+
+        // Botão Iniciar
+        document.getElementById('btnIniciar').onclick = async function() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+
+            if(!nome || !num) return alert("Preencha tudo!");
+            if(num < 1 || num > 100) return alert("Número inválido (1-100)");
+
+            try {
+                const snap = await db.ref('competidores/' + num).once('value');
+                if(snap.exists()) return alert("Este número de carro já está em uso!");
+
+                await db.ref('competidores/' + num).set({ nome, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) { alert("Erro ao conectar."); }
+        };
+
+        function encerrarSessao() {
+            if(confirm("Encerrar prova?")) {
+                localStorage.removeItem('rally_carro_ativo');
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
