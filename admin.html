@@ -169,19 +169,32 @@
                 config.features.forEach(feat => {
                     if(feat.geometry.type === 'Polygon') {
                         const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% tolerância
-                        let tempoExcessoMs = 0;
-                        for(let i = 1; i < rastroArr.length; i++) {
-                            const p = rastroArr[i];
-                            const duration = p.ts - rastroArr[i-1].ts;
-                            // Considera pontos dentro do polígono com velocidade acima da tolerância
-                            if(duration < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                tempoExcessoMs += duration;
-                            }
-                        }
-                        // Se passou de 10 segundos de carência
-                        if(tempoExcessoMs > 10000) {
-                            pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                        }
+                        // Dentro do loop dos polígonos na função apurar()
+let tempoExcessoMs = 0;
+
+for(let i = 1; i < rastroArr.length; i++) {
+    const p = rastroArr[i];
+    const duration = p.ts - rastroArr[i-1].ts;
+
+    // --- FILTROS DE SEGURANÇA ---
+    // 1. Ignora saltos de tempo muito grandes (ex: perda de sinal por mais de 30s)
+    if (duration > 30000) continue; 
+
+    // 2. Só processa se a velocidade for real (acima de 2km/h) 
+    // e se o ponto estiver dentro do radar (polígono)
+    if(p.vel > 2 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+        
+        // 3. Verifica se a velocidade filtrada excede o vMax da zona
+        if(p.vel > vMax) {
+            tempoExcessoMs += duration;
+        }
+    }
+}
+
+// A carência de 10 segundos que você já tem continua valendo:
+if(tempoExcessoMs > 10000) {
+    pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
+}
                     } else if(feat.properties?.type === 'circle') {
                         const centro = feat.geometry.coordinates;
                         const raio = feat.properties.radius / 1000;
@@ -201,6 +214,7 @@
     </script>
 </body>
 </html>
+
 
 
 
