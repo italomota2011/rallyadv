@@ -2,73 +2,66 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Analise de Rastro - Rally</title>
+    <title>Análise de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
-        #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-        #map { flex-grow: 1; }
-        h2 { color: #e67e22; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
-        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; line-height: 1.6; }
-        .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
-    </style>
-</head>
-<body>
-    <div id="sidebar">
-        <h2>🛰️ Análise de Telemetria</h2>
-        <select id="carSelect"><option>Carregando competidores...</option></select>
-        <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
-        
-        <div id="resumo">
-            <div class="stats-card">Selecione um carro para ver os detalhes da prova.</div>
-        </div>
-
-        <div class="legenda">
-            <strong>Legenda do Mapa:</strong><br>
-            <span style="color:#38a169">⬤</span> Waypoint Visitado (Verde)<br>
-            <span style="color:#e74c3c">⬤</span> Waypoint Perdido (Vermelho)<br>
-            <span style="color:#e67e22">━━</span> Rastro do Carro (Laranja)<br>
-            <span style="color:#e74c3c">⬤</span> Infração de Velocidade<br>
-            <span style="color:#3498db">⬢</span> Radar (Azul)
-        </div>
-        
-        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
-    </div>
-
-    <div id="map"></div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
+    <style>
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; border-right: 2px solid #333; }
+        #map { flex-grow: 1; background: #222; }
+        h2 { color: #e67e22; margin: 0 0 20px 0; font-size: 1.2rem; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
+        select { background: #2d3748; color: white; border: 1px solid #4a5568; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #d35400; }
+        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 13px; line-height: 1.5; }
+        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
+        .legenda { font-size: 11px; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <h2>🛰️ Telemetria</h2>
+        <select id="carSelect"><option value="">Carregando competidores...</option></select>
+        <button onclick="analisarRastro()">ANALISAR RASTRO</button>
+        
+        <div id="resumo">
+            <div class="stats-card">Selecione um carro para processar a telemetria.</div>
+        </div>
+
+        <div class="legenda">
+            <strong>MAPA:</strong><br>
+            <span style="color:#38a169">●</span> Waypoint OK | <span style="color:#e74c3c">●</span> Waypoint Perdido<br>
+            <span style="color:#e67e22">▬</span> Trajetória do Carro<br>
+            <span style="color:#3498db">⬢</span> Área de Radar
+        </div>
+        
+        <button style="background:#4a5568; margin-top:15px;" onclick="location.href='admin.html'">VOLTAR</button>
+    </div>
+
+    <div id="map"></div>
+
     <script>
-        // Configurações do Firebase
+        // 1. Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally",
-            appId: "1:341731891354:web:d0c34265be68015e98a723"
+            projectId: "cronometro-rally"
         };
         
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
+        firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
-        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery © Esri' });
+        // 2. Inicialização do Mapa (Global)
+        let map, layers = {};
 
-        const map = L.map('map', {
-            center: [-12.26, -38.96],
-            zoom: 13,
-            layers: [osm]
-        });
-
-        const baseMaps = { "Mapa de Rua": osm, "Satélite": satelite };
-        L.control.layers
+        window.onload = function() {
+            map = L.map('map').setView([-12.26, -38.96], 13);
+            
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            const satelite = L.tileLayer
