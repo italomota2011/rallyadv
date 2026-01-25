@@ -1,4 +1,24 @@
-Página admin funcionando perfeitamente, todos os botões e páginas funcionando;
+⭕ PÁGINA ADMIN=
+_______________________________________
+Botões:
+Buscar cidade - ✅
+Salvar trajeto - ✅
+Rastro - ✅
+Rodar Apuração - ✅
+Pontos - ✅
+Hora Chegada - ✅
+Tempos - ✅
+Fotos - ✅
+Ranking Fotos - ✅
+Ranking Final - ✅
+Reset com senha - ✅
+________________________________________
+Funções do mapa todas ok - ✅
+________________________________________
+
+⭕ Página 
+
+
 Mapa funcionando;
 Todos os cálculos funcionando;
 Odometro precisa de ajustes;
