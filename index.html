@@ -117,31 +117,53 @@
 
             db.ref(".info/connected").on("value", s => {
                 const m = document.getElementById('msgGps');
-                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE - NÃO FECHE O SISTEMA";
             });
 
             watchID = navigator.geolocation.watchPosition(p => {
-                const lat = p.coords.latitude;
-                const lng = p.coords.longitude;
-                const vel = (p.coords.speed || 0) * 3.6;
-                const accuracy = p.coords.accuracy;
+            const lat = p.coords.latitude;
+            const lng = p.coords.longitude;
+            const vel = (p.coords.speed || 0) * 3.6;
+            const accuracy = p.coords.accuracy;
+            const agora = Date.now();
 
-                document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
+            document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
 
-                // FILTRO DE ESTABILIDADE
-                if (accuracy < 30) {
-                    if (ultimaPos && vel > 3.0) {
-                        const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                        if (trecho > 0.005 && trecho < 0.2) {
-                            distTotal += trecho;
-                            atualizarDisplay();
-                        }
+            // Dados para enviar ao Firebase
+            const dadosCoordenada = { 
+                lat: lat, 
+                lng: lng, 
+                vel: vel.toFixed(1), 
+                ts: agora 
+            };
+
+            // FILTRO DE ESTABILIDADE PARA O ODÔMETRO
+            if (accuracy < 30) {
+                if (ultimaPos && vel > 3.0) {
+                    const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                    if (trecho > 0.005 && trecho < 0.2) {
+                        distTotal += trecho;
+                        atualizarDisplay();
                     }
-                    ultimaPos = { lat, lng };
                 }
+                ultimaPos = { lat, lng };
 
-                db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
-            }, null, { enableHighAccuracy: true });
+                // --- CORREÇÃO AQUI ---
+                // 1. Atualiza a posição atual (para o mapa em tempo real)
+                db.ref('posicoes/' + num).set(dadosCoordenada);
+                
+                // 2. Salva no histórico (para a Apuração e o Rastro funcionarem)
+                db.ref('rastros/' + num).push(dadosCoordenada);
+                // ---------------------
+            }
+
+        }, (err) => {
+            console.error("Erro GPS:", err);
+        }, { 
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 10000 
+        });, null, { enableHighAccuracy: true });
         }
 
         // CORREÇÃO DO BOTÃO INICIAR
@@ -199,6 +221,7 @@
     </script>
 </body>
 </html>
+
 
 
 
