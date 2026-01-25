@@ -6,60 +6,56 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; padding: 0; display: flex; height: 100vh; background: #121212; color: white; font-family: sans-serif; overflow: hidden; }
-        
-        #sidebar { 
-            width: 320px; 
-            background: #1e1e1e; 
-            padding: 20px; 
-            z-index: 1000; 
-            border-right: 2px solid #e67e22; 
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            box-sizing: border-box;
-        }
-
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; z-index: 1000; border-right: 2px solid #e67e22; display: flex; flex-direction: column; height: 100vh; box-sizing: border-box; }
         #map { flex-grow: 1; height: 100vh; background: #222; }
-        
         h2 { color: #e67e22; margin: 0 0 15px 0; font-size: 1.2rem; }
         label { font-size: 12px; color: #aaa; margin-bottom: 5px; }
-        
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        button:hover { background: #d35400; }
-        
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         #resumo { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; line-height: 1.5; }
-        
-        .legenda { 
-            padding: 12px; 
-            background: rgba(255,255,255,0.05); 
-            border-radius: 8px; 
-            font-size: 11px; 
-            line-height: 1.8;
-            border: 1px solid #333;
-        }
+        .legenda { padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 11px; line-height: 1.8; border: 1px solid #333; }
         .item-legenda { display: flex; align-items: center; gap: 8px; }
-        .leaflet-control-layers { background: white !important; color: black !important; }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
         <h2>🛰️ Analisador GPS</h2>
-        
-        <label>Competidor para Análise:</label>
-        <select id="carSelect">
-            <option value="">Aguardando dados...</option>
-        </select>
-        
-        <button onclick="analisar()">PROCESSAR TELEMETRIA</button>
+        <label>Competidor:</label>
+        <select id="carSelect"><option value="">Aguardando dados...</option></select>
+        <button onclick="analisar()">ANALISAR RASTRO</button>
 
         <div id="resumo">
-            <div class="stats-card">Selecione um carro para analisar o desempenho contra a rota oficial.</div>
+            <div class="stats-card">Selecione um carro para processar os dados.</div>
         </div>
 
         <div class="legenda">
-            <strong>Dicionário do Mapa:</strong>
-            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial (Planejada)</div>
-            <div class="item-legenda"><span style
+            <strong>Legenda:</strong>
+            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial</div>
+            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro do Carro</div>
+            <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
+            <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Perdido</div>
+            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
+        </div>
+        
+        <button style="background:#444; margin-top: 15px; padding: 10px;" onclick="location.href='admin.html'">VOLTAR</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+    <script>
+        // 1. MAPA INICIAL
+        var map = L.map('map').setView([-12.26, -38.96], 13);
+        var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri'
+        }).addTo(map);
+
+        var camadas = {
+            rota: L.featureGroup().addTo(map),
+            rastro: L.polyline([], {color: '#e67e22', weight
