@@ -2,170 +2,177 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Ranking Geral - Rally</title>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <title>Relatório de Prova - Ranking Geral</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a202c; color: white; margin: 0; padding: 20px; }
-        .container { max-width: 850px; margin: auto; }
-        .header { text-align: center; padding: 20px; background: #2d3748; border-radius: 12px; margin-bottom: 20px; border-bottom: 4px solid #e67e22; }
-        h1 { color: #e67e22; margin: 5px 0; }
-        .controles { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        input { padding: 12px; border-radius: 6px; border: none; width: 250px; background: #1a202c; color: white; border: 1px solid #4a5568; }
-        .btn { padding: 12px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; transition: 0.3s; }
-        .btn-pdf { background: #e67e22; color: white; }
-        .btn-voltar { background: #4a5568; color: white; text-decoration: none; display: flex; align-items: center; }
-        .btn:hover { opacity: 0.8; }
-        .cat-card { background: #2d3748; padding: 20px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        h2 { color: #f6ad55; border-bottom: 1px solid #4a5568; padding-bottom: 8px; margin-top: 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; color: #a0aec0; font-size: 12px; padding: 10px; border-bottom: 2px solid #1a202c; }
-        td { padding: 12px; border-bottom: 1px solid #4a5568; font-size: 14px; }
-        .right { text-align: right; }
-        .gps { color: #fc8181; font-weight: bold; }
-        .fotos { color: #68d391; font-weight: bold; }
-        #logoCanto { display: none; } /* Imagem oculta usada apenas para o PDF */
+        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 20px; margin: 0; }
+        .container { max-width: 1100px; margin: auto; }
+        .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
+        h1 { color: #e67e22; margin: 0; }
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; margin-top: 0; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+        th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 1px solid #4a5568; font-size: 13px; text-transform: uppercase; }
+        td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; vertical-align: middle; }
+
+        /* Ajuste de Larguras de Coluna */
+        .col-pos { width: 60px; font-weight: bold; color: #e67e22; }
+        .col-num { width: 60px; }
+        .col-piloto { width: auto; }
+        .col-tempo { width: 150px; font-family: monospace; color: #fbd38d; font-weight: bold; }
+        .col-pontos { width: 180px; text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+
+        .text-right { text-align: right; }
+        
+        #logoInvisivel { display: none; }
+        .btn { border-radius: 5px; font-weight: bold; transition: 0.3s; padding: 10px 20px; border: none; cursor: pointer; color: white; }
+        .btn-voltar { background: #4a5568; }
+        .btn-pdf { background: #38a169; }
+        input { background: #1a202c; color: white; border: 1px solid #4a5568; padding: 10px; border-radius: 5px; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="header">
-            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" width="60" style="margin-bottom: 10px;">
-            <h1>RANKING GERAL</h1>
-            <p>Resultados Consolidados: GPS e Fotos</p>
-        </div>
+<div class="container">
+    <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
-        <div class="controles">
-            <input type="text" id="inputEvento" placeholder="Nome da Cidade / Evento">
-            <button class="btn btn-pdf" onclick="gerarPDF()">📄 GERAR PDF</button>
-            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
-        </div>
-
-        <div id="conteudo">Carregando dados do servidor...</div>
+    <div class="header-ranking">
+        <h1>🏆 Classificação Final</h1>
     </div>
 
-    <img id="logoCanto" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
+    <div class="cat-card">
+        <label style="display:block; margin-bottom:8px; color:#a0aec0;">Nome da Etapa / Cidade:</label>
+        <input type="text" id="inputCidade" placeholder="Ex: Etapa de Verão - Salvador">
+        <div style="margin-top: 15px; display: flex; gap: 10px;">
+            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
+            <button class="btn btn-pdf" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
+        </div>
+    </div>
 
-    <script>
-        // Configuração Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    <div id="rankingContent">A carregar classificação...</div>
+</div>
 
-        const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        // Escuta em tempo real
-        db.ref('competidores').on('value', snap => {
-            const data = snap.val();
-            if(!data) {
-                document.getElementById('conteudo').innerHTML = "Nenhum dado encontrado.";
-                return;
-            }
+    const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
-            let html = "";
-            categorias.forEach(cat => {
-                let lista = [];
-                for(let id in data) {
-                    if(data[id].categoria === cat) lista.push({id, ...data[id]});
-                }
-                
-                // Ordenação: Maior pontuação (menos penalidades) no topo
-                lista.sort((a,b) => (b.pontos || 0) - (a.pontos || 0));
+    function tempoParaSegundos(tempo) {
+        if (!tempo || typeof tempo !== 'string' || tempo === "00:00:00") return 9999999; 
+        const partes = tempo.split(':');
+        return (+partes[0]) * 3600 + (+partes[1]) * 60 + (+partes[2]);
+    }
 
-                if(lista.length > 0) {
-                    html += `<div class="cat-card">
-                        <h2>${cat}</h2>
-                        <table id="tabela-${cat.replace(/\s/g, '')}">
-                            <thead>
-                                <tr><th>POS</th><th>Nº</th><th>PILOTO</th><th class="right">GPS</th><th class="right">FOTOS</th></tr>
-                            </thead>
-                            <tbody>`;
-                    lista.forEach((p, i) => {
-                        html += `<tr>
-                            <td>${i+1}º</td>
-                            <td>${p.id}</td>
-                            <td>${p.nome || '---'}</td>
-                            <td class="right gps">${p.pontos || 0}</td>
-                            <td class="right fotos">+${p.pontosFotos || 0}</td>
-                        </tr>`;
+    db.ref('competidores').on('value', snap => {
+        const data = snap.val();
+        if(!data) return document.getElementById('rankingContent').innerHTML = "Sem dados.";
+
+        let html = "";
+        categorias.forEach(cat => {
+            let list = [];
+            for(let id in data) {
+                if(data[id].categoria === cat) {
+                    const p = data[id];
+                    const ptsGPS = p.pontos || 0; 
+                    const bonus = p.pontosFotos || 0;
+                    const totalPts = ptsGPS + bonus;
+                    const tempoStr = p.tempoFormatado || p.tempo || "00:00:00";
+
+                    list.push({ 
+                        id, ...p, 
+                        tempoStr,
+                        tSeg: tempoParaSegundos(tempoStr),
+                        totalPts
                     });
-                    html += `</tbody></table></div>`;
                 }
-            });
-            document.getElementById('conteudo').innerHTML = html;
-        });
-
-        // Função para garantir o carregamento da imagem
-        function carregarImagem(el) {
-            return new Promise((resolve) => {
-                if (el.complete) resolve();
-                else el.onload = () => resolve();
-            });
-        }
-
-        async function gerarPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const evento = document.getElementById('inputEvento').value || "Classificação Oficial";
-            const imgEl = document.getElementById('logoCanto');
-
-            // Aguarda a imagem estar disponível
-            await carregarImagem(imgEl);
-
-            try {
-                // Desenha a Logo (X, Y, Largura, Altura)
-                doc.addImage(imgEl, 'PNG', 90, 8, 25, 25);
-            } catch (e) { console.error("Erro ao carregar imagem no PDF", e); }
-
-            doc.setFontSize(18);
-            doc.setTextColor(230, 126, 34);
-            doc.text("RESULTADO GERAL DO EVENTO", 105, 42, { align: "center" });
+            }
             
-            doc.setFontSize(11);
-            doc.setTextColor(100, 100, 100);
-            doc.text(evento, 105, 49, { align: "center" });
-            doc.text(`Emitido em: ${new Date().toLocaleString()}`, 105, 55, { align: "center" });
+            list.sort((a, b) => {
+                if (a.tSeg !== b.tSeg) return a.tSeg - b.tSeg;
+                return b.totalPts - a.totalPts;
+            });
 
-            let yPos = 65;
-            const cards = document.querySelectorAll('.cat-card');
+            if(list.length > 0) {
+                html += `
+                <div class="cat-card">
+                    <h2>Categoria: ${cat}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="col-pos">Pos</th>
+                                <th class="col-num">Nº</th>
+                                <th class="col-piloto">Piloto</th>
+                                <th class="col-tempo">Tempo Total</th>
+                                <th class="col-pontos text-right">Pontuação Final</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                list.forEach((p, i) => {
+                    html += `
+                    <tr>
+                        <td class="col-pos">${i + 1}º</td>
+                        <td class="col-num"><b>${p.id}</b></td>
+                        <td class="col-piloto">${p.nome}</td>
+                        <td class="col-tempo">${p.tempoStr}</td>
+                        <td class="col-pontos text-right">${p.totalPts.toLocaleString('pt-BR')} pts</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+        });
+        document.getElementById('rankingContent').innerHTML = html;
+    });
 
-            cards.forEach(card => {
+    async function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const cidade = document.getElementById('inputCidade').value || "Resultado Geral";
+        const img = document.getElementById('logoInvisivel');
+
+        try { doc.addImage(img, 'JPEG', 85, 10, 30, 30); } catch (e) {}
+
+        doc.setFontSize(18);
+        doc.setTextColor(230, 126, 34);
+        doc.text("RELATÓRIO DE PROVA", 105, 50, { align: "center" });
+        doc.setFontSize(12);
+        doc.setTextColor(100, 100, 100);
+        doc.text(cidade, 105, 58, { align: "center" });
+
+        let finalY = 65;
+        document.querySelectorAll('.cat-card').forEach((card) => {
+            if(card.querySelector('h2')) {
                 const titulo = card.querySelector('h2').innerText;
                 const tabela = card.querySelector('table');
-
-                if (yPos > 240) { doc.addPage(); yPos = 20; }
-
-                doc.setFontSize(13);
-                doc.setTextColor(44, 62, 80);
-                doc.text(titulo, 14, yPos);
-
-                doc.autoTable({
-                    html: tabela,
-                    startY: yPos + 3,
-                    theme: 'grid',
-                    headStyles: { fillColor: [230, 126, 34], halign: 'center' },
-                    styles: { fontSize: 9, cellPadding: 3 },
-                    columnStyles: { 
-                        0: { halign: 'center', cellWidth: 15 }, 
-                        1: { halign: 'center', cellWidth: 15 },
-                        2: { halign: 'left' },
-                        3: { halign: 'right', cellWidth: 35 }, 
-                        4: { halign: 'right', cellWidth: 35 } 
+                if (finalY > 240) { doc.addPage(); finalY = 20; }
+                doc.setFontSize(14);
+                doc.setTextColor(0, 0, 0);
+                doc.text(titulo, 14, finalY);
+                doc.autoTable({ 
+                    html: tabela, 
+                    startY: finalY + 5, 
+                    theme: 'striped',
+                    headStyles: { fillColor: [230, 126, 34] },
+                    columnStyles: {
+                        4: { halign: 'right' } // Alinha a 5ª coluna (Pontos) à direita no PDF
                     }
                 });
-                
-                yPos = doc.lastAutoTable.finalY + 15;
-            });
-
-            doc.save(`Resultado_${evento.replace(/\s+/g, '_')}.pdf`);
-        }
-    </script>
+                finalY = doc.lastAutoTable.finalY + 15;
+            }
+        });
+        doc.save(`Ranking_Final_${cidade.replace(/\s+/g, '_')}.pdf`);
+    }
+</script>
 </body>
 </html>
