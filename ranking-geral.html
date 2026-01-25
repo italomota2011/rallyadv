@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Relatório de Prova</title>
+    <title>Relatório de Prova - Ranking Geral</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
@@ -18,11 +18,14 @@
         th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
         td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
         .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
+        .tempo-col { font-family: monospace; color: #fbd38d; font-weight: bold; }
         .penal-col { color: #fc8181; }
         .foto-col { color: #63b3ed; }
-        .tempo-col { font-family: monospace; color: #fbd38d; font-weight: bold; }
         .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
         #logoInvisivel { display: none; }
+        .btn { border-radius: 5px; font-weight: bold; transition: 0.3s; padding: 10px; border: none; cursor: pointer; color: white; }
+        .btn-voltar { background: #4a5568; }
+        .btn-pdf { background: #38a169; }
     </style>
 </head>
 <body>
@@ -31,19 +34,19 @@
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
     <div class="header-ranking">
-        <h1>🏆 Classificação Final (Por Menor Tempo)</h1>
+        <h1>🏆 Classificação Final (Tempo + Desempate Pontos)</h1>
     </div>
 
-    <div class="cat-card" style="background: #2d3748; padding: 15px; margin-bottom: 20px;">
+    <div class="cat-card">
         <label>Nome da Etapa:</label>
-        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin-top:5px; border-radius:5px; border:none;" placeholder="Ex: Etapa de Verão">
+        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin-top:5px; border-radius:5px; border:none; background: #1a202c; color: white;" placeholder="Ex: Etapa de Verão">
         <div style="margin-top: 15px; display: flex; gap: 10px;">
-            <button class="btn" style="background:#4a5568; color:white; padding:10px; border:none; cursor:pointer;" onclick="location.href='admin.html'">VOLTAR</button>
-            <button class="btn" style="background:#38a169; color:white; padding:10px; border:none; cursor:pointer;" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
+            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
+            <button class="btn btn-pdf" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
         </div>
     </div>
 
-    <div id="rankingContent">Calculando classificação por tempo...</div>
+    <div id="rankingContent">A carregar classificação...</div>
 </div>
 
 <script>
@@ -59,11 +62,9 @@
 
     const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
-    // Função para converter tempo (HH:MM:SS) em segundos para comparação
     function tempoParaSegundos(tempo) {
-        if (!tempo || typeof tempo !== 'string') return 999999; 
+        if (!tempo || typeof tempo !== 'string' || tempo === "00:00:00") return 9999999; 
         const partes = tempo.split(':');
-        if (partes.length !== 3) return 999999;
         return (+partes[0]) * 3600 + (+partes[1]) * 60 + (+partes[2]);
     }
 
@@ -77,27 +78,27 @@
             for(let id in data) {
                 if(data[id].categoria === cat) {
                     const p = data[id];
-                    
-                    const pontosGPS = p.pontos || 0; 
-                    const penalidadeGPS = 0 - pontosGPS;
-                    const bonusFotos = p.pontosFotos || 0;
-                    const totalFinal = pontosGPS + bonusFotos;
-                    const tempoStr = p.tempo || "99:59:59"; 
+                    const ptsGPS = p.pontos || 0; 
+                    const bonus = p.pontosFotos || 0;
+                    const totalPts = ptsGPS + bonus;
+                    const tempoStr = p.tempoFormatado || p.tempo || "00:00:00";
 
                     list.push({ 
-                        id, 
-                        ...p, 
+                        id, ...p, 
                         tempoStr,
-                        tempoSegundos: tempoParaSegundos(tempoStr),
-                        penalidadeGPS, 
-                        bonusFotos, 
-                        totalFinal 
+                        tSeg: tempoParaSegundos(tempoStr),
+                        totalPts
                     });
                 }
             }
             
-            // ORDENAÇÃO: Menor tempo primeiro
-            list.sort((a, b) => a.tempoSegundos - b.tempoSegundos);
+            // LÓGICA DE CLASSIFICAÇÃO E DESEMPATE:
+            list.sort((a, b) => {
+                if (a.tSeg !== b.tSeg) {
+                    return a.tSeg - b.tSeg; // 1º Critério: Menor Tempo
+                }
+                return b.totalPts - a.totalPts; // 2º Critério (Desempate): Maior Pontuação
+            });
 
             if(list.length > 0) {
                 html += `
@@ -110,9 +111,7 @@
                                 <th>Nº</th>
                                 <th>Piloto</th>
                                 <th>Tempo Total</th>
-                                <th>Penal. GPS</th>
-                                <th>Bônus Fotos</th>
-                                <th style="text-align: right;">PONTOS EXTRAS</th>
+                                <th>Pontuação (GPS+Fotos)</th>
                             </tr>
                         </thead>
                         <tbody>`;
@@ -123,9 +122,7 @@
                         <td><b>${p.id}</b></td>
                         <td>${p.nome}</td>
                         <td class="tempo-col">${p.tempoStr}</td>
-                        <td class="penal-col">-${p.penalidadeGPS.toLocaleString('pt-BR')}</td>
-                        <td class="foto-col">+${p.bonusFotos.toLocaleString('pt-BR')}</td>
-                        <td class="pontos-col">${p.totalFinal.toLocaleString('pt-BR')} pts</td>
+                        <td class="pontos-col">${p.totalPts.toLocaleString('pt-BR')} pts</td>
                     </tr>`;
                 });
                 html += `</tbody></table></div>`;
@@ -150,11 +147,25 @@
         doc.text(cidade, 105, 58, { align: "center" });
 
         let finalY = 65;
-        document.querySelectorAll('.cat-card').forEach((card) => {
+        document.querySelectorAll('.cat-card').forEach((card, idx) => {
             if(card.querySelector('h2')) {
                 const titulo = card.querySelector('h2').innerText;
                 const tabela = card.querySelector('table');
                 if (finalY > 240) { doc.addPage(); finalY = 20; }
                 doc.setFontSize(14);
                 doc.setTextColor(0, 0, 0);
-                doc.text(titulo, 14, finalY
+                doc.text(titulo, 14, finalY);
+                doc.autoTable({ 
+                    html: tabela, 
+                    startY: finalY + 5, 
+                    theme: 'striped',
+                    headStyles: { fillColor: [230, 126, 34] }
+                });
+                finalY = doc.lastAutoTable.finalY + 15;
+            }
+        });
+        doc.save(`Ranking_Final_${cidade}.pdf`);
+    }
+</script>
+</body>
+</html>
