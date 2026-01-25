@@ -14,6 +14,8 @@
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
         .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; border: 1px solid #444; }
+        /* Garante que o controle de camadas seja visível no fundo escuro */
+        .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
     </style>
 </head>
 <body>
@@ -27,7 +29,7 @@
         <div class="stats-card">Selecione um carro para analisar.</div>
     </div>
 
-    <div class="legenda" id="legendaFixa">
+    <div class="legenda">
         <strong>Legenda do Mapa:</strong><br>
         <span style="color:#3498db">━━</span> Rota Oficial (Planejada)<br>
         <span style="color:#e67e22">━━</span> Rastro Real (Percorrido)<br>
@@ -47,17 +49,37 @@
 <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
 <script>
-    // 1. INICIALIZAÇÃO DO MAPA (Independente do Firebase)
-    const map = L.map('map').setView([-12.26, -38.96], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // --- CONFIGURAÇÃO DAS CAMADAS DE MAPA ---
+    const mapaRua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    });
 
+    const mapaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Imagery © Esri'
+    });
+
+    // Inicializa o mapa com a camada de rua por padrão
+    const map = L.map('map', {
+        center: [-12.26, -38.96],
+        zoom: 13,
+        layers: [mapaRua] 
+    });
+
+    // Adiciona o botão de controle no canto superior direito
+    const baseMaps = {
+        "Mapa de Rua": mapaRua,
+        "Satélite": mapaSatelite
+    };
+    L.control.layers(baseMaps).addTo(map);
+
+    // --- CAMADAS DE DADOS ---
     const camadas = {
         rotaOficial: L.featureGroup().addTo(map),
         rastroCarro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
         alertas: L.featureGroup().addTo(map)
     };
 
-    // 2. CONFIGURAÇÃO FIREBASE
+    // --- CONFIGURAÇÃO FIREBASE ---
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         authDomain: "cronometro-rally.firebaseapp.com",
@@ -66,112 +88,32 @@
         appId: "1:341731891354:web:d0c34265be68015e98a723"
     };
 
-    try {
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
 
-        // 3. CARREGAR COMPETIDORES
-        db.ref('competidores').on('value', snap => {
-            const select = document.getElementById('carSelect');
-            let html = '<option value="">Selecione o Piloto...</option>';
-            const data = snap.val();
-            if(data) {
-                Object.keys(data).sort((a,b)=>a-b).forEach(id => {
-                    html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-                });
-            }
-            select.innerHTML = html;
-        });
+    // Carregar competidores
+    db.ref('competidores').on('value', snap => {
+        const select = document.getElementById('carSelect');
+        let html = '<option value="">Selecione o Piloto...</option>';
+        const data = snap.val();
+        if(data) {
+            Object.keys(data).sort((a,b)=>a-b).forEach(id => {
+                html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
+            });
+        }
+        select.innerHTML = html;
+    });
 
-        // 4. FUNÇÃO DE ANÁLISE
-        window.analisarRastro = async function() {
-            const id = document.getElementById('carSelect').value;
-            if(!id) return alert("Selecione um carro!");
+    // Função de Análise
+    window.analisarRastro = async function() {
+        const id = document.getElementById('carSelect').value;
+        if(!id) return alert("Selecione um carro!");
 
-            camadas.rotaOficial.clearLayers();
-            camadas.alertas.clearLayers();
-            camadas.rastroCarro.setLatLngs([]);
-            document.getElementById('resumo').innerHTML = "Processando...";
+        camadas.rotaOficial.clearLayers();
+        camadas.alertas.clearLayers();
+        camadas.rastroCarro.setLatLngs([]);
+        document.getElementById('resumo').innerHTML = "Processando...";
 
-            try {
-                const [snapRastro, snapConfig] = await Promise.all([
-                    db.ref('rastros/' + id).once('value'),
-                    db.ref('configuracoes/percurso').once('value')
-                ]);
-
-                const rastroData = snapRastro.val();
-                const rotaOficial = snapConfig.val();
-
-                // Desenha a rota oficial se existir
-                if(rotaOficial) {
-                    L.geoJSON(rotaOficial, {
-                        style: { color: '#3498db', weight: 6, opacity: 0.3, dashArray: '5, 10' }
-                    }).addTo(camadas.rotaOficial);
-                }
-
-                if(!rastroData) {
-                    document.getElementById('resumo').innerHTML = "Sem dados de GPS.";
-                    return alert("Nenhum dado de rastro encontrado.");
-                }
-
-                const rastroArr = Object.values(rastroData).sort((a,b) => a.ts - b.ts);
-                camadas.rastroCarro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-
-                let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
-                let pen = 0;
-
-                // Comparação com a Rota Oficial
-                if(rotaOficial && rotaOficial.features) {
-                    rotaOficial.features.forEach((feat, idx) => {
-                        // RADARES
-                        if(feat.geometry.type.includes('Polygon')) {
-                            const vMax = (feat.properties.velocidade || 60) * 1.1;
-                            let tempoExcesso = 0;
-                            rastroArr.forEach((p, i) => {
-                                if(i === 0) return;
-                                if(turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if(p.vel > vMax) {
-                                        tempoExcesso += (p.ts - rastroArr[i-1].ts);
-                                        L.circleMarker([p.lat, p.lng], {radius: 3, color: 'red'}).addTo(camadas.alertas);
-                                    }
-                                }
-                            });
-                            if(tempoExcesso > 10000) {
-                                const pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
-                                pen += pts;
-                                resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: Excesso (-${pts} pts)</div>`;
-                            }
-                        }
-                        // WAYPOINTS
-                        else if(feat.properties?.type === 'circle') {
-                            const coords = feat.geometry.coordinates;
-                            const raioM = feat.properties.radius || 50;
-                            const visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
-                            
-                            L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.3 }).addTo(camadas.rotaOficial);
-                            if(!visitou) {
-                                pen += 20000;
-                                resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido (-20.000 pts)</div>`;
-                            }
-                        }
-                    });
-                }
-
-                resumoHtml += `<br><b>Total Penalidades:</b> -${pen} pts</div>`;
-                document.getElementById('resumo').innerHTML = resumoHtml;
-                map.fitBounds(camadas.rastroCarro.getBounds());
-
-            } catch (err) {
-                console.error(err);
-                alert("Erro ao processar dados.");
-            }
-        };
-
-    } catch (e) {
-        console.error("Erro Firebase:", e);
-        document.getElementById('carSelect').innerHTML = '<option>Erro ao conectar</option>';
-    }
-</script>
-
-</body>
-</html>
+        try {
+            const [snapRastro, snapConfig] = await Promise.all([
+                db
