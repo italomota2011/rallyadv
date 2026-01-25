@@ -2,28 +2,235 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Relatório de Prova - Ranking Geral</title>
+    <title>Ranking Geral - Rally</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 20px; margin: 0; }
-        .container { max-width: 1100px; margin: auto; }
-        .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
-        h1 { color: #e67e22; margin: 0; }
-        .controles { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
-        input { padding: 10px; border-radius: 6px; border: 1px solid #4a5568; background: #2d3748; color: white; }
+        /* Estilos da Tela */
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #1a202c; 
+            color: #e2e8f0; 
+            margin: 0; 
+            padding: 20px;
+        }
+        .container { max-width: 1000px; margin: auto; }
         
-        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .header-ranking { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            padding: 20px;
+            background: #2d3748;
+            border-radius: 12px;
+            border-bottom: 4px solid #e67e22;
+        }
+        
+        h1 { color: #e67e22; margin: 10px 0; }
+        
+        .controles { 
+            display: flex; 
+            gap: 10px; 
+            justify-content: center; 
+            margin-bottom: 30px; 
+        }
+
+        input { 
+            padding: 12px; 
+            border-radius: 6px; 
+            border: 1px solid #4a5568; 
+            background: #2d3748; 
+            color: white; 
+            width: 250px;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+
+        .btn-pdf { background: #e67e22; color: white; }
+        .btn-voltar { background: #4a5568; color: white; text-decoration: none; display: inline-block; }
+        .btn:hover { opacity: 0.8; }
+
+        /* Estilo dos Cards de Categoria */
+        .cat-card { 
+            background: #2d3748; 
+            border-radius: 12px; 
+            padding: 20px; 
+            margin-bottom: 25px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
         h2 { color: #f6ad55; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #2d3748; }
+        th { background: #1a202c; color: #a0aec0; text-align: left; padding: 12px; font-size: 12px; }
+        td { padding: 12px; border-bottom: 1px solid #4a5568; color: white; }
         
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { background: #1a202c; color: #a0aec0; text-align: left; padding: 12px; font-size: 12px; text-transform: uppercase; }
-        td { padding: 12px; border-bottom: 1px solid #4a5568; }
-        
-        .col-pontos { text-align: right; font-weight: bold; }
-        .total-destaque { color: #63b3ed; font-size: 1.1rem; }
+        .col-right { text-align: right; }
+        .total-destaque { color: #63b3ed; font-weight: bold; font-size: 1.1rem; }
         .penalidade { color: #fc8181; }
-        
-        .btn-pdf { background: #e67e22; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+        #logoInvisivel { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header-ranking">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" width="70" alt="Logo">
+            <h1>RANKING GERAL</h1>
+            <p>Pontuação Consolidada: GPS + Fotos</p>
+        </div>
+
+        <div class="controles">
+            <input type="text" id="inputCidade" placeholder="Nome da Cidade/Evento">
+            <button class="btn btn-pdf" onclick="gerarPDF()">📄 Gerar PDF Alinhado</button>
+            <button class="btn btn-voltar" onclick="location.href='admin.html'">Sair</button>
+        </div>
+
+        <div id="rankingGeralContent">
+            <p style="text-align:center;">Buscando dados no servidor...</p>
+        </div>
+    </div>
+
+    <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossOrigin="anonymous">
+
+    <script>
+        // Configuração Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
+        // Escutar dados do Firebase
+        db.ref('competidores').on('value', snap => {
+            const data = snap.val();
+            if (!data) {
+                document.getElementById('rankingGeralContent').innerHTML = "Nenhum competidor cadastrado.";
+                return;
+            }
+
+            let htmlFull = "";
+
+            categorias.forEach(cat => {
+                let lista = [];
+                for (let id in data) {
+                    if (data[id].categoria === cat) {
+                        const p = data[id];
+                        const ptsGps = p.pontos || 0;
+                        const ptsFotos = p.pontosFotos || 0;
+                        const total = ptsGps + ptsFotos;
+                        lista.push({ id, ...p, total });
+                    }
+                }
+
+                // Ordenação: Maior pontuação primeiro
+                lista.sort((a, b) => b.total - a.total);
+
+                if (lista.length > 0) {
+                    htmlFull += `
+                    <div class="cat-card">
+                        <h2>${cat}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>POS</th>
+                                    <th>Nº</th>
+                                    <th>PILOTO</th>
+                                    <th class="col-right">GPS</th>
+                                    <th class="col-right">FOTOS</th>
+                                    <th class="col-right">TOTAL</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    lista.forEach((c, idx) => {
+                        htmlFull += `
+                        <tr>
+                            <td>${idx + 1}º</td>
+                            <td>${c.id}</td>
+                            <td>${c.nome}</td>
+                            <td class="col-right penalidade">${c.pontos || 0}</td>
+                            <td class="col-right" style="color:#68d391">+${c.pontosFotos || 0}</td>
+                            <td class="col-right total-destaque">${c.total}</td>
+                        </tr>`;
+                    });
+
+                    htmlFull += `</tbody></table></div>`;
+                }
+            });
+
+            document.getElementById('rankingGeralContent').innerHTML = htmlFull || "Nenhum dado para as categorias selecionadas.";
+        });
+
+        // Função do PDF com Alinhamento Corrigido
+        async function gerarPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const cidade = document.getElementById('inputCidade').value || "Resultado Oficial";
+            const img = document.getElementById('logoInvisivel');
+
+            // Cabeçalho do PDF
+            try { doc.addImage(img, 'PNG', 90, 10, 25, 25); } catch(e) {}
+            
+            doc.setFontSize(16);
+            doc.setTextColor(230, 126, 34);
+            doc.text("RANKING GERAL - RALLY", 105, 45, { align: "center" });
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`${cidade} | Gerado em: ${new Date().toLocaleString()}`, 105, 52, { align: "center" });
+
+            let currentY = 60;
+
+            const tabelas = document.querySelectorAll('.cat-card');
+            
+            tabelas.forEach((card) => {
+                const titulo = card.querySelector('h2').innerText;
+                const tableEl = card.querySelector('table');
+
+                if (currentY > 250) { doc.addPage(); currentY = 20; }
+
+                doc.setFontSize(12);
+                doc.setTextColor(40, 40, 40);
+                doc.text(titulo, 14, currentY);
+
+                doc.autoTable({
+                    html: tableEl,
+                    startY: currentY + 5,
+                    theme: 'grid',
+                    headStyles: { fillColor: [230, 126, 34], halign: 'center' },
+                    styles: { fontSize: 8 },
+                    columnStyles: {
+                        0: { halign: 'center', cellWidth: 12 }, // POS
+                        1: { halign: 'center', cellWidth: 12 }, // Nº
+                        2: { halign: 'left' },                  // PILOTO
+                        3: { halign: 'right', cellWidth: 25 },  // GPS
+                        4: { halign: 'right', cellWidth: 25 },  // FOTOS
+                        5: { halign: 'right', cellWidth: 25, fontStyle: 'bold' } // TOTAL
+                    },
+                    margin: { left: 14, right: 14 }
+                });
+
+                currentY = doc.lastAutoTable.finalY + 15;
+            });
+
+            doc.save(`Ranking_${cidade.replace(/\s+/g, '_')}.pdf`);
+        }
+    </script>
+</body>
+</html>
