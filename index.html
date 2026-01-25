@@ -126,9 +126,11 @@
             watchID = navigator.geolocation.watchPosition(pos => {
     // 1. Pega a velocidade original e a precisão do sinal
     const speedMS = pos.coords.speed || 0;
-    const accuracy = pos.coords.accuracy || 0;
+    const accuracy = pos.coords.accuracy || 0; // Precisão em metros
 
-    // 2. FILTRO DE FLUTUAÇÃO
+    // 2. FILTRO DE FLUTUAÇÃO:
+    // Se a velocidade for menor que 0.6 m/s (aprox. 2 km/h), consideramos parado (0).
+    // Se a precisão for ruim (ex: maior que 30 metros), ignoramos para evitar saltos.
     let velKMH = 0;
     if (speedMS > 0.6 && accuracy < 35) {
         velKMH = speedMS * 3.6;
@@ -137,47 +139,24 @@
     // 3. Atualiza a tela para o competidor
     document.getElementById('viewVel').innerText = velKMH.toFixed(1);
     
-    // 4. Cria o objeto de coordenadas
+    // 4. Salva os dados filtrados
     const coord = { 
         lat: pos.coords.latitude, 
         lng: pos.coords.longitude, 
         vel: parseFloat(velKMH.toFixed(1)), 
         ts: Date.now(),
-        acc: accuracy.toFixed(1)
+        acc: accuracy.toFixed(1) // Opcional: guardar a precisão ajuda a analisar erros depois
     };
 
-    // 5. ENVIO PARA O FIREBASE (Nuvem)
-    db.ref('posicoes/' + num).set(coord);
-    db.ref('rastros/' + num).push(coord);
-
-    // INÍCIO DO BACKUP LOCAL CORRIGIDO
-    try {
-        // 1. Busca o histórico ou cria array vazio
-        let historicoLocal = JSON.parse(localStorage.getItem('rally_backup_rastro') || "[]");
-        
-        // 2. Adiciona a nova posição
-        historicoLocal.push(coord);
-
-        // 3. Limite de 10000 pontos (Ajustado)
-        if (historicoLocal.length > 10000) {
-            historicoLocal.shift(); 
-        }
-
-        // Salva de volta no armazenamento do celular
-        localStorage.setItem('rally_backup_rastro', JSON.stringify(historicoLocal));
-    } catch (e) {
-        console.error("Erro ao salvar backup local:", e);
-    }
     
-}, error => {
-    console.error(error);
-}, {
-    enableHighAccuracy: true,
-    maximumAge: 3000,
-    timeout: 10000
-}; (err) => {
+
+                // Envio de dados
+                db.ref('posicoes/' + num).set(coord);
+                db.ref('rastros/' + num).push(coord);
+                
+            }, (err) => {
                 console.error("Erro GPS:", err);
-            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 };
+            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         }
 
         // Carregar sessão salva
@@ -236,12 +215,6 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
 
 
 
