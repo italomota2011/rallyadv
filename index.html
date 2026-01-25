@@ -150,15 +150,15 @@
     db.ref('posicoes/' + num).set(coord);
     db.ref('rastros/' + num).push(coord);
 
-    // 6. BACKUP LOCAL (Armazenamento Interno do Celular)
+    // INÍCIO DO BACKUP LOCAL CORRIGIDO
     try {
-        // Busca o histórico já salvo ou cria um novo array vazio
+        // 1. Busca o histórico ou cria array vazio
         let historicoLocal = JSON.parse(localStorage.getItem('rally_backup_rastro') || "[]");
         
-        // Adiciona a nova posição
+        // 2. Adiciona a nova posição
         historicoLocal.push(coord);
 
-        // Mantém apenas os últimos 10000 pontos para não pesar o navegador (aprox. 4h de rastro)
+        // 3. Limite de 10000 pontos (Ajustado)
         if (historicoLocal.length > 10000) {
             historicoLocal.shift(); 
         }
@@ -236,6 +236,7 @@
     </script>
 </body>
 </html>
+
 
 
 
