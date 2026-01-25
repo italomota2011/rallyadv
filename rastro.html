@@ -5,7 +5,6 @@
     <title>Análise de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        /* Layout fixo para evitar que elementos sumam */
         body { margin: 0; padding: 0; display: flex; height: 100vh; background: #121212; color: white; font-family: sans-serif; overflow: hidden; }
         
         #sidebar { 
@@ -15,7 +14,7 @@
             z-index: 1000; 
             border-right: 2px solid #e67e22; 
             display: flex;
-            flex-direction: column; /* Organiza itens em coluna */
+            flex-direction: column;
             height: 100vh;
             box-sizing: border-box;
         }
@@ -26,15 +25,12 @@
         label { font-size: 12px; color: #aaa; margin-bottom: 5px; }
         
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         button:hover { background: #d35400; }
         
-        /* Área de resultados com rolagem própria se for muito grande */
         #resumo { flex-grow: 1; overflow-y: auto; margin-bottom: 10px; }
-        
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; font-size: 13px; line-height: 1.5; }
         
-        /* Legenda compacta e sempre visível no rodapé da sidebar */
         .legenda { 
             padding: 12px; 
             background: rgba(255,255,255,0.05); 
@@ -44,9 +40,7 @@
             border: 1px solid #333;
         }
         .item-legenda { display: flex; align-items: center; gap: 8px; }
-
-        /* Estilo para o seletor de satélite do Leaflet */
-        .leaflet-control-layers { background: white !important; color: black !important; border-radius: 8px !important; }
+        .leaflet-control-layers { background: white !important; color: black !important; }
     </style>
 </head>
 <body>
@@ -62,16 +56,16 @@
         <button onclick="analisar()">PROCESSAR TELEMETRIA</button>
 
         <div id="resumo">
-            <div class="stats-card">Selecione um carro e clique em analisar para verificar radares e waypoints.</div>
+            <div class="stats-card">Selecione um carro para ver o rastro e comparar com a rota oficial.</div>
         </div>
 
         <div class="legenda">
             <strong>Dicionário do Mapa:</strong>
-            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada (Admin)</div>
-            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real (Carro)</div>
+            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial (Planejada)</div>
+            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real (Percorrido)</div>
             <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
             <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Não Visitado</div>
-            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
+            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Ponto de Excesso Velocidade</div>
         </div>
         
         <button style="background:#444; margin-top: 15px; padding: 10px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
@@ -85,7 +79,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // 1. INICIAR MAPA COM SATÉLITE
+        // 1. INICIAR MAPA
         var map = L.map('map').setView([-12.26, -38.96], 13);
         
         var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -109,7 +103,6 @@
         firebase.initializeApp(firebaseConfig);
         var db = firebase.database();
 
-        // Carregar Pilotos
         db.ref('competidores').on('value', snap => {
             const select = document.getElementById('carSelect');
             let html = '<option value="">Selecione um Carro</option>';
@@ -121,7 +114,7 @@
             select.innerHTML = html;
         });
 
-        // 3. FUNÇÃO DE ANÁLISE (RADARES E WAYPOINTS)
+        // 3. FUNÇÃO DE ANÁLISE COMPLETA
         async function analisar() {
             let id = document.getElementById('carSelect').value;
             if(!id) return;
@@ -137,38 +130,40 @@
                     db.ref('configuracoes/percurso').once('value')
                 ]);
 
-                if(!snapR.exists()) {
-                    document.getElementById('resumo').innerHTML = '<div class="stats-card">Sem dados de rastro para este carro.</div>';
-                    return;
-                }
-
-                let rastroArr = Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts);
-                camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-                map.fitBounds(camadas.rastro.getBounds(), {padding: [40, 40]});
-
-                let pen = 0;
-                let logs = "";
-
+                // 1. DESENHAR ROTA OFICIAL (O que foi feito no Admin)
                 if(snapO.exists()) {
-                    const rota = snapO.val();
-                    rota.features.forEach(feat => {
-                        // Cálculo de Waypoints
+                    const rotaGeoJSON = snapO.val();
+                    L.geoJSON(rotaGeoJSON, {
+                        style: function(f) {
+                            if(f.geometry.type === 'LineString') return {color: '#3498db', weight: 6, opacity: 0.5};
+                            return {color: '#3498db', weight: 1, fillOpacity: 0.1}; // Polígonos/Radares
+                        }
+                    }).addTo(camadas.rota);
+
+                    // 2. PROCESSAR PENALIDADES
+                    let rastroArr = snapR.exists() ? Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts) : [];
+                    let pen = 0;
+                    let logs = "";
+
+                    rotaGeoJSON.features.forEach(feat => {
+                        // Waypoints (Círculos)
                         if(feat.properties?.type === 'circle') {
-                            let coords = feat.geometry.coordinates;
+                            let coords = feat.geometry.coordinates; // [lng, lat]
                             let raioM = feat.properties.radius || 50;
                             let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
                             
                             L.circle([coords[1], coords[0]], {
                                 radius: raioM,
                                 color: visitou ? '#38a169' : '#e74c3c',
-                                fillOpacity: 0.3
+                                fillOpacity: 0.4,
+                                weight: 2
                             }).addTo(camadas.rota);
 
                             if(!visitou) { pen += 20000; logs += "❌ Waypoint Perdido (-20.000)<br>"; }
                         }
-                        // Cálculo de Radares
+                        
+                        // Radares (Polígonos)
                         else if(feat.geometry.type.includes('Polygon')) {
-                            L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
                             let vMax = (feat.properties.velocidade || 60) * 1.1;
                             let tempoExcesso = 0;
                             
@@ -176,7 +171,7 @@
                                 if(i > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
                                     if(p.vel > vMax) {
                                         tempoExcesso += (p.ts - rastroArr[i-1].ts);
-                                        L.circleMarker([p.lat, p.lng], {radius:3, color:'red', fillOpacity: 1}).addTo(camadas.alertas);
+                                        L.circleMarker([p.lat, p.lng], {radius:3, color:'red', fillOpacity:1}).addTo(camadas.alertas);
                                     }
                                 }
                             });
@@ -187,16 +182,23 @@
                             }
                         }
                     });
+
+                    document.getElementById('resumo').innerHTML = `
+                        <div class="stats-card">
+                            <strong>Resultado: Carro ${id}</strong><hr>
+                            ${logs || "✅ Trajeto sem penalidades."}<br>
+                            <b>Penalidade Final: -${pen} pts</b>
+                        </div>`;
                 }
 
-                document.getElementById('resumo').innerHTML = `
-                    <div class="stats-card">
-                        <strong>Resultado: Carro ${id}</strong><hr>
-                        ${logs || "✅ Percurso sem penalidades."}<br>
-                        <b>Penalidade Final: -${pen} pts</b>
-                    </div>`;
+                // 3. DESENHAR RASTRO REAL DO CARRO
+                if(snapR.exists()) {
+                    let rastroArr = Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts);
+                    camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
+                    map.fitBounds(camadas.rastro.getBounds(), {padding: [50, 50]});
+                }
 
-            } catch (e) { console.error(e); alert("Erro ao processar."); }
+            } catch (e) { console.error(e); alert("Erro ao carregar dados."); }
         }
     </script>
 </body>
