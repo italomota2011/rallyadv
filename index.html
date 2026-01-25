@@ -31,3 +31,133 @@
         #inputAjuste { display: none; background: #fff; color: #000; font-size: 2rem; font-weight: bold; text-align: center; margin: 0 auto 10px; width: 100%; border: none; }
         .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px; }
         .btn-odo { padding: 12px 5px; font-size: 14px; margin: 0; }
+        .btn-minus { background: #c0392b; }
+        .btn-plus { background: #27ae60; }
+        .btn-reset { background: #7f8c8d; }
+        
+        .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
+        .status-offline { color: #f1c40f !important; }
+        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="setup">
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo">
+            <h2 style="color:#e67e22; margin-top: 0;">REGISTRO</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto (Letras)">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+                <option>ANTIGOS</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
+            <button id="btnIniciar">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo">
+            <h2 id="viewCarro" style="color:#e67e22; margin-bottom: 5px; font-size: 16px;">--</h2>
+            <div id="viewVel" style="font-size: 3rem; font-weight: bold;">0.0</div>
+            <p style="margin: 0; color: #888; font-size: 12px; margin-bottom: 10px;">KM/H</p>
+            
+            <div class="odo-container">
+                <div id="viewDist" class="odo-distancia" onclick="abrirAjuste()">0.000</div>
+                <input type="number" id="inputAjuste" step="0.001" onblur="fecharAjuste()">
+                <div class="odo-controls">
+                    <button class="btn-odo btn-minus" onclick="ajustar(-0.001)">-1m</button>
+                    <button class="btn-odo btn-reset" onclick="zerar()">ZERAR</button>
+                    <button class="btn-odo btn-plus" onclick="ajustar(0.001)">+1m</button>
+                </div>
+            </div>
+
+            <div id="msgGps" class="status-gps">● CONECTANDO...</div>
+            <button class="btn-sair" onclick="encerrarSessao()">Encerrar Sessão</button>
+        </div>
+    </div>
+
+    <script>
+        // Usei VAR para compatibilidade total
+        var firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        var db = firebase.database();
+
+        var watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            var R = 6371;
+            var dLat = (lat2 - lat1) * Math.PI / 180;
+            var dLon = (lon2 - lon1) * Math.PI / 180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
+        }
+
+        function ajustar(v) { distTotal += v; if(distTotal < 0) distTotal = 0; atualizarDisplay(); }
+        function zerar() { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } }
+        
+        function abrirAjuste() { 
+            document.getElementById('viewDist').style.display = 'none';
+            var i = document.getElementById('inputAjuste');
+            i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
+        }
+        
+        function fecharAjuste() {
+            var val = parseFloat(document.getElementById('inputAjuste').value);
+            if(!isNaN(val) && val >= 0) distTotal = val;
+            document.getElementById('inputAjuste').style.display = 'none';
+            document.getElementById('viewDist').style.display = 'block';
+            atualizarDisplay();
+        }
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
+
+            var salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            db.ref(".info/connected").on("value", function(s) {
+                var m = document.getElementById('msgGps');
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+                m.className = s.val() ? "status-gps" : "status-gps status-offline";
+            });
+
+            watchID = navigator.geolocation.watchPosition(function(p) {
+                var lat = p.coords.latitude, lng = p.coords.longitude;
+                var vel = (p.coords.speed || 0) * 3.6;
+                document.getElementById('viewVel').innerText = vel.toFixed(1);
+
+                if (ultimaPos && vel > 1.2) {
+                    distTotal += calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                    atualizarDisplay();
+                }
+                ultimaPos = { lat: lat, lng: lng };
+
+                db.ref('posicoes/' + num).set({ lat: lat, lng: lng, vel: vel.toFixed(1), ts: Date.now() });
+                db.ref('rastros/' + num).push({ lat: lat, lng: lng, vel: vel.toFixed(1), ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        document.getElementById('btnIniciar').onclick = function() {
+            var nome = document.getElementById('nome').value.trim();
+            var numStr = document.getElementById('carro').value;
+            var num = parseInt(numStr);
+            var cat = document.getElementById('categoria').value;
+
+            // 1. Validações Locais (Não deixam a tela preta)
+            if(!nome || !numStr) { alert("Preencha tudo!"); return; }
+            if(!/^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/.test(nome)) { alert("Nome apenas com letras!"); return; }
+            if(num < 1 || num > 100) { alert("Número do
