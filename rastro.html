@@ -13,8 +13,8 @@
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; border: 1px solid #444; }
-        /* Estilo para o botão de camadas aparecer melhor no modo escuro */
-        .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
+        /* Garante que o seletor de satélite apareça branco no fundo escuro */
+        .leaflet-control-layers { background: #2d3748 !important; color: white !important; }
     </style>
 </head>
 <body>
@@ -25,13 +25,53 @@
     <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
     
     <div id="resumo">
-        <div class="stats-card">Selecione um carro para analisar.</div>
+        <div class="stats-card">Selecione um carro para começar.</div>
     </div>
 
     <div class="legenda">
-        <strong>Legenda do Mapa:</strong><br>
-        <span style="color:#3498db">━━</span> Rota Oficial (Planejada)<br>
-        <span style="color:#e67e22">━━</span> Rastro Real (Percorrido)<br>
+        <strong>Legenda:</strong><br>
+        <span style="color:#3498db">━━</span> Rota Oficial (Admin)<br>
+        <span style="color:#e67e22">━━</span> Rastro Real (GPS)<br>
         <span style="color:#38a169">⬤</span> Waypoint OK<br>
         <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-        <span style="color
+        <span style="color:red">⬤</span> Excesso de Velocidade
+    </div>
+    
+    <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+<script>
+    // --- 1. CONFIGURAÇÃO DO MAPA (INÍCIO IMEDIATO) ---
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: 'OSM' });
+    const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' });
+
+    const map = L.map('map', {
+        center: [-12.26, -38.96],
+        zoom: 13,
+        layers: [osm] // Começa sempre com o de rua
+    });
+
+    const baseLayers = {
+        "Mapa de Rua": osm,
+        "Satélite": sat
+    };
+    L.control.layers(baseLayers).addTo(map);
+
+    const camadas = {
+        rotaOficial: L.featureGroup().addTo(map),
+        rastroCarro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
+        alertas: L.featureGroup().addTo(map)
+    };
+
+    // --- 2. CONFIGURAÇÃO FIREBASE ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-
