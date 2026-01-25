@@ -38,11 +38,12 @@
         
         .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
 
-        /* Estilos do Odômetro */
-        .odo-box { margin-top: 15px; padding: 10px; border-top: 1px solid #333; }
-        .odo-val { font-size: 2.2rem; font-weight: bold; color: #f1c40f; margin: 5px 0; cursor: pointer; }
-        .odo-btns { display: flex; gap: 5px; justify-content: center; }
-        .btn-mini { padding: 8px; font-size: 12px; background: #333; margin-bottom: 0; width: auto; flex: 1; }
+        /* Estilos do Odômetro Refinados */
+        .odo-box { margin-top: 15px; padding: 15px 10px; border-top: 1px solid #333; background: rgba(0,0,0,0.2); border-radius: 10px; }
+        .odo-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+        .odo-val { font-size: 3rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
+        .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+        .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
     </style>
 </head>
 <body>
@@ -67,20 +68,47 @@
         <div id="ativo" class="tracking">
             <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 5px;">Carro --</h2>
             <div id="viewVel" style="font-size: 4rem; font-weight: bold; line-height: 1;">0.0</div>
-            <p style="margin-top: 5px; color: #888;">KM/H</p>
+            <p style="margin-top: 5px; color: #888; font-size: 12px;">KM/H</p>
 
-            <div class="odo-box">
-                <div id="displayOdo" class="odo-val" onclick="ajusteManualOdo()">0.000</div>
-                <div class="odo-btns">
-                    <button class="btn-mini" onclick="alterarOdo(-0.001)">-1m</button>
-                    <button class="btn-mini" onclick="zerarOdo()" style="background:#444">ZERAR</button>
-                    <button class="btn-mini" onclick="alterarOdo(0.001)">+1m</button>
-                </div>
-            </div>
+            /* Estilos do Odômetro Ampliado */
+.odo-box { 
+    margin-top: 20px; 
+    padding: 20px 10px; /* Mais espaço interno */
+    border-top: 1px solid #333; 
+    background: rgba(0,0,0,0.4); /* Fundo um pouco mais escuro para contraste */
+    border-radius: 15px; 
+}
+
+.odo-label { 
+    font-size: 14px; /* Rótulo maior */
+    color: #aaa; 
+    text-transform: uppercase; 
+    letter-spacing: 2px; 
+}
+
+.odo-val { 
+    font-size: 5.5rem; /* Aumentado drasticamente (era 3rem) */
+    font-weight: 900; 
+    color: #f1c40f; 
+    margin: 10px 0; 
+    cursor: pointer; 
+    font-family: 'Courier New', monospace; /* Fonte monoespaçada ajuda na leitura */
+    text-shadow: 2px 2px 10px rgba(0,0,0,0.5); /* Sombra para dar profundidade */
+}
+
+.btn-mini { 
+    padding: 15px; /* Botões maiores para facilitar o toque com o carro andando */
+    font-size: 18px; 
+    background: #333; 
+    margin-bottom: 0; 
+    width: auto; 
+    flex: 1; 
+    border: 1px solid #444; 
+}
             
             <div class="status-container">
                 <div id="msgGps" class="status-gps">● CONECTANDO...</div>
-                <div id="detalheOffline" class="aviso-offline">DADOS PROTEGIDOS NO CELULAR, NÃO FECHE O SISTEMA.</div>
+                <div id="detalheOffline" class="aviso-offline">DADOS PROTEGIDOS NO CELULAR.</div>
             </div>
 
             <div id="statusTela" class="wake-lock-status">Tela Bloqueada (Sempre Acesa)</div>
@@ -89,7 +117,7 @@
     </div>
 
     <script>
-        // CONFIGURAÇÃO FIREBASE (ORIGINAL)
+        // CONFIGURAÇÃO FIREBASE (IGUAL AO SEU)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -103,34 +131,53 @@
         let wakeLock = null;
         let watchID = null;
 
-        // VARIÁVEIS DO ODÔMETRO
+        // VARIÁVEIS TÉCNICAS DO ODÔMETRO
         let odoTotal = 0;
-        let ultimaCoord = null;
+        let ultimaCoordOdo = null;
 
-        function alterarOdo(v) { odoTotal = Math.max(0, odoTotal + v); atualizarTelaOdo(); }
-        function zerarOdo() { if(confirm("Zerar odômetro?")) { odoTotal = 0; atualizarTelaOdo(); } }
-        function atualizarTelaOdo() { document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); }
-        function ajusteManualOdo() {
-            let n = prompt("Ajustar KM:", odoTotal.toFixed(3));
-            if(n !== null) { odoTotal = parseFloat(n.replace(',','.')) || 0; atualizarTelaOdo(); }
+        function alterarOdo(v) { 
+            odoTotal = Math.max(0, odoTotal + v); 
+            atualizarTelaOdo(); 
         }
 
+        function zerarOdo() { 
+            if(confirm("Zerar odômetro?")) { 
+                odoTotal = 0; 
+                atualizarTelaOdo(); 
+            } 
+        }
+
+        function atualizarTelaOdo() { 
+            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); 
+        }
+
+        function ajusteManualOdo() {
+            let n = prompt("Ajustar Odômetro (KM):", odoTotal.toFixed(3));
+            if(n !== null) { 
+                let val = parseFloat(n.replace(',','.'));
+                if(!isNaN(val)) {
+                    odoTotal = Math.max(0, val);
+                    atualizarTelaOdo();
+                }
+            }
+        }
+
+        // FÓRMULA DE HAVERSINE (PRECISÃO MÉTRICA)
         function calcularDist(lat1, lon1, lat2, lon2) {
             const R = 6371;
             const dLat = (lat2-lat1)*Math.PI/180;
             const dLon = (lon2-lon1)*Math.PI/180;
             const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; // KM
         }
 
-        // MANTER TELA ACESA
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
                 try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
             }
         }
 
-        // FLUXO DE RASTREIO
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
@@ -153,17 +200,27 @@
             });
 
             watchID = navigator.geolocation.watchPosition(pos => {
-                const speedMS = pos.coords.speed || 0;
-                const accuracy = pos.coords.accuracy || 0;
                 const lat = pos.coords.latitude;
                 const lng = pos.coords.longitude;
+                const accuracy = pos.coords.accuracy || 0;
+                const speedMS = pos.coords.speed || 0;
 
-                // Lógica Odômetro
-                if(ultimaCoord && accuracy < 30) {
-                    let d = calcularDist(ultimaCoord.lat, ultimaCoord.lng, lat, lng);
-                    if(d > 0.002) { odoTotal += d; atualizarTelaOdo(); }
+                // --- LÓGICA DO ODÔMETRO (FILTRADA) ---
+                if(ultimaCoordOdo) {
+                    // Calcula distância entre o ponto atual e o anterior
+                    let d = calcularDist(ultimaCoordOdo.lat, ultimaCoordOdo.lng, lat, lng);
+                    
+                    // FILTROS DE QUALIDADE:
+                    // 1. Precisão do GPS deve ser menor que 25 metros
+                    // 2. Distância deve ser maior que 3 metros (0.003km) para evitar drift parado
+                    // 3. Velocidade deve ser maior que 1km/h
+                    if(accuracy < 25 && d > 0.003 && (speedMS * 3.6) > 1) {
+                        odoTotal += d;
+                        atualizarTelaOdo();
+                    }
                 }
-                ultimaCoord = {lat, lng};
+                ultimaCoordOdo = {lat, lng};
+                // -------------------------------------
 
                 let velKMH = 0;
                 if (speedMS > 0.6 && accuracy < 35) {
@@ -181,7 +238,7 @@
                 db.ref('posicoes/' + num).set(coord);
                 db.ref('rastros/' + num).push(coord);
                 
-            }, (err) => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+            }, (err) => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 });
         }
 
         window.onload = function() {
@@ -189,13 +246,6 @@
             if (salvo) iniciarFluxoRastreio(salvo);
         };
 
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && localStorage.getItem('rally_carro_ativo')) {
-                solicitarWakeLock();
-            }
-        });
-
-        // BOTÃO INICIAR (RESTAURADO)
         document.getElementById('btnIniciar').onclick = async function() {
             const numRaw = document.getElementById('carro').value;
             const nomeRaw = document.getElementById('nome').value.trim();
@@ -203,29 +253,23 @@
             const num = parseInt(numRaw);
 
             if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-            if(num < 1 || num > 100) return alert("O número do carro deve ser entre 1 e 100!");
-
+            
             try {
                 const snapshot = await db.ref('competidores').once('value');
                 const competidores = snapshot.val() || {};
-
-                if (competidores[num]) {
-                    return alert("Este número de carro já está registrado!");
-                }
+                if (competidores[num]) return alert("Este número de carro já existe!");
 
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
-
             } catch (e) {
-                alert("Erro ao conectar ao banco de dados.");
+                alert("Erro de conexão.");
             }
         };
 
         function encerrarSessao() {
-            if(confirm("Deseja encerrar a sessão?")) {
+            if(confirm("Encerrar prova?")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
-                if (wakeLock) wakeLock.release();
                 localStorage.removeItem('rally_carro_ativo');
                 location.reload();
             }
