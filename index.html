@@ -53,7 +53,7 @@
                 <option>ANTIGOS</option>
             </select>
             <input type="number" id="carro" placeholder="Nº do Carro">
-            <button id="btnIniciar" onclick="validarERegistrar()">INICIAR PROVA</button>
+            <button id="btnIniciar">INICIAR PROVA</button>
         </div>
 
         <div id="ativo">
@@ -67,3 +67,124 @@
                 <input type="number" id="inputAjuste" step="0.001">
                 <p style="color: #555; font-size: 10px; margin: 10px 0;">Toque no número para editar</p>
                 <div class="odo-controls">
+                    <button class="btn-odo btn-minus" id="btnM1">-1m</button>
+                    <button class="btn-odo btn-reset" id="btnZerar">ZERAR</button>
+                    <button class="btn-odo btn-plus" id="btnP1">+1m</button>
+                </div>
+            </div>
+
+            <div id="msgGps" class="status-gps">● CONECTANDO...</div>
+            <button class="btn-sair" id="btnSair">Encerrar Sessão</button>
+        </div>
+    </div>
+
+    <script>
+        // 1. Configuração Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // 2. Variáveis Globais
+        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+
+        // 3. Funções de Cálculo e UI
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
+        }
+
+        // 4. Fluxo Principal
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
+
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').then(l => wakeLock = l).catch(()=>{});
+            }
+
+            db.ref(".info/connected").on("value", s => {
+                const m = document.getElementById('msgGps');
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+                m.className = s.val() ? "status-gps" : "status-gps status-offline";
+            });
+
+            watchID = navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude;
+                const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6;
+                document.getElementById('viewVel').innerText = vel.toFixed(1);
+
+                if (ultimaPos && vel > 1.2) {
+                    distTotal += calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                    atualizarDisplay();
+                }
+                ultimaPos = { lat, lng };
+
+                db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
+                db.ref('rastros/' + num).push({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        // 5. Listeners de Eventos (Onde os outros códigos falhavam)
+        document.getElementById('btnIniciar').addEventListener('click', async function() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+            if(!num || !nome) return alert("Preencha Nome e Carro!");
+            
+            try {
+                await db.ref('competidores/' + num).update({ nome, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) { alert("Erro de conexão."); }
+        });
+
+        document.getElementById('viewDist').addEventListener('click', function() {
+            this.style.display = 'none';
+            const i = document.getElementById('inputAjuste');
+            i.style.display = 'block';
+            i.value = distTotal.toFixed(3);
+            i.focus();
+        });
+
+        document.getElementById('inputAjuste').addEventListener('blur', function() {
+            const n = parseFloat(this.value);
+            if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
+            this.style.display = 'none';
+            document.getElementById('viewDist').style.display = 'block';
+        });
+
+        document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
+        document.getElementById('btnM1').onclick = () => { if(distTotal > 0) distTotal -= 0.001; atualizarDisplay(); };
+        document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
+        
+        document.getElementById('btnSair').onclick = () => {
+            if(confirm("Encerrar?")) { localStorage.clear(); location.reload(); }
+        };
+
+        window.onload = () => {
+            const logado = localStorage.getItem('rally_carro_ativo');
+            if (logado) iniciarFluxoRastreio(logado);
+        };
+    </script>
+</body>
+</html>
