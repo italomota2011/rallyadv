@@ -2,41 +2,33 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Analise de Rastro - Rally Pro</title>
+    <title>Analise de Rastro - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
         #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-        #map { flex-grow: 1; }
+        #map { flex-grow: 1; background: #222; }
         h2 { color: #e67e22; margin-top: 0; }
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; line-height: 1.6; margin-top: 10px; }
+        .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; line-height: 1.6; }
         .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
     </style>
 </head>
 <body>
     <div id="sidebar">
         <h2>🛰️ Telemetria</h2>
-        <select id="carSelect"><option>Carregando competidores...</option></select>
+        <select id="carSelect"><option value="">Carregando...</option></select>
         <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
-        
-        <div id="resumo">
-            <div class="stats-card">Selecione um carro para ver os detalhes da prova.</div>
-        </div>
-
+        <div id="resumo"><div class="stats-card">Selecione um carro.</div></div>
         <div class="legenda">
-            <strong>Legenda do Mapa:</strong><br>
-            <span style="color:#38a169">⬤</span> Waypoint Visitado<br>
-            <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-            <span style="color:#e67e22">━━</span> Rastro Realizado<br>
-            <span style="color:#e74c3c">⬤</span> Ponto de Infração<br>
-            <span style="color:#3498db">⬢</span> Radar de Velocidade
+            <strong>Legenda:</strong><br>
+            <span style="color:#38a169">⬤</span> Waypoint OK | <span style="color:#e74c3c">⬤</span> Perdido<br>
+            <span style="color:#e67e22">━━</span> Rastro | <span style="color:#3498db">⬢</span> Radar
         </div>
-        
-        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
 
     <div id="map"></div>
@@ -47,6 +39,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -58,27 +51,26 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}');
-
-        const map = L.map('map', { center: [-12.26, -38.96], zoom: 13, layers: [osm] });
-        L.control.layers({ "Mapa": osm, "Satélite": satelite }).addTo(map);
+        // Inicialização do Mapa
+        const map = L.map('map').setView([-12.26, -38.96], 13);
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         
         let layers = {
-            rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
+            rastro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
             percurso: L.featureGroup().addTo(map),
             penalidades: L.featureGroup().addTo(map)
         };
 
+        // Carregar Competidores
         db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione um Piloto...</option>';
             const data = snap.val();
+            let opt = '<option value="">Selecione um Piloto...</option>';
             if(data) {
                 Object.keys(data).sort((a,b)=>a-b).forEach(id => {
                     opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
                 });
-                document.getElementById('carSelect').innerHTML = opt;
             }
+            document.getElementById('carSelect').innerHTML = opt;
         });
 
         async function analisarRastro() {
@@ -98,17 +90,61 @@
                 const rastroData = snapRastro.val();
                 const config = snapConfig.val();
 
-                if(!rastroData) return alert("Sem dados de rastro para este carro.");
+                if(!rastroData) return alert("Sem dados de rastro.");
                 if(!config) return alert("Percurso não configurado.");
 
                 const rastroArr = Object.values(rastroData).sort((a, b) => a.ts - b.ts);
                 layers.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
 
-                let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
                 let totalPenalidades = 0;
+                let resumoHtml = `<div class="stats-card"><strong>Carro ${id}</strong><br>`;
 
                 config.features.forEach((feat, idx) => {
                     if(feat.geometry.type === 'Polygon') {
-                        L.geoJSON(feat, { style: { color: '#3498db', weight: 3, fillOpacity: 0.2 } }).addTo(layers.percurso);
+                        L.geoJSON(feat, { style: { color: '#3498db', fillOpacity: 0.2 } }).addTo(layers.percurso);
+                        const vMax = (feat.properties.velocidade || 60) * 1.1;
+                        let tempoExcesso = 0;
 
-                        const vMax = (feat.properties.velocidade || 60) * 1.1
+                        rastroArr.forEach((p, i) => {
+                            if (i === 0) return;
+                            const vAtual = parseFloat(p.vel) || 0;
+                            if(turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                if(vAtual > vMax) {
+                                    tempoExcesso += (p.ts - rastroArr[i-1].ts);
+                                    L.circleMarker([p.lat, p.lng], { radius: 5, color: 'red' }).addTo(layers.penalidades);
+                                }
+                            }
+                        });
+
+                        if(tempoExcesso > 10000) {
+                            const pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
+                            totalPenalidades += pts;
+                            resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: ${pts} pts</div>`;
+                        }
+                    } else if(feat.properties?.type === 'circle') {
+                        const coords = feat.geometry.coordinates;
+                        const raioM = feat.properties.radius;
+                        const visitou = rastroArr.some(pt => 
+                            turf.distance(turf.point([pt.lng, pt.lat]), turf.point([coords[0], coords[1]])) <= (raioM / 1000)
+                        );
+
+                        L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.3 }).addTo(layers.percurso);
+                        if(!visitou) {
+                            totalPenalidades += 20000;
+                            resumoHtml += `<div class="penalidade-item">❌ WP Perdido: 20k pts</div>`;
+                        }
+                    }
+                });
+
+                resumoHtml += `<br><b>Total:</b> -${totalPenalidades} pts</div>`;
+                document.getElementById('resumo').innerHTML = resumoHtml;
+                map.fitBounds(layers.rastro.getBounds(), { padding: [50, 50] });
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao processar.");
+            }
+        }
+    </script>
+</body>
+</html>
