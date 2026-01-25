@@ -9,7 +9,6 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
     <style>
-        /* Estilos da Tela */
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
             background-color: #1a202c; 
@@ -17,7 +16,7 @@
             margin: 0; 
             padding: 20px;
         }
-        .container { max-width: 1000px; margin: auto; }
+        .container { max-width: 900px; margin: auto; }
         
         .header-ranking { 
             text-align: center; 
@@ -57,10 +56,9 @@
         }
 
         .btn-pdf { background: #e67e22; color: white; }
-        .btn-voltar { background: #4a5568; color: white; text-decoration: none; display: inline-block; }
+        .btn-voltar { background: #4a5568; color: white; text-decoration: none; display: inline-block; text-align: center; }
         .btn:hover { opacity: 0.8; }
 
-        /* Estilo dos Cards de Categoria */
         .cat-card { 
             background: #2d3748; 
             border-radius: 12px; 
@@ -71,13 +69,13 @@
 
         h2 { color: #f6ad55; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
 
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: #2d3748; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th { background: #1a202c; color: #a0aec0; text-align: left; padding: 12px; font-size: 12px; }
         td { padding: 12px; border-bottom: 1px solid #4a5568; color: white; }
         
-        .col-right { text-align: right; }
-        .total-destaque { color: #63b3ed; font-weight: bold; font-size: 1.1rem; }
+        .col-right { text-align: right; font-weight: bold; }
         .penalidade { color: #fc8181; }
+        .bonus { color: #68d391; }
 
         #logoInvisivel { display: none; }
     </style>
@@ -88,7 +86,7 @@
         <div class="header-ranking">
             <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" width="70" alt="Logo">
             <h1>RANKING GERAL</h1>
-            <p>Pontuação Consolidada: GPS + Fotos</p>
+            <p>Classificação por Pontos de GPS e Fotos</p>
         </div>
 
         <div class="controles">
@@ -105,7 +103,6 @@
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossOrigin="anonymous">
 
     <script>
-        // Configuração Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
@@ -116,7 +113,6 @@
 
         const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
-        // Escutar dados do Firebase
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
             if (!data) {
@@ -127,110 +123,4 @@
             let htmlFull = "";
 
             categorias.forEach(cat => {
-                let lista = [];
-                for (let id in data) {
-                    if (data[id].categoria === cat) {
-                        const p = data[id];
-                        const ptsGps = p.pontos || 0;
-                        const ptsFotos = p.pontosFotos || 0;
-                        const total = ptsGps + ptsFotos;
-                        lista.push({ id, ...p, total });
-                    }
-                }
-
-                // Ordenação: Maior pontuação primeiro
-                lista.sort((a, b) => b.total - a.total);
-
-                if (lista.length > 0) {
-                    htmlFull += `
-                    <div class="cat-card">
-                        <h2>${cat}</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>POS</th>
-                                    <th>Nº</th>
-                                    <th>PILOTO</th>
-                                    <th class="col-right">GPS</th>
-                                    <th class="col-right">FOTOS</th>
-                                    <th class="col-right">TOTAL</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                    
-                    lista.forEach((c, idx) => {
-                        htmlFull += `
-                        <tr>
-                            <td>${idx + 1}º</td>
-                            <td>${c.id}</td>
-                            <td>${c.nome}</td>
-                            <td class="col-right penalidade">${c.pontos || 0}</td>
-                            <td class="col-right" style="color:#68d391">+${c.pontosFotos || 0}</td>
-                            <td class="col-right total-destaque">${c.total}</td>
-                        </tr>`;
-                    });
-
-                    htmlFull += `</tbody></table></div>`;
-                }
-            });
-
-            document.getElementById('rankingGeralContent').innerHTML = htmlFull || "Nenhum dado para as categorias selecionadas.";
-        });
-
-        // Função do PDF com Alinhamento Corrigido
-        async function gerarPDF() {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            const cidade = document.getElementById('inputCidade').value || "Resultado Oficial";
-            const img = document.getElementById('logoInvisivel');
-
-            // Cabeçalho do PDF
-            try { doc.addImage(img, 'PNG', 90, 10, 25, 25); } catch(e) {}
-            
-            doc.setFontSize(16);
-            doc.setTextColor(230, 126, 34);
-            doc.text("RANKING GERAL - RALLY", 105, 45, { align: "center" });
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-            doc.text(`${cidade} | Gerado em: ${new Date().toLocaleString()}`, 105, 52, { align: "center" });
-
-            let currentY = 60;
-
-            const tabelas = document.querySelectorAll('.cat-card');
-            
-            tabelas.forEach((card) => {
-                const titulo = card.querySelector('h2').innerText;
-                const tableEl = card.querySelector('table');
-
-                if (currentY > 250) { doc.addPage(); currentY = 20; }
-
-                doc.setFontSize(12);
-                doc.setTextColor(40, 40, 40);
-                doc.text(titulo, 14, currentY);
-
-                doc.autoTable({
-                    html: tableEl,
-                    startY: currentY + 5,
-                    theme: 'grid',
-                    headStyles: { fillColor: [230, 126, 34], halign: 'center' },
-                    styles: { fontSize: 8 },
-                    columnStyles: {
-                        0: { halign: 'center', cellWidth: 12 }, // POS
-                        1: { halign: 'center', cellWidth: 12 }, // Nº
-                        2: { halign: 'left' },                  // PILOTO
-                        3: { halign: 'right', cellWidth: 25 },  // GPS
-                        4: { halign: 'right', cellWidth: 25 },  // FOTOS
-                        5: { halign: 'right', cellWidth: 25, fontStyle: 'bold' } // TOTAL
-                    },
-                    margin: { left: 14, right: 14 }
-                });
-
-                currentY = doc.lastAutoTable.finalY + 15;
-            });
-
-            doc.save(`Ranking_${cidade.replace(/\s+/g, '_')}.pdf`);
-        }
-    </script>
-</body>
-</html>
+                let lista
