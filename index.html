@@ -18,10 +18,11 @@
     
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; text-align: center; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; text-align: center; position: relative; z-index: 100; }
         .logo { display: block; margin: 0 auto 15px auto; max-width: 120px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
+        button:disabled { background: #555; cursor: not-allowed; }
         
         #setup { display: block; } 
         #ativo { display: none; }
@@ -32,20 +33,4 @@
         .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px; }
         .btn-odo { padding: 12px 5px; font-size: 14px; margin: 0; }
         .btn-minus { background: #c0392b; }
-        .btn-plus { background: #27ae60; }
-        .btn-reset { background: #7f8c8d; }
-        
-        .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
-        .status-offline { color: #f1c40f !important; }
-        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <div class="card">
-        <div id="setup">
-            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" class="logo">
-            <h2 style="color:#e67e22; margin-top: 0;">REGISTRO</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto (Letras)">
-            <select id="categoria">
-                <option>BAIANO 4x2</option><option
+        .btn-plus { background: #27ae60
