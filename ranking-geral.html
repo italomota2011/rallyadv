@@ -2,17 +2,39 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Relatório de Prova - Ranking Geral</title>
+    <title>Relatório de Prova</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #1a202c; color: white; padding: 20px; margin: 0; }
-        .container { max-width: 1200px; margin: auto; }
+        .container { max-width: 1100px; margin: auto; }
         .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
         h1 { color: #e67e22; margin: 0; }
         .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px
+        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 2px solid #4a5568; font-size: 13px; text-transform: uppercase; }
+        td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; }
+        .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
+        .tempo-col { color: #cbd5e0; font-family: 'Courier New', monospace; font-weight: bold; }
+        .penal-col { color: #fc8181; } 
+        .foto-col { color: #63b3ed; } 
+        .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+        .btn { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; }
+        #logoInvisivel { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
+
+    <div class="header-ranking">
+        <h1>🏆 Classificação Final</h1>
+    </div>
+
+    <div class="cat-card">
+        <label>Nome da Etapa:</label>
+        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin: 10px 0; border-radius:5px; border:none; background
