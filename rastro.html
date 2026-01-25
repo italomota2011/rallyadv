@@ -124,22 +124,37 @@
                         }
                         
                         // Cálculo de Radares
+                        // Cálculo de Radares (ATUALIZADO COM FILTRO DE FLUTUAÇÃO)
                         else if(feat.geometry.type.includes('Polygon')) {
                             L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
-                            let vMax = (feat.properties.velocidade || 60) * 1.1;
+                            
+                            const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% de tolerância
                             let tempoExcesso = 0;
+
                             rastroArr.forEach((p, i) => {
-                                if(i > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if(p.vel > vMax) {
-                                        tempoExcesso += (p.ts - rastroArr[i-1].ts);
-                                        L.circleMarker([p.lat, p.lng], {radius:3, color:'red', fillOpacity: 1}).addTo(camadas.alertas);
+                                if(i > 0) {
+                                    const duration = p.ts - rastroArr[i-1].ts;
+
+                                    // FILTROS: duration < 30s (perda de sinal) e p.vel > 2 (carro parado)
+                                    if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                        tempoExcesso += duration;
+                                        
+                                        // Bolinha vermelha com detalhes ao clicar
+                                        L.circleMarker([p.lat, p.lng], {
+                                            radius: 4, 
+                                            color: 'red', 
+                                            fillColor: '#f03', 
+                                            fillOpacity: 1
+                                        }).addTo(camadas.alertas)
+                                          .bindPopup(`<b>EXCESSO</b><br>Vel: ${p.vel} km/h<br>Limite: ${feat.properties.velocidade} km/h`);
                                     }
                                 }
                             });
+
                             if(tempoExcesso > 10000) {
                                 let pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
                                 pen += pts;
-                                logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcesso/1000)}s (-${pts})<br>`;
+                                logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcesso/1000)}s (-${pts} pts)<br>`;
                             }
                         }
                     });
@@ -157,3 +172,4 @@
     </script>
 </body>
 </html>
+
