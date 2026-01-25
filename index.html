@@ -3,33 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Piloto Rally</title>
+    <title>Rally Tracker</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; border-top: 5px solid red; }
-        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; }
-        button { background: #0059FF; border: none; font-weight: bold; }
+        body { font-family: sans-serif; background: #121212; color: white; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .card { background: #1e1e1e; padding: 25px; border-radius: 15px; width: 90%; max-width: 350px; text-align: center; border-top: 5px solid #ff0000; }
+        input, button { width: 100%; padding: 15px; margin: 10px 0; border-radius: 8px; border: none; font-size: 16px; }
+        input { background: #252525; color: white; }
+        button { background: #0059FF; color: white; font-weight: bold; }
         #ativo { display: none; }
-        .dist { font-size: 3rem; font-weight: bold; margin: 10px 0; font-family: monospace; }
+        .vel { font-size: 3.5rem; font-weight: bold; margin: 10px 0; }
     </style>
 </head>
 <body>
 
 <div class="card">
     <div id="setup">
-        <h2>RALLY START</h2>
-        <input type="text" id="nome" placeholder="Seu Nome">
+        <h2>REGISTO DE LARGADA</h2>
+        <input type="text" id="nome" placeholder="Nome do Piloto">
         <input type="number" id="carro" placeholder="Nº do Carro">
-        <button onclick="checkAndStart()">INICIAR PROVA</button>
+        <button onclick="tentarIniciar()">INICIAR PROVA</button>
     </div>
 
     <div id="ativo">
-        <h3 id="vCarro">--</h3>
-        <div id="vVel" style="font-size: 2.5rem;">0.0</div>
-        <div class="dist" id="vDist">0.000</div>
-        <button onclick="localStorage.clear(); location.reload();" style="background:#444">SAIR</button>
+        <h3 id="txtCarro" style="color:#0059FF">CARRO --</h3>
+        <div class="vel" id="txtVel">0.0</div>
+        <p>KM/H</p>
+        <hr style="border:0; border-top:1px solid #333">
+        <button onclick="sair()" style="background:#444; font-size:12px">ENCERRAR</button>
     </div>
 </div>
 
@@ -42,40 +44,41 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    async function checkAndStart() {
+    async function tentarIniciar() {
         const num = document.getElementById('carro').value;
         const nome = document.getElementById('nome').value;
-        if(!num || !nome) return alert("Preencha tudo!");
+        if(!num || !nome) return alert("Preencha os dados!");
 
-        // VERIFICA SE O ADMIN ABRIU A PROVA
+        // Verifica se o admin abriu
         const snap = await db.ref('configuracoes/provaAtiva').once('value');
-        if(!snap.val()) {
-            alert("Aguarde a liberação do administrador!");
-            return;
-        }
+        if(!snap.val()) return alert("PROVA FECHADA!\nAguarde a autorização do diretor de prova.");
 
         localStorage.setItem('rally_carro', num);
-        start(num);
+        iniciar(num, nome);
     }
 
-    function start(num) {
+    function iniciar(num, nome) {
         document.getElementById('setup').style.display = 'none';
         document.getElementById('ativo').style.display = 'block';
-        document.getElementById('vCarro').innerText = "CARRO " + num;
+        document.getElementById('txtCarro').innerText = "CARRO " + num;
+        
+        db.ref('competidores/' + num).update({ nome: nome, pontos: 0 });
 
         navigator.geolocation.watchPosition(p => {
             const lat = p.coords.latitude, lng = p.coords.longitude;
             const vel = (p.coords.speed || 0) * 3.6;
-            document.getElementById('vVel').innerText = vel.toFixed(1) + " KM/H";
+            document.getElementById('txtVel').innerText = vel.toFixed(1);
             
             db.ref('posicoes/'+num).set({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
             db.ref('rastros/'+num).push({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
-        }, null, {enableHighAccuracy: true});
+        }, null, { enableHighAccuracy: true });
     }
+
+    function sair() { if(confirm("Sair?")) { localStorage.clear(); location.reload(); } }
 
     window.onload = () => {
         const c = localStorage.getItem('rally_carro');
-        if(c) start(c);
+        if(c) iniciar(c, "Piloto");
     };
 </script>
 </body>
