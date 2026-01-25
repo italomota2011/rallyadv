@@ -3,20 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rally - Tracker Pro</title>
+    <title>Rally - Tracker Pro+</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
         .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; }
+        
         .logo { display: block; margin: 0 auto 20px auto; max-width: 150px; height: auto; }
+
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
+        
         .tracking { text-align: center; display: none; }
-        .status-gps { color: #2ecc71; font-weight: bold; font-size: 14px; margin-top: 10px; }
-        .offline { color: #e74c3c !important; }
-        .wake-lock-status { color: #888; font-size: 11px; margin-top: 5px; }
-        .btn-sair { background: transparent; color: #666; font-size: 12px; margin-top: 25px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
+        
+        /* Estilos de Status de Conexão */
+        .status-container { margin-top: 15px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.2); }
+        .status-gps { color: #2ecc71; font-weight: bold; font-size: 14px; }
+        
+        /* Classe para quando estiver Offline */
+        .status-offline { color: #f1c40f !important; } /* Amarelo/Laranja para atenção */
+        
+        .aviso-offline { display: none; font-size: 11px; color: #f1c40f; margin-top: 5px; text-transform: uppercase; }
+
+        .wake-lock-status { color: #666; font-size: 11px; margin-top: 8px; }
+        .btn-sair { background: transparent; color: #444; font-size: 12px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
     </style>
 </head>
 <body>
@@ -38,14 +49,18 @@
             <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
             <div id="viewVel" style="font-size: 3.5rem; font-weight: bold;">0.0</div>
             <p>KM/H</p>
-            <div id="msgGps" class="status-gps">● TRANSMITINDO GPS</div>
+            
+            <div class="status-container">
+                <div id="msgGps" class="status-gps">● CONECTADO</div>
+                <div id="detalheOffline" class="aviso-offline">Sinal fraco: Dados salvos no celular, não feche o sistema</div>
+            </div>
+
             <div id="statusTela" class="wake-lock-status">Tela Bloqueada (Acesa)</div>
-            <button class="btn-sair" onclick="encerrarSessao()">Sair / Novo Registro</button>
+            <button class="btn-sair" onclick="encerrarSessao()">Encerrar Sessão</button>
         </div>
     </div>
 
     <script>
-        // Configuração
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             authDomain: "cronometro-rally.firebaseapp.com",
@@ -53,21 +68,18 @@
             projectId: "cronometro-rally",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
         let wakeLock = null;
         let watchID = null;
 
-        // Função para manter a tela acesa
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
                 try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
             }
         }
 
-        // Função de Rastreio
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
@@ -75,60 +87,71 @@
             
             solicitarWakeLock();
 
-            // Monitor de Conexão
+            // LÓGICA DE MONITORAMENTO DE INTERNET
             db.ref(".info/connected").on("value", (snap) => {
                 const msg = document.getElementById('msgGps');
+                const detalhe = document.getElementById('detalheOffline');
                 if (snap.val() === true) {
-                    msg.innerText = "● TRANSMITINDO GPS";
-                    msg.classList.remove('offline');
+                    msg.innerText = "● TRANSMITINDO AO VIVO";
+                    msg.classList.remove('status-offline');
+                    detalhe.style.display = 'none';
                 } else {
-                    msg.innerText = "○ SINAL DE INTERNET PERDIDO";
-                    msg.classList.add('offline');
+                    msg.innerText = "○ SEM SINAL DE INTERNET";
+                    msg.classList.add('status-offline');
+                    detalhe.style.display = 'block';
                 }
             });
 
             watchID = navigator.geolocation.watchPosition(pos => {
                 const vel = (pos.coords.speed || 0) * 3.6;
                 document.getElementById('viewVel').innerText = vel.toFixed(1);
-                const coord = { lat: pos.coords.latitude, lng: pos.coords.longitude, vel: vel.toFixed(1), ts: Date.now() };
+                
+                const coord = { 
+                    lat: pos.coords.latitude, 
+                    lng: pos.coords.longitude, 
+                    vel: vel.toFixed(1), 
+                    ts: Date.now() 
+                };
+
+                // O Firebase cuida da fila offline automaticamente
                 db.ref('posicoes/' + num).set(coord);
                 db.ref('rastros/' + num).push(coord);
-            }, null, { enableHighAccuracy: true });
+                
+            }, null, { enableHighAccuracy: true, maximumAge: 0 });
         }
 
-        // --- INICIALIZAÇÃO SEGURA ---
         window.onload = function() {
             const salvo = localStorage.getItem('rally_carro_ativo');
-            if (salvo) {
-                iniciarFluxoRastreio(salvo);
-            }
+            if (salvo) iniciarFluxoRastreio(salvo);
         };
 
-        // Botão Iniciar
         document.getElementById('btnIniciar').onclick = async function() {
             const num = document.getElementById('carro').value;
             const nome = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
 
             if(!nome || !num) return alert("Preencha tudo!");
-            if(num < 1 || num > 100) return alert("Número inválido (1-100)");
 
             try {
                 const snap = await db.ref('competidores/' + num).once('value');
-                if(snap.exists()) return alert("Este número de carro já está em uso!");
+                if(snap.exists()) return alert("Número já em uso!");
 
                 await db.ref('competidores/' + num).set({ nome, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
-            } catch (e) { alert("Erro ao conectar."); }
+            } catch (e) { alert("Erro de conexão."); }
         };
 
         function encerrarSessao() {
-            if(confirm("Encerrar prova?")) {
+            if(confirm("Deseja mesmo encerrar o rastreio?")) {
                 localStorage.removeItem('rally_carro_ativo');
                 location.reload();
             }
         }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') solicitarWakeLock();
+        });
     </script>
 </body>
 </html>
