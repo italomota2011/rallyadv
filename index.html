@@ -70,41 +70,15 @@
             <div id="viewVel" style="font-size: 4rem; font-weight: bold; line-height: 1;">0.0</div>
             <p style="margin-top: 5px; color: #888; font-size: 12px;">KM/H</p>
 
-            /* Estilos do Odômetro Ampliado */
-.odo-box { 
-    margin-top: 20px; 
-    padding: 20px 10px; /* Mais espaço interno */
-    border-top: 1px solid #333; 
-    background: rgba(0,0,0,0.4); /* Fundo um pouco mais escuro para contraste */
-    border-radius: 15px; 
-}
-
-.odo-label { 
-    font-size: 14px; /* Rótulo maior */
-    color: #aaa; 
-    text-transform: uppercase; 
-    letter-spacing: 2px; 
-}
-
-.odo-val { 
-    font-size: 5.5rem; /* Aumentado drasticamente (era 3rem) */
-    font-weight: 900; 
-    color: #f1c40f; 
-    margin: 10px 0; 
-    cursor: pointer; 
-    font-family: 'Courier New', monospace; /* Fonte monoespaçada ajuda na leitura */
-    text-shadow: 2px 2px 10px rgba(0,0,0,0.5); /* Sombra para dar profundidade */
-}
-
-.btn-mini { 
-    padding: 15px; /* Botões maiores para facilitar o toque com o carro andando */
-    font-size: 18px; 
-    background: #333; 
-    margin-bottom: 0; 
-    width: auto; 
-    flex: 1; 
-    border: 1px solid #444; 
-}
+            <div class="odo-box">
+                <span class="odo-label">Odômetro Parcial</span>
+                <div id="displayOdo" class="odo-val" onclick="ajusteManualOdo()">0.000</div>
+                <div class="odo-btns">
+                    <button class="btn-mini" onclick="alterarOdo(-0.001)">-1m</button>
+                    <button class="btn-mini" onclick="zerarOdo()" style="background:#b30000; color: white;">ZERAR</button>
+                    <button class="btn-mini" onclick="alterarOdo(0.001)">+1m</button>
+                </div>
+            </div>
             
             <div class="status-container">
                 <div id="msgGps" class="status-gps">● CONECTANDO...</div>
