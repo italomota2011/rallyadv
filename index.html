@@ -5,56 +5,100 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rally Tracker Pro</title>
 
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
-    <link rel="apple-touch-icon" href="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s">
-    <meta name="mobile-web-app-capable" content="yes">
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; text-align: center; }
+        input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
+        #setup { display: block; }
+        #ativo { display: none; }
+        .status-gps { color: #2ecc71; font-weight: bold; font-size: 14px; margin-top: 10px; }
+    </style>
 
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    
-    <style>
-        body { 
-            font-family: sans-serif; 
-            background: #121212; 
-            color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            margin: 0; 
-            overflow: hidden; 
-        }
-        .card { 
-            background: #1e1e1e; 
-            padding: 25px; 
-            border-radius: 12px; 
-            width: 90%; 
-            max-width: 380px; 
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5); 
-            border-top: 5px solid #e67e22; 
-            text-align: center;
-        }
-        
-        .logo { display: block; margin: 0 auto 20px auto; max-width: 150px; height: auto; }
+</head>
+<body>
 
-        input, select, button { 
-            width: 100%; 
-            padding: 14px; 
-            margin-bottom: 15px; 
-            border-radius: 8px; 
-            border: 1px solid #333; 
-            background: #252525; 
-            color: white; 
-            font-size: 16px; 
-            box-sizing: border-box; 
+    <div class="card">
+        <div id="setup">
+            <h2 style="color:#e67e22;">REGISTRO</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto">
+            <select id="categoria">
+                <option>BAIANO 4x2</option>
+                <option>BAIANO 4x4</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro">
+            <button onclick="processarRegistro()">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo">
+            <h2 id="viewCarro" style="color:#e67e22;">Carro --</h2>
+            <div id="viewVel" style="font-size: 4rem; font-weight: bold;">0.0</div>
+            <p>KM/H</p>
+            <div id="msgGps" class="status-gps">● AGUARDANDO...</div>
+            <button style="background:#444; margin-top:20px;" onclick="encerrarSessao()">Encerrar / Sair</button>
+        </div>
+    </div>
+
+    <script>
+        // Configuração
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let watchID = null;
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "Carro " + num;
+
+            watchID = navigator.geolocation.watchPosition(pos => {
+                const vel = (pos.coords.speed || 0) * 3.6;
+                document.getElementById('viewVel').innerText = vel.toFixed(1);
+                
+                db.ref('posicoes/' + num).set({
+                    lat: pos.coords.latitude, 
+                    lng: pos.coords.longitude, 
+                    vel: vel.toFixed(1), 
+                    ts: Date.now() 
+                });
+                document.getElementById('msgGps').innerText = "● TRANSMITINDO";
+            }, null, { enableHighAccuracy: true });
         }
-        button { 
-            background: #e67e22; 
-            border: none; 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: 0.3s; 
+
+        async function processarRegistro() {
+            const nome = document.getElementById('nome').value;
+            const num = document.getElementById('carro').value;
+            if(!nome || !num) return alert("Preencha tudo!");
+
+            try {
+                await db.ref('competidores/' + num).set({ nome: nome, categoria: document.getElementById('categoria').value });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) { alert("Erro ao conectar!"); }
         }
-        button:active { transform: scale(0.98);
+
+        function encerrarSessao() {
+            if(confirm("Sair?")) {
+                if(watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.removeItem('rally_carro_ativo');
+                location.reload();
+            }
+        }
+
+        window.onload = () => {
+            const salvo = localStorage.getItem('rally_carro_ativo');
+            if(salvo) iniciarFluxoRastreio(salvo);
+        }
+    </script>
+</body>
+</html>
