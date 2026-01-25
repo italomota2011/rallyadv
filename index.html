@@ -1,145 +1,104 @@
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rally Tracker Pro</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; text-align: center; border-top: 5px solid #FF0000; }
+        input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
+        button { background: #0059FF; border: none; font-weight: bold; }
+        .odo-distancia { font-size: 3.2rem; font-weight: bold; font-family: monospace; }
+        .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        #ativo { display: none; }
+    </style>
+</head>
+<body>
 
-    let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+    <div class="card">
+        <div id="setup">
+            <h2 style="color:#0059FF;">RALLY DE AVENTURA</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+                <option>ANTIGOS</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro (1-100)">
+            <button id="btnIniciar">INICIAR PROVA</button>
+        </div>
 
-    function calcularDistancia(lat1, lon1, lat2, lon2) {
-        const R = 6371;
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
-        return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
-    }
+        <div id="ativo">
+            <h2 id="viewCarro" style="color:#e67e22;">--</h2>
+            <div id="viewVel" style="font-size: 3rem; font-weight: bold;">0.0</div>
+            <p style="color: #888;">KM/H</p>
+            <div id="viewDist" class="odo-distancia">0.000</div>
+            <div class="odo-controls">
+                <button id="btnM1" style="background:#c0392b">-1m</button>
+                <button id="btnZerar" style="background:#7f8c8d">ZERAR</button>
+                <button id="btnP1" style="background:#27ae60">+1m</button>
+            </div>
+            <div id="msgGps" style="color: #2ecc71; margin-top:10px;">AGUARDANDO GPS...</div>
+            <button id="btnSair" style="background:none; text-decoration:underline; font-size:12px;">Sair</button>
+        </div>
+    </div>
 
-    function atualizarDisplay() {
-        document.getElementById('viewDist').innerText = distTotal.toFixed(3);
-        localStorage.setItem('rally_distancia', distTotal);
-    }
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-    function iniciarFluxoRastreio(num) {
-        document.getElementById('setup').style.display = 'none';
-        document.getElementById('ativo').style.display = 'block';
-        document.getElementById('viewCarro').innerText = "CARRO " + num;
+        let watchID = null, distTotal = 0, ultimaPos = null;
 
-        const salva = localStorage.getItem('rally_distancia');
-        if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
-
-        if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').catch(()=>{});
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        db.ref(".info/connected").on("value", s => {
-            const m = document.getElementById('msgGps');
-            m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
-        });
-
-        watchID = navigator.geolocation.watchPosition(p => {
-            const lat = p.coords.latitude;
-            const lng = p.coords.longitude;
-            const vel = (p.coords.speed || 0) * 3.6;
-            const accuracy = p.coords.accuracy;
-
-            document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
-
-            // --- FILTRO DE ESTABILIDADE (MANTIDO INTACTO) ---
-            if (accuracy < 30) {
-                if (ultimaPos && vel > 3.0) {
-                    const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (trecho > 0.005 && trecho < 0.2) {
-                        distTotal += trecho;
-                        atualizarDisplay();
-                    }
-                }
-                ultimaPos = { lat, lng };
-            }
-            // ------------------------------------------------
-
-            db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
-        }, null, { enableHighAccuracy: true });
-    }
-
-    document.getElementById('btnIniciar').onclick = async function() {
-        const numRaw = document.getElementById('carro').value;
-        const nome = document.getElementById('nome').value.trim();
-        const cat = document.getElementById('categoria').value;
-
-        if(!numRaw || !nome) {
-            alert("Por favor, preencha o Nome e o Número do Carro!");
-            return;
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
         }
 
-        // Converte para número puro (ex: "01" vira 1)
-        const numCarro = parseInt(numRaw, 10);
-
-        if (isNaN(numCarro) || numCarro <= 0 || numCarro > 100) {
-            alert("O número do carro deve estar entre 1 e 100!");
-            return;
-        }
-
-        try {
-            const snapshot = await db.ref('competidores').once('value');
-            const competidores = snapshot.val();
-
-            if (competidores) {
-                for (let id in competidores) {
-                    // Verifica duplicidade comparando como números
-                    if (parseInt(id, 10) === numCarro) {
-                        alert("Este número de carro (" + numCarro + ") já está em uso!");
-                        return;
-                    }
-                    if (competidores[id].nome.toLowerCase() === nome.toLowerCase()) {
-                        alert("Este nome de piloto já está cadastrado!");
-                        return;
-                    }
-                }
-            }
-
-            await db.ref('competidores/' + numCarro).set({ nome, categoria: cat });
-            localStorage.setItem('rally_carro_ativo', numCarro);
-            iniciarFluxoRastreio(numCarro);
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
             
-        } catch (e) {
-            console.error(e);
-            iniciarFluxoRastreio(numCarro);
-        }
-    };
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
 
-    // Handlers de Odômetro (MANTIDOS INTACTOS)
-    document.getElementById('viewDist').onclick = function() {
-        this.style.display = 'none';
-        const i = document.getElementById('inputAjuste');
-        i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
-    };
+            watchID = navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude;
+                const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6;
+                const accuracy = p.coords.accuracy;
 
-    document.getElementById('inputAjuste').onblur = function() {
-        const n = parseFloat(this.value);
-        if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
-        this.style.display = 'none'; document.getElementById('viewDist').style.display = 'block';
-    };
+                document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
 
-    document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
-    document.getElementById('btnM1').onclick = () => { if(distTotal > 0.001) distTotal -= 0.001; atualizarDisplay(); };
-    document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
-    
-    document.getElementById('btnSair').onclick = () => {
-        if(confirm("Encerrar Sessão?")) { 
-            if(watchID) navigator.geolocation.clearWatch(watchID);
-            localStorage.clear(); 
-            location.reload(); 
-        }
-    };
+                // --- SEU FILTRO DE ESTABILIDADE ORIGINAL ---
+                if (accuracy < 30) {
+                    if (ultimaPos && vel > 3.0) {
+                        const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                        if (trecho > 0.005 && trecho < 0.2) {
+                            distTotal += trecho;
+                            atualizarDisplay();
+                        }
+                    }
+                    ultimaPos = { lat, lng };
+                }
+                // --------------------------------------------
 
-    window.onload = () => {
-        const logado = localStorage.getItem('rally_carro_ativo');
-        if (logado) iniciarFluxoRastreio(logado);
-    };
-</script>
+                db.ref('posicoes
