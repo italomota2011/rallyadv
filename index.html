@@ -126,11 +126,9 @@
             watchID = navigator.geolocation.watchPosition(pos => {
     // 1. Pega a velocidade original e a precisão do sinal
     const speedMS = pos.coords.speed || 0;
-    const accuracy = pos.coords.accuracy || 0; // Precisão em metros
+    const accuracy = pos.coords.accuracy || 0;
 
-    // 2. FILTRO DE FLUTUAÇÃO:
-    // Se a velocidade for menor que 0.6 m/s (aprox. 2 km/h), consideramos parado (0).
-    // Se a precisão for ruim (ex: maior que 30 metros), ignoramos para evitar saltos.
+    // 2. FILTRO DE FLUTUAÇÃO
     let velKMH = 0;
     if (speedMS > 0.6 && accuracy < 35) {
         velKMH = speedMS * 3.6;
@@ -139,22 +137,45 @@
     // 3. Atualiza a tela para o competidor
     document.getElementById('viewVel').innerText = velKMH.toFixed(1);
     
-    // 4. Salva os dados filtrados
+    // 4. Cria o objeto de coordenadas
     const coord = { 
         lat: pos.coords.latitude, 
         lng: pos.coords.longitude, 
         vel: parseFloat(velKMH.toFixed(1)), 
         ts: Date.now(),
-        acc: accuracy.toFixed(1) // Opcional: guardar a precisão ajuda a analisar erros depois
+        acc: accuracy.toFixed(1)
     };
 
-    
+    // 5. ENVIO PARA O FIREBASE (Nuvem)
+    db.ref('posicoes/' + num).set(coord);
+    db.ref('rastros/' + num).push(coord);
 
-                // Envio de dados
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-                
-            }, (err) => {
+    // 6. BACKUP LOCAL (Armazenamento Interno do Celular)
+    try {
+        // Busca o histórico já salvo ou cria um novo array vazio
+        let historicoLocal = JSON.parse(localStorage.getItem('rally_backup_rastro') || "[]");
+        
+        // Adiciona a nova posição
+        historicoLocal.push(coord);
+
+        // Mantém apenas os últimos 1000 pontos para não pesar o navegador (aprox. 15-20 min de rastro)
+        if (historicoLocal.length > 1000) {
+            historicoLocal.shift(); 
+        }
+
+        // Salva de volta no armazenamento do celular
+        localStorage.setItem('rally_backup_rastro', JSON.stringify(historicoLocal));
+    } catch (e) {
+        console.error("Erro ao salvar backup local:", e);
+    }
+    
+}, error => {
+    console.error(error);
+}, {
+    enableHighAccuracy: true,
+    maximumAge: 3000,
+    timeout: 10000
+});, (err) => {
                 console.error("Erro GPS:", err);
             }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         }
@@ -215,6 +236,7 @@
     </script>
 </body>
 </html>
+
 
 
 
