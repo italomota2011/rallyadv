@@ -117,7 +117,7 @@
 
             db.ref(".info/connected").on("value", s => {
                 const m = document.getElementById('msgGps');
-                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE - NÃO FECHE O SISTEMA";
             });
 
             watchID = navigator.geolocation.watchPosition(p => {
@@ -224,6 +224,7 @@
     </script>
 </body>
 </html>
+
 
 
 
