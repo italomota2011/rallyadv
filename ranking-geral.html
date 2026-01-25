@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Relatório de Prova</title>
+    <title>Relatório de Prova - Ranking por Tempo</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
@@ -18,9 +18,10 @@
         th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
         td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
         .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
+        .tempo-destaque { color: #48bb78; font-family: monospace; font-weight: bold; font-size: 1.1rem; }
         .penal-col { color: #fc8181; }
         .foto-col { color: #63b3ed; }
-        .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+        .pontos-col { text-align: right; color: #cbd5e0; }
         #logoInvisivel { display: none; }
     </style>
 </head>
@@ -30,19 +31,19 @@
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
     <div class="header-ranking">
-        <h1>🏆 Classificação Final (GPS + Fotos)</h1>
+        <h1>🏆 Classificação por Tempo (Desempate: Pontos)</h1>
     </div>
 
     <div class="cat-card" style="background: #2d3748; padding: 15px; margin-bottom: 20px;">
         <label>Nome da Etapa:</label>
         <input type="text" id="inputCidade" style="width:100%; padding:10px; margin-top:5px; border-radius:5px; border:none;" placeholder="Ex: Etapa de Verão">
         <div style="margin-top: 15px; display: flex; gap: 10px;">
-            <button class="btn" style="background:#4a5568; color:white; padding:10px; border:none; cursor:pointer;" onclick="location.href='admin.html'">VOLTAR</button>
-            <button class="btn" style="background:#38a169; color:white; padding:10px; border:none; cursor:pointer;" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
+            <button style="background:#4a5568; color:white; padding:10px; border:none; cursor:pointer; border-radius:5px;" onclick="location.href='admin.html'">VOLTAR</button>
+            <button style="background:#38a169; color:white; padding:10px; border:none; cursor:pointer; border-radius:5px;" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
         </div>
     </div>
 
-    <div id="rankingContent">Calculando pontuações combinadas...</div>
+    <div id="rankingContent">Processando classificação...</div>
 </div>
 
 <script>
@@ -53,83 +54,106 @@
         projectId: "cronometro-rally",
         appId: "1:341731891354:web:d0c34265be68015e98a723"
     };
-    
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
     const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
     db.ref('competidores').on('value', snap => {
-        try {
-            const data = snap.val();
-            if(!data) {
-                document.getElementById('rankingContent').innerHTML = "Sem dados no banco de dados.";
-                return;
-            }
+        const data = snap.val();
+        if(!data) return document.getElementById('rankingContent').innerHTML = "Sem dados.";
 
-            let html = "";
-            categorias.forEach(cat => {
-                let list = [];
-                for(let id in data) {
-                    const p = data[id];
-                    if(p && p.categoria === cat) {
-                        const pontosGPS = Number(p.pontos) || 0; 
-                        const bonusFotos = Number(p.pontosFotos) || 0;
-                        const totalFinal = pontosGPS + bonusFotos;
-                        
-                        // Busca o campo tempoFormatado que você usa no arquivo tempos.html
-                        const tempoProva = p.tempoFormatado || "--:--:--";
+        let html = "";
+        categorias.forEach(cat => {
+            let list = [];
+            for(let id in data) {
+                const p = data[id];
+                if(p.categoria === cat) {
+                    const pontosGPS = Number(p.pontos) || 0;
+                    const bonusFotos = Number(p.pontosFotos) || 0;
+                    const totalFinal = pontosGPS + bonusFotos;
+                    
+                    // Se não tiver tempo, define um valor muito alto para ficar no fim da lista
+                    const tempoMs = p.tempoTotalMs || 999999999; 
+                    const tempoTexto = p.tempoFormatado || "--:--:--";
 
-                        list.push({ 
-                            id: id, 
-                            nome: p.nome || "Piloto sem nome",
-                            penalidadeGPS: 0 - pontosGPS, 
-                            bonusFotos: bonusFotos, 
-                            totalFinal: totalFinal,
-                            tempoTotal: tempoProva
-                        });
-                    }
-                }
-                
-                list.sort((a, b) => b.totalFinal - a.totalFinal);
-
-                if(list.length > 0) {
-                    html += `
-                    <div class="cat-card">
-                        <h2>Categoria: ${cat}</h2>
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th class="pos-col">Pos</th>
-                                    <th>Nº</th>
-                                    <th>Piloto</th>
-                                    <th>Tempo Total</th>
-                                    <th>Penal. GPS</th>
-                                    <th>Bônus Fotos</th>
-                                    <th style="text-align: right;">TOTAL FINAL</th>
-                                </tr>
-                            </thead>
-                            <tbody>`;
-                    list.forEach((p, i) => {
-                        html += `
-                        <tr>
-                            <td class="pos-col">${i + 1}º</td>
-                            <td><b>${p.id}</b></td>
-                            <td>${p.nome}</td>
-                            <td style="color: #cbd5e0; font-family: monospace;">${p.tempoTotal}</td>
-                            <td class="penal-col">-${p.penalidadeGPS.toLocaleString('pt-BR')}</td>
-                            <td class="foto-col">+${p.bonusFotos.toLocaleString('pt-BR')}</td>
-                            <td class="pontos-col">${p.totalFinal.toLocaleString('pt-BR')} pts</td>
-                        </tr>`;
+                    list.push({ 
+                        id, 
+                        ...p, 
+                        totalFinal,
+                        tempoMs,
+                        tempoTexto
                     });
-                    html += `</tbody></table></div>`;
                 }
+            }
+            
+            // LÓGICA DE CLASSIFICAÇÃO:
+            list.sort((a, b) => {
+                // 1º Critério: Menor Tempo (tempoMs)
+                if (a.tempoMs !== b.tempoMs) {
+                    return a.tempoMs - b.tempoMs;
+                }
+                // 2º Critério (Desempate): Maior Pontuação (totalFinal)
+                return b.totalFinal - a.totalFinal;
             });
-            document.getElementById('rankingContent').innerHTML = html || "Nenhum competidor encontrado para as categorias.";
-        } catch (err) {
-            console.error(err);
-            document.getElementById('rankingContent').innerHTML = "Erro ao processar dados: " + err.message;
-        }
+
+            if(list.length > 0) {
+                html += `
+                <div class="cat-card">
+                    <h2>Categoria: ${cat}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th class="pos-col">Pos</th>
+                                <th>Nº</th>
+                                <th>Piloto</th>
+                                <th>TEMPO TOTAL</th>
+                                <th>Penal. GPS</th>
+                                <th>Bônus Fotos</th>
+                                <th style="text-align: right;">PONTOS (Desempate)</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+                list.forEach((p, i) => {
+                    html += `
+                    <tr>
+                        <td class="pos-col">${i + 1}º</td>
+                        <td><b>${p.id}</b></td>
+                        <td>${p.nome}</td>
+                        <td class="tempo-destaque">${p.tempoTexto}</td>
+                        <td class="penal-col">${(p.pontos || 0).toLocaleString('pt-BR')}</td>
+                        <td class="foto-col">+${(p.pontosFotos || 0).toLocaleString('pt-BR')}</td>
+                        <td class="pontos-col">${p.totalFinal.toLocaleString('pt-BR')} pts</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+        });
+        document.getElementById('rankingContent').innerHTML = html;
     });
 
-    async function export
+    async function exportarPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF('p', 'mm', 'a4');
+        const cidade = document.getElementById('inputCidade').value || "Ranking por Tempo";
+        const img = document.getElementById('logoInvisivel');
+
+        try { doc.addImage(img, 'JPEG', 85, 10, 40, 30); } catch (e) {}
+        doc.setFontSize(18);
+        doc.text("RELATÓRIO DE PROVA", 105, 50, { align: "center" });
+
+        let finalY = 65;
+        document.querySelectorAll('.cat-card').forEach((card) => {
+            if(card.querySelector('h2')) {
+                const titulo = card.querySelector('h2').innerText;
+                const tabela = card.querySelector('table');
+                doc.text(titulo, 14, finalY);
+                doc.autoTable({ html: tabela, startY: finalY + 5, theme: 'striped', styles: { fontSize: 8 } });
+                finalY = doc.lastAutoTable.finalY + 15;
+            }
+        });
+        doc.save(`Ranking_Tempo_${cidade}.pdf`);
+    }
+</script>
+</body>
+</html>
