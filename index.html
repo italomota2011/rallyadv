@@ -11,8 +11,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Rally Tracker">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
-    <meta name="mobile-web-app-capable" content="yes">
-
+    
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
@@ -22,10 +21,8 @@
         .logo { display: block; margin: 0 auto 15px auto; max-width: 320px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; color: white; }
-        
         #setup { display: block; } 
         #ativo { display: none; }
-        
         .odo-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
         .odo-distancia { font-size: 3.2rem; font-weight: bold; color: #fff; line-height: 1; cursor: pointer; font-family: monospace; }
         #inputAjuste { display: none; background: #fff; color: #000; font-size: 2rem; font-weight: bold; text-align: center; margin: 0 auto 10px; width: 100%; border: none; }
@@ -34,7 +31,6 @@
         .btn-minus { background: #c0392b; }
         .btn-plus { background: #27ae60; }
         .btn-reset { background: #7f8c8d; }
-        
         .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
         .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; width: auto; }
     </style>
@@ -59,7 +55,6 @@
             <h2 id="viewCarro" style="color:#e67e22; margin-bottom: 5px; font-size: 16px;">--</h2>
             <div id="viewVel" style="font-size: 3rem; font-weight: bold;">0.0</div>
             <p style="margin: 0; color: #888; font-size: 12px; margin-bottom: 10px;">KM/H</p>
-            
             <div class="odo-container">
                 <div style="color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">Distância (KM)</div>
                 <div id="viewDist" class="odo-distancia">0.000</div>
@@ -70,7 +65,6 @@
                     <button class="btn-odo btn-plus" id="btnP1">+1m</button>
                 </div>
             </div>
-
             <div id="msgGps" class="status-gps">● AGUARDANDO GPS...</div>
             <button class="btn-sair" id="btnSair">Encerrar Sessão</button>
         </div>
@@ -87,7 +81,7 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+        let watchID = null, distTotal = 0, ultimaPos = null;
 
         function calcularDistancia(lat1, lon1, lat2, lon2) {
             const R = 6371;
@@ -111,9 +105,7 @@
             const salva = localStorage.getItem('rally_distancia');
             if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
 
-            if ('wakeLock' in navigator) {
-                navigator.wakeLock.request('screen').catch(()=>{});
-            }
+            if ('wakeLock' in navigator) { navigator.wakeLock.request('screen').catch(()=>{}); }
 
             db.ref(".info/connected").on("value", s => {
                 const m = document.getElementById('msgGps');
@@ -121,30 +113,21 @@
             });
 
             watchID = navigator.geolocation.watchPosition(p => {
-                const lat = p.coords.latitude;
-                const lng = p.coords.longitude;
-                const vel = (p.coords.speed || 0) * 3.6;
-                const accuracy = p.coords.accuracy;
+                const lat = p.coords.latitude; const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6; const accuracy = p.coords.accuracy;
 
                 document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
-
-                // FILTRO DE ESTABILIDADE
                 if (accuracy < 30) {
                     if (ultimaPos && vel > 3.0) {
                         const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                        if (trecho > 0.005 && trecho < 0.2) {
-                            distTotal += trecho;
-                            atualizarDisplay();
-                        }
+                        if (trecho > 0.005 && trecho < 0.2) { distTotal += trecho; atualizarDisplay(); }
                     }
                     ultimaPos = { lat, lng };
                 }
-
                 db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
             }, null, { enableHighAccuracy: true });
         }
 
-        // CORREÇÃO DO BOTÃO INICIAR
         document.getElementById('btnIniciar').onclick = async function() {
             const num = document.getElementById('carro').value;
             const nome = document.getElementById('nome').value.trim();
@@ -154,41 +137,39 @@
                 alert("Por favor, preencha o Nome e o Número do Carro!");
                 return;
             }
+
+            // VERIFICAÇÃO SE A PROVA ESTÁ ABERTA NO FIREBASE
+            const statusSnap = await db.ref('configuracoes/prova_aberta').once('value');
+            if (!statusSnap.val()) {
+                alert("⚠️ A prova ainda não foi aberta pelo administrador. Aguarde o sinal!");
+                return;
+            }
             
             try {
-                // Tenta salvar no Firebase, mas prossegue mesmo se houver erro de rede
-                db.ref('competidores/' + num).update({ nome, categoria: cat }).catch(e => console.log("Offline update"));
+                db.ref('competidores/' + num).update({ nome, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
-            } catch (e) {
-                console.error(e);
-                // Se o Firebase falhar drasticamente, ainda inicia o odômetro local
-                iniciarFluxoRastreio(num);
-            }
+            } catch (e) { iniciarFluxoRastreio(num); }
         };
 
-        // Handlers de Odômetro
+        // Handlers de Odômetro (Mantidos originais)
         document.getElementById('viewDist').onclick = function() {
             this.style.display = 'none';
             const i = document.getElementById('inputAjuste');
             i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
         };
-
         document.getElementById('inputAjuste').onblur = function() {
             const n = parseFloat(this.value);
             if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
             this.style.display = 'none'; document.getElementById('viewDist').style.display = 'block';
         };
-
         document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
         document.getElementById('btnM1').onclick = () => { if(distTotal > 0.001) distTotal -= 0.001; atualizarDisplay(); };
         document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
-        
         document.getElementById('btnSair').onclick = () => {
             if(confirm("Encerrar Sessão?")) { 
                 if(watchID) navigator.geolocation.clearWatch(watchID);
-                localStorage.clear(); 
-                location.reload(); 
+                localStorage.clear(); location.reload(); 
             }
         };
 
@@ -199,17 +180,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
