@@ -2,3 +2,17 @@ Página admin funcionando perfeitamente, todos os botões e páginas funcionando
 Mapa funcionando;
 Todos os cálculos funcionando;
 Odometro precisa de ajustes;
+
+
+
+rastro:
+
+adicionar velocidade popup
+adicionar penal saída rota
+proibir nome repetido
+
+Gostaria que eu criasse um pequeno código para você colocar no seu Mapa que mostre quais pilotos estão "Offline" (pararam de enviar dados há mais de 1 minuto)?
+
+
+ícones dos carros verde - online, mostrando o nome do piloto ao passar o mouse em cima
+
