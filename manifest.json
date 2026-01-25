@@ -1,0 +1,21 @@
+{
+  "name": "Rally Tracker Pro",
+  "short_name": "RallyTracker",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#e67e22",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
