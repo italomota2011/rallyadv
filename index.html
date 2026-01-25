@@ -158,8 +158,8 @@
         // Adiciona a nova posição
         historicoLocal.push(coord);
 
-        // Mantém apenas os últimos 1000 pontos para não pesar o navegador (aprox. 15-20 min de rastro)
-        if (historicoLocal.length > 1000) {
+        // Mantém apenas os últimos 10000 pontos para não pesar o navegador (aprox. 4h de rastro)
+        if (historicoLocal.length > 10000) {
             historicoLocal.shift(); 
         }
 
@@ -236,6 +236,7 @@
     </script>
 </body>
 </html>
+
 
 
 
