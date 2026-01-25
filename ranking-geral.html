@@ -70,8 +70,8 @@
                     const p = data[id];
                     
                     // --- CÁLCULO DA SOMA ---
-                    const pontosGPS = p.pontos || 150000; 
-                    const penalidadeGPS = 150000 - pontosGPS;
+                    const pontosGPS = p.pontos || 0; 
+                    const penalidadeGPS = 0 - pontosGPS;
                     const bonusFotos = p.pontosFotos || 0;
                     const totalFinal = pontosGPS + bonusFotos; // AQUI SOMA TUDO
 
