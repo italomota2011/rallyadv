@@ -27,6 +27,26 @@
         <label>Competidor para Análise:</label>
         <select id="carSelect"><option value="">Aguardando dados...</option></select>
         <button onclick="analisar()">PROCESSAR TELEMETRIA</button>
-
         <div id="resumo">
-            <div
+            <div class="stats-card">Selecione um carro e clique em analisar para verificar radares e waypoints.</div>
+        </div>
+        <div class="legenda">
+            <strong>Dicionário do Mapa:</strong>
+            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada (Admin)</div>
+            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real (Carro)</div>
+            <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
+            <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Não Visitado</div>
+            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
+        </div>
+        <button style="background:#444; margin-top: 15px; padding: 10px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
+    <script>
+        var map =
