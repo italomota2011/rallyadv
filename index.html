@@ -157,37 +157,53 @@
             });
 
             watchID = navigator.geolocation.watchPosition(pos => {
-                const lat = pos.coords.latitude;
-                const lng = pos.coords.longitude;
-                const accuracy = pos.coords.accuracy || 0;
-                const speedMS = pos.coords.speed || 0;
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const accuracy = pos.coords.accuracy || 0;
+    const speedMS = pos.coords.speed || 0;
 
-                // --- LÓGICA DO ODÔMETRO (SOMENTE VISUAL) ---
-                if(ultimaCoordOdo) {
-                    let d = calcularDist(ultimaCoordOdo.lat, ultimaCoordOdo.lng, lat, lng);
-                    // Filtro: Precisão aceitável até 60m e movimento mínimo de 2 metros (0.002km)
-                    if(accuracy < 60 && d > 0.002) {
-                        odoTotal += d;
-                        atualizarTelaOdo();
-                    }
-                }
-                ultimaCoordOdo = {lat, lng};
+    // --- LÓGICA DO ODÔMETRO COM FILTRO DE PARADO ---
+    if(ultimaCoordOdo) {
+        let d = calcularDist(ultimaCoordOdo.lat, ultimaCoordOdo.lng, lat, lng);
+        
+        // FILTROS: 
+        // 1. Só conta se a precisão do GPS for boa (menor que 40 metros)
+        // 2. Só conta se o deslocamento for maior que 10 metros (0.010 km)
+        // Isso impede que o odômetro suba sozinho quando você está parado.
+        if(accuracy < 40 && d > 0.010) {
+            odoTotal += d;
+            atualizarTelaOdo();
+            // Só atualiza a última coordenada de referência se você realmente se moveu
+            ultimaCoordOdo = {lat, lng}; 
+        }
+    } else {
+        // Primeira vez que recebe o sinal
+        ultimaCoordOdo = {lat, lng};
+    }
+    // -----------------------------------------------
 
-                // Cálculo de velocidade para exibição
-                let velKMH = speedMS > 0 ? (speedMS * 3.6) : 0;
-                document.getElementById('viewVel').innerText = velKMH.toFixed(1);
-                
-                // --- RASTREAMENTO (BANCO DE DADOS) ---
-                const coord = { 
-                    lat: lat, lng: lng, 
-                    vel: parseFloat(velKMH.toFixed(1)), 
-                    ts: Date.now(), acc: accuracy.toFixed(1)
-                };
+    // Velocidade para o visor
+    let velKMH = speedMS > 0 ? (speedMS * 3.6) : 0;
+    document.getElementById('viewVel').innerText = velKMH.toFixed(1);
+    
+    // RASTREAMENTO (MANTIDO ORIGINAL - NÃO AFETA O MAPA)
+    const coord = { 
+        lat: lat, lng: lng, 
+        vel: parseFloat(velKMH.toFixed(1)), 
+        ts: Date.now(), 
+        acc: accuracy.toFixed(1)
+    };
 
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-                
-            }, (err) => {
+    db.ref('posicoes/' + num).set(coord);
+    db.ref('rastros/' + num).push(coord);
+    
+}, (err) => {
+    console.error("Erro GPS:", err);
+}, { 
+    enableHighAccuracy: true, 
+    maximumAge: 0, 
+    timeout: 10000 
+});, (err) => {
                 console.warn("Erro de GPS: ", err.message);
             }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         }
@@ -228,3 +244,4 @@
     </script>
 </body>
 </html>
+
