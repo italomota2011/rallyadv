@@ -47,9 +47,8 @@ Envia dados com perca de internet - ✅
 Odometro - ✅
 Botão iniciar - ✅
 Cores padrão - ✅
-Não pode duplicar nome do piloto - ❌
-Não pode duplicar número do carro - ❌
-Número do carro não pode ter 0 a esquerda, nao pode ser 0 nem maior que 100 - ❌
+Não pode duplicar nome do piloto - ✅
+Não pode duplicar número do carro - ✅
 Só pode iniciar depois que o admin abrir prova - ❌
 
 
