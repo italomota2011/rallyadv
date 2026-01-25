@@ -9,74 +9,23 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #1a202c; 
-            color: #e2e8f0; 
-            margin: 0; 
-            padding: 20px;
-        }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a202c; color: #e2e8f0; margin: 0; padding: 20px; }
         .container { max-width: 900px; margin: auto; }
-        
-        .header-ranking { 
-            text-align: center; 
-            margin-bottom: 30px; 
-            padding: 20px;
-            background: #2d3748;
-            border-radius: 12px;
-            border-bottom: 4px solid #e67e22;
-        }
-        
+        .header-ranking { text-align: center; margin-bottom: 30px; padding: 20px; background: #2d3748; border-radius: 12px; border-bottom: 4px solid #e67e22; }
         h1 { color: #e67e22; margin: 10px 0; }
-        
-        .controles { 
-            display: flex; 
-            gap: 10px; 
-            justify-content: center; 
-            margin-bottom: 30px; 
-        }
-
-        input { 
-            padding: 12px; 
-            border-radius: 6px; 
-            border: 1px solid #4a5568; 
-            background: #2d3748; 
-            color: white; 
-            width: 250px;
-        }
-
-        .btn {
-            padding: 12px 20px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            text-transform: uppercase;
-            transition: 0.3s;
-        }
-
+        .controles { display: flex; gap: 10px; justify-content: center; margin-bottom: 30px; }
+        input { padding: 12px; border-radius: 6px; border: 1px solid #4a5568; background: #2d3748; color: white; width: 250px; }
+        .btn { padding: 12px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; }
         .btn-pdf { background: #e67e22; color: white; }
-        .btn-voltar { background: #4a5568; color: white; text-decoration: none; display: inline-block; text-align: center; }
-        .btn:hover { opacity: 0.8; }
-
-        .cat-card { 
-            background: #2d3748; 
-            border-radius: 12px; 
-            padding: 20px; 
-            margin-bottom: 25px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-
+        .btn-voltar { background: #4a5568; color: white; text-decoration: none; }
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; }
         h2 { color: #f6ad55; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
-
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th { background: #1a202c; color: #a0aec0; text-align: left; padding: 12px; font-size: 12px; }
         td { padding: 12px; border-bottom: 1px solid #4a5568; color: white; }
-        
         .col-right { text-align: right; font-weight: bold; }
         .penalidade { color: #fc8181; }
         .bonus { color: #68d391; }
-
         #logoInvisivel { display: none; }
     </style>
 </head>
@@ -91,36 +40,74 @@
 
         <div class="controles">
             <input type="text" id="inputCidade" placeholder="Nome da Cidade/Evento">
-            <button class="btn btn-pdf" onclick="gerarPDF()">📄 Gerar PDF Alinhado</button>
+            <button class="btn btn-pdf" onclick="gerarPDF()">📄 Gerar PDF</button>
             <button class="btn btn-voltar" onclick="location.href='admin.html'">Sair</button>
         </div>
 
         <div id="rankingGeralContent">
-            <p style="text-align:center;">Buscando dados no servidor...</p>
+            <p style="text-align:center; color: #f6ad55;">Conectando ao banco de dados...</p>
         </div>
     </div>
 
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossOrigin="anonymous">
 
     <script>
+        // Configuração completa para evitar falhas de conexão
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally"
         };
-        firebase.initializeApp(firebaseConfig);
+        
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const db = firebase.database();
 
         const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
 
+        // Função de escuta com tratamento de erro
         db.ref('competidores').on('value', snap => {
             const data = snap.val();
             if (!data) {
-                document.getElementById('rankingGeralContent').innerHTML = "Nenhum competidor cadastrado.";
+                document.getElementById('rankingGeralContent').innerHTML = "<p style='text-align:center'>Nenhum competidor encontrado no banco.</p>";
                 return;
             }
 
             let htmlFull = "";
-
             categorias.forEach(cat => {
-                let lista
+                let lista = [];
+                for (let id in data) {
+                    if (data[id].categoria === cat) {
+                        lista.push({ id, ...data[id] });
+                    }
+                }
+
+                // Ordenação: Menos penalidades (pontos maiores/menos negativos) no topo
+                lista.sort((a, b) => (b.pontos || 0) - (a.pontos || 0));
+
+                if (lista.length > 0) {
+                    htmlFull += `
+                    <div class="cat-card">
+                        <h2>${cat}</h2>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>POS</th>
+                                    <th>Nº</th>
+                                    <th>PILOTO</th>
+                                    <th class="col-right">GPS</th>
+                                    <th class="col-right">FOTOS</th>
+                                </tr>
+                            </thead>
+                            <tbody>`;
+                    
+                    lista.forEach((c, idx) => {
+                        htmlFull += `
+                        <tr>
+                            <td>${idx + 1}º</td>
+                            <td>${c.id}</td>
+                            <td>${c.nome || '---'}</td>
+                            <td class="col-right penalidade">${c.pontos || 0}</td>
+                            <td class="col-right bonus">+${c.pontosFotos
