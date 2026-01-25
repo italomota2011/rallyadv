@@ -115,7 +115,7 @@
                                 <th class="col-num">Nº</th>
                                 <th class="col-piloto">Piloto</th>
                                 <th class="col-tempo">Tempo Total</th>
-                                <th class="col-pontos text-right">Pontuação Final</th>
+                                <th class="col-pontos">Pontuação Final</th>
                             </tr>
                         </thead>
                         <tbody>`;
@@ -126,7 +126,7 @@
                         <td class="col-num"><b>${p.id}</b></td>
                         <td class="col-piloto">${p.nome}</td>
                         <td class="col-tempo">${p.tempoStr}</td>
-                        <td class="col-pontos text-right">${p.totalPts.toLocaleString('pt-BR')} pts</td>
+                        <td class="col-pontos">${p.totalPts.toLocaleString('pt-BR')} pts</td>
                     </tr>`;
                 });
                 html += `</tbody></table></div>`;
