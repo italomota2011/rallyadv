@@ -21,7 +21,7 @@
         .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #e67e22; text-align: center; position: relative; z-index: 100; }
         .logo { display: block; margin: 0 auto 15px auto; max-width: 120px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; }
+        button { background: #e67e22; border: none; font-weight: bold; cursor: pointer; color: white; }
         
         #setup { display: block; } 
         #ativo { display: none; }
@@ -36,7 +36,6 @@
         .btn-reset { background: #7f8c8d; }
         
         .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
-        .status-offline { color: #f1c40f !important; }
         .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; width: auto; }
     </style>
 </head>
@@ -65,5 +64,138 @@
                 <div style="color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">Distância (KM)</div>
                 <div id="viewDist" class="odo-distancia">0.000</div>
                 <input type="number" id="inputAjuste" step="0.001">
-                <p style="color: #555; font-size: 10px; margin: 10px 0;">Toque no número para editar</p>
                 <div class="odo-controls">
+                    <button class="btn-odo btn-minus" id="btnM1">-1m</button>
+                    <button class="btn-odo btn-reset" id="btnZerar">ZERAR</button>
+                    <button class="btn-odo btn-plus" id="btnP1">+1m</button>
+                </div>
+            </div>
+
+            <div id="msgGps" class="status-gps">● AGUARDANDO GPS...</div>
+            <button class="btn-sair" id="btnSair">Encerrar Sessão</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+        }
+
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
+        }
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "CARRO " + num;
+
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').catch(()=>{});
+            }
+
+            db.ref(".info/connected").on("value", s => {
+                const m = document.getElementById('msgGps');
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+            });
+
+            watchID = navigator.geolocation.watchPosition(p => {
+                const lat = p.coords.latitude;
+                const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6;
+                const accuracy = p.coords.accuracy;
+
+                document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
+
+                // FILTRO DE ESTABILIDADE
+                if (accuracy < 30) {
+                    if (ultimaPos && vel > 3.0) {
+                        const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                        if (trecho > 0.005 && trecho < 0.2) {
+                            distTotal += trecho;
+                            atualizarDisplay();
+                        }
+                    }
+                    ultimaPos = { lat, lng };
+                }
+
+                db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        // CORREÇÃO DO BOTÃO INICIAR
+        document.getElementById('btnIniciar').onclick = async function() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+
+            if(!num || !nome) {
+                alert("Por favor, preencha o Nome e o Número do Carro!");
+                return;
+            }
+            
+            try {
+                // Tenta salvar no Firebase, mas prossegue mesmo se houver erro de rede
+                db.ref('competidores/' + num).update({ nome, categoria: cat }).catch(e => console.log("Offline update"));
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                console.error(e);
+                // Se o Firebase falhar drasticamente, ainda inicia o odômetro local
+                iniciarFluxoRastreio(num);
+            }
+        };
+
+        // Handlers de Odômetro
+        document.getElementById('viewDist').onclick = function() {
+            this.style.display = 'none';
+            const i = document.getElementById('inputAjuste');
+            i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
+        };
+
+        document.getElementById('inputAjuste').onblur = function() {
+            const n = parseFloat(this.value);
+            if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
+            this.style.display = 'none'; document.getElementById('viewDist').style.display = 'block';
+        };
+
+        document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
+        document.getElementById('btnM1').onclick = () => { if(distTotal > 0.001) distTotal -= 0.001; atualizarDisplay(); };
+        document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
+        
+        document.getElementById('btnSair').onclick = () => {
+            if(confirm("Encerrar Sessão?")) { 
+                if(watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.clear(); 
+                location.reload(); 
+            }
+        };
+
+        window.onload = () => {
+            const logado = localStorage.getItem('rally_carro_ativo');
+            if (logado) iniciarFluxoRastreio(logado);
+        };
+    </script>
+</body>
+</html>
