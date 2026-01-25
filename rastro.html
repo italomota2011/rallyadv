@@ -12,9 +12,8 @@
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
-        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
         .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; border: 1px solid #444; }
-        /* Garante que o controle de camadas seja visível no fundo escuro */
+        /* Estilo para o botão de camadas aparecer melhor no modo escuro */
         .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
     </style>
 </head>
@@ -22,7 +21,7 @@
 
 <div id="sidebar">
     <h2>🛰️ Telemetria</h2>
-    <select id="carSelect"><option value="">Carregando banco...</option></select>
+    <select id="carSelect"><option value="">Conectando banco...</option></select>
     <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
     
     <div id="resumo">
@@ -35,85 +34,4 @@
         <span style="color:#e67e22">━━</span> Rastro Real (Percorrido)<br>
         <span style="color:#38a169">⬤</span> Waypoint OK<br>
         <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-        <span style="color:red; font-weight:bold">⬤</span> Ponto de Excesso de Velocidade
-    </div>
-    
-    <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
-</div>
-
-<div id="map"></div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-
-<script>
-    // --- CONFIGURAÇÃO DAS CAMADAS DE MAPA ---
-    const mapaRua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    });
-
-    const mapaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Imagery © Esri'
-    });
-
-    // Inicializa o mapa com a camada de rua por padrão
-    const map = L.map('map', {
-        center: [-12.26, -38.96],
-        zoom: 13,
-        layers: [mapaRua] 
-    });
-
-    // Adiciona o botão de controle no canto superior direito
-    const baseMaps = {
-        "Mapa de Rua": mapaRua,
-        "Satélite": mapaSatelite
-    };
-    L.control.layers(baseMaps).addTo(map);
-
-    // --- CAMADAS DE DADOS ---
-    const camadas = {
-        rotaOficial: L.featureGroup().addTo(map),
-        rastroCarro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
-        alertas: L.featureGroup().addTo(map)
-    };
-
-    // --- CONFIGURAÇÃO FIREBASE ---
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // Carregar competidores
-    db.ref('competidores').on('value', snap => {
-        const select = document.getElementById('carSelect');
-        let html = '<option value="">Selecione o Piloto...</option>';
-        const data = snap.val();
-        if(data) {
-            Object.keys(data).sort((a,b)=>a-b).forEach(id => {
-                html += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-            });
-        }
-        select.innerHTML = html;
-    });
-
-    // Função de Análise
-    window.analisarRastro = async function() {
-        const id = document.getElementById('carSelect').value;
-        if(!id) return alert("Selecione um carro!");
-
-        camadas.rotaOficial.clearLayers();
-        camadas.alertas.clearLayers();
-        camadas.rastroCarro.setLatLngs([]);
-        document.getElementById('resumo').innerHTML = "Processando...";
-
-        try {
-            const [snapRastro, snapConfig] = await Promise.all([
-                db
+        <span style="color
