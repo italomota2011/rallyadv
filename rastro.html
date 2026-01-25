@@ -11,18 +11,33 @@
         h2 { color: #e67e22; margin-top: 0; }
         select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 13px; line-height: 1.6; }
-        .penalidade-item { color: #ff6b6b; font-weight: bold; margin-top: 5px; }
+        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
+        .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
+        .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; line-height: 1.6; }
+        /* Estilo para o controle de camadas (satélite) */
+        .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
     </style>
 </head>
 <body>
-
     <div id="sidebar">
-        <h2>Telemetria</h2>
-        <select id="carSelect"><option value="">Carregando...</option></select>
-        <button onclick="analisarRastro()">ANALISAR TRAJETO</button>
-        <div id="resumo"></div>
-        <button onclick="location.href='admin.html'" style="background: #333; margin-top: 20px;">VOLTAR ADMIN</button>
+        <h2>🛰️ Análise de Telemetria</h2>
+        <select id="carSelect"><option>Carregando competidores...</option></select>
+        <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
+        
+        <div id="resumo">
+            <div class="stats-card">Selecione um carro para ver os detalhes da prova.</div>
+        </div>
+
+        <div class="legenda">
+            <strong>Legenda do Mapa:</strong><br>
+            <span style="color:#38a169">⬤</span> Waypoint Visitado (Verde)<br>
+            <span style="color:#e74c3c">⬤</span> Waypoint Perdido (Vermelho)<br>
+            <span style="color:#e67e22">━━</span> Rastro do Carro (Laranja)<br>
+            <span style="color:#e74c3c">⬤</span> Infração de Velocidade<br>
+            <span style="color:#3498db">⬢</span> Radar (Azul)
+        </div>
+        
+        <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
     </div>
 
     <div id="map"></div>
@@ -33,27 +48,64 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // Configurações do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally"
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        firebase.initializeApp(firebaseConfig);
+        
+        // Inicialização segura
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const db = firebase.database();
 
-        const map = L.map('map').setView([-12.25, -38.95], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        // Configuração dos Mapas (Rua e Satélite)
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        });
 
-        const layers = {
-            percurso: L.layerGroup().addTo(map),
-            rastro: L.polyline([], {color: '#3498db', weight: 4, opacity: 0.7}).addTo(map),
-            penalidades: L.layerGroup().addTo(map)
+        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Imagery © Esri'
+        });
+
+        const map = L.map('map', {
+            center: [-12.26, -38.96],
+            zoom: 13,
+            layers: [osm] // Mapa padrão
+        });
+
+        // Controle de Alternância de Mapas (Igual ao Admin)
+        const baseMaps = {
+            "Mapa de Rua": osm,
+            "Satélite": satelite
+        };
+        L.control.layers(baseMaps).addTo(map);
+        
+        let layers = {
+            rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
+            percurso: L.featureGroup().addTo(map),
+            penalidades: L.featureGroup().addTo(map)
         };
 
+        // Carregar competidores no select
         db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione o Carro</option>';
-            snap.forEach(c => { opt += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
-            document.getElementById('carSelect').innerHTML = opt;
+            let opt = '<option value="">Selecione um Piloto...</option>';
+            const data = snap.val();
+            if(data) {
+                Object.keys(data).sort((a,b)=>a-b).forEach(id => {
+                    opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
+                });
+                document.getElementById('carSelect').innerHTML = opt;
+            } else {
+                document.getElementById('carSelect').innerHTML = '<option>Nenhum carro encontrado</option>';
+            }
+        }, error => {
+            console.error("Erro Firebase:", error);
+            alert("Erro ao carregar dados do Firebase.");
         });
 
         async function analisarRastro() {
@@ -73,14 +125,17 @@
                 const rastroData = snapRastro.val();
                 const config = snapConfig.val();
 
-                if(!rastroData) return alert("Sem dados de GPS.");
-                if(!config) return alert("Percurso não configurado.");
+                if(!rastroData) return alert("Este carro não possui dados de rastro.");
+                if(!config) return alert("Percurso não configurado no Admin.");
 
                 const rastroArr = Object.values(rastroData).sort((a, b) => a.ts - b.ts);
-                
-                // Filtro para garantir que pontos vazios não quebrem o Turf
-                const pontosValidos = rastroArr.filter(p => p.lat && p.lng);
-                layers.rastro.setLatLngs(pontosValidos.map(p => [p.lat, p.lng]));
+                layers.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
+
+                // 1. Desenhar Radares
+                L.geoJSON(config, {
+                    filter: (f) => f.geometry.type === 'Polygon',
+                    style: { color: '#3498db', weight: 3, fillOpacity: 0.2 }
+                }).addTo(layers.percurso);
 
                 let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
                 let totalPenalidades = 0;
@@ -90,46 +145,60 @@
                         const vMaxPermitida = (feat.properties.velocidade || 60) * 1.1; 
                         let tempoExcessoMs = 0;
 
-                        pontosValidos.forEach((p, i) => {
+                        rastroArr.forEach((p, i) => {
                             if (i === 0) return;
-                            try {
-                                const pt = turf.point([p.lng, p.lat]);
-                                if(turf.booleanPointInPolygon(pt, feat)) {
-                                    // Compara garantindo que p.vel é número
-                                    if(Number(p.vel) > vMaxPermitida) {
-                                        tempoExcessoMs += (p.ts - pontosValidos[i-1].ts);
-                                        L.circleMarker([p.lat, p.lng], { radius: 5, color: 'red' }).addTo(layers.penalidades);
-                                    }
+                            const pontoTurf = turf.point([p.lng, p.lat]);
+                            if(turf.booleanPointInPolygon(pontoTurf, feat)) {
+                                if(p.vel > vMaxPermitida) {
+                                    tempoExcessoMs += (p.ts - rastroArr[i-1].ts);
+                                    L.circleMarker([p.lat, p.lng], { radius: 6, color: 'red', fillOpacity: 0.9 })
+                                     .bindPopup(`<b>EXCESSO NO RADAR ${idx+1}</b><br>Vel: ${p.vel.toFixed(1)} km/h`)
+                                     .addTo(layers.penalidades);
                                 }
-                            } catch(e) {}
+                            }
                         });
 
                         if(tempoExcessoMs > 10000) {
-                            const pts = (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                            totalPenalidades += pts;
-                            resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: -${pts} pts</div>`;
+                            const pontosPerdidos = (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
+                            totalPenalidades += pontosPerdidos;
+                            resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: ${pontosPerdidos} pts</div>`;
                         }
 
                     } else if(feat.properties?.type === 'circle') {
                         const coords = feat.geometry.coordinates;
-                        const raioKm = feat.properties.radius / 1000;
-                        const visitou = pontosValidos.some(p => turf.distance(turf.point([p.lng, p.lat]), turf.point(coords)) <= raioKm);
+                        const raioM = feat.properties.radius;
+                        const raioKm = raioM / 1000;
+                        
+                        const visitou = rastroArr.some(pt => 
+                            turf.distance(turf.point([pt.lng, pt.lat]), turf.point(coords)) <= raioKm
+                        );
 
-                        L.circle([coords[1], coords[0]], { radius: feat.properties.radius, color: visitou ? 'green' : 'red', fillOpacity: 0.2 }).addTo(layers.percurso);
+                        // Waypoint Verde/Vermelho
+                        L.circle([coords[1], coords[0]], {
+                            radius: raioM,
+                            color: visitou ? '#38a169' : '#e74c3c',
+                            fillOpacity: 0.3,
+                            weight: 3
+                        }).bindPopup(`Waypoint: ${visitou ? 'Visitado' : 'NÃO VISITADO'}`)
+                          .addTo(layers.percurso);
+
                         if(!visitou) {
                             totalPenalidades += 20000;
-                            resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: -20.000 pts</div>`;
+                            resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: 20.000 pts</div>`;
                         }
                     }
                 });
 
-                resumoHtml += `<br><b>Total Penalidades:</b> -${totalPenalidades} pts</div>`;
+                resumoHtml += `<br><b>Total:</b> -${totalPenalidades} pts</div>`;
                 document.getElementById('resumo').innerHTML = resumoHtml;
-                if(pontosValidos.length) map.fitBounds(layers.rastro.getBounds());
+                
+                if (layers.rastro.getLatLngs().length > 0) {
+                    map.fitBounds(layers.rastro.getBounds(), { padding: [50, 50] });
+                }
 
             } catch (err) {
                 console.error(err);
-                alert("Erro ao processar: " + err.message);
+                alert("Erro ao processar telemetria.");
             }
         }
     </script>
