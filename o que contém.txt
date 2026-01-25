@@ -18,6 +18,16 @@ ________________________________________
 
 🔵 PÁGINA RASTRO = 
 
+Legenda - ✅
+Seleção de carro - ✅
+Botão voltar ao painel - ✅
+PopUp com as penalizações de velocidade - ❌
+Penalização fora da rota - ❌
+Pontuação correta de waypoint - ❌
+
+🟥Funções do mapa todas ok - ✅
+
+
 _________________________________________
 🔵 PÁGINA RANKING GERAL =
 
@@ -28,8 +38,7 @@ Campo para digitar nome e data do evento - ✅
 
 
 
-Mapa funcionando;
-Todos os cálculos funcionando;
+
 Odometro precisa de ajustes;
 
 
