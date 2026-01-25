@@ -25,7 +25,6 @@ Legenda - ✅
 Seleção de carro - ✅
 Botão voltar ao painel - ✅
 PopUp com as penalizações de velocidade - ❌
-Penalização fora da rota - ❌
 Pontuação correta de waypoint - ❌
 
 🟥Funções do mapa todas ok - ✅
@@ -42,12 +41,8 @@ _______________________________________________
 🔵 PÁGINA GPS (celular) =
 
 Não apaga tela - ✅
-Envia dados com perca de internet - ❌ (backup local)
 Odometro - ❌
 Botão iniciar - ✅
-Cores padrão - ❌
-Não pode duplicar nome do piloto - ❌
-Não pode duplicar número do carro - ❌
 Só pode iniciar depois que o admin abrir prova - ❌
 
 
