@@ -19,7 +19,6 @@
         th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 1px solid #4a5568; font-size: 13px; text-transform: uppercase; }
         td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; vertical-align: middle; }
 
-        /* Ajuste de Larguras de Coluna */
         .col-pos { width: 60px; font-weight: bold; color: #e67e22; }
         .col-num { width: 60px; }
         .col-piloto { width: auto; }
@@ -141,7 +140,7 @@
         const cidade = document.getElementById('inputCidade').value || "Resultado Geral";
         const img = document.getElementById('logoInvisivel');
 
-        try { doc.addImage(img, 'JPEG', 85, 10, 30, 30); } catch (e) {}
+        try { doc.addImage(img, 'JPEG', 90, 10, 30, 30); } catch (e) {}
 
         doc.setFontSize(18);
         doc.setTextColor(230, 126, 34);
@@ -152,27 +151,19 @@
 
         let finalY = 65;
         document.querySelectorAll('.cat-card').forEach((card) => {
-            if(card.querySelector('h2')) {
-                const titulo = card.querySelector('h2').innerText;
+            const h2 = card.querySelector('h2');
+            if(h2) {
+                const titulo = h2.innerText;
                 const tabela = card.querySelector('table');
+                
                 if (finalY > 240) { doc.addPage(); finalY = 20; }
+                
                 doc.setFontSize(14);
                 doc.setTextColor(0, 0, 0);
                 doc.text(titulo, 14, finalY);
+
                 doc.autoTable({ 
                     html: tabela, 
                     startY: finalY + 5, 
                     theme: 'striped',
                     headStyles: { fillColor: [230, 126, 34] },
-                    columnStyles: {
-                        4: { halign: 'right' } // Alinha a 5ª coluna (Pontos) à direita no PDF
-                    }
-                });
-                finalY = doc.lastAutoTable.finalY + 15;
-            }
-        });
-        doc.save(`Ranking_Final_${cidade.replace(/\s+/g, '_')}.pdf`);
-    }
-</script>
-</body>
-</html>
