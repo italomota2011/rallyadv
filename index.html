@@ -5,22 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rally Tracker Pro</title>
 
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#ff0000">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
-    <meta name="mobile-web-app-capable" content="yes">
-
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
     <style>
-        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; position: relative; z-index: 100; }
-        .logo { display: block; margin: 0 auto 15px auto; max-width: 280px; height: auto; }
-        
+        body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; }
+        .logo { display: block; margin: 0 auto 15px auto; max-width: 250px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        
-        button { background: #0059FF; border: none; font-weight: bold; cursor:
+        button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; }
+        #setup { display: block; } 
+        #ativo { display: none; }
+        .odo-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
+        .odo-distancia { font-size: 3rem; font-weight: bold; font-family: monospace; }
+        .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+        .btn-odo { padding: 10px; font-size: 12px; background: #333; }
+        .status-gps { color: #2ecc71; font-size: 12px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <div id="setup">
+            <img src="
