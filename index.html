@@ -4,21 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rally Tracker Pro</title>
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#ff0000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
+    <meta name="mobile-web-app-capable" content="yes">
+
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 95%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; }
-        .logo { display: block; margin: 0 auto 15px auto; max-width: 250px; height: auto; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; position: relative; z-index: 100; }
+        .logo { display: block; margin: 0 auto 15px auto; max-width: 320px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; color: white; }
+        
         #setup { display: block; } 
         #ativo { display: none; }
+        
         .odo-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
-        .odo-distancia { font-size: 3.5rem; font-weight: bold; color: #fff; cursor: pointer; font-family: 'Courier New', monospace; }
+        .odo-distancia { font-size: 3.2rem; font-weight: bold; color: #fff; line-height: 1; cursor: pointer; font-family: monospace; }
+        #inputAjuste { display: none; background: #fff; color: #000; font-size: 2rem; font-weight: bold; text-align: center; margin: 0 auto 10px; width: 100%; border: none; }
         .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 15px; }
-        .btn-odo { padding: 12px 5px; font-size: 14px; margin: 0; background: #333; }
+        .btn-odo { padding: 12px 5px; font-size: 14px; margin: 0; }
+        .btn-minus { background: #c0392b; }
+        .btn-plus { background: #27ae60; }
+        .btn-reset { background: #7f8c8d; }
+        
         .status-gps { color: #2ecc71; font-weight: bold; font-size: 12px; margin-top: 10px; }
+        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 15px; text-decoration: underline; border: none; cursor: pointer; width: auto; }
     </style>
 </head>
 <body>
@@ -26,6 +44,7 @@
     <div class="card">
         <div id="setup">
             <img src="https://static.wixstatic.com/media/390dd5_474bd3f54e9b4da5af6aced0893ce858~mv2.png/v1/fill/w_668,h_191,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/RRB%20-%20Letra%20Branca.png" class="logo">
+            <h2 style="color:#0059FF; margin-top: 0;">RALLY DE AVENTURA</h2>
             <input type="text" id="nome" placeholder="Nome do Piloto">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
@@ -33,96 +52,164 @@
                 <option>ANTIGOS</option>
             </select>
             <input type="number" id="carro" placeholder="Nº do Carro">
-            <button id="btnIniciar" onclick="tentarIniciar()">INICIAR PROVA</button>
-            <p id="msgAviso" style="font-size: 11px; color: #888;">A largada deve ser autorizada pelo Admin.</p>
+            <button id="btnIniciar">INICIAR PROVA</button>
         </div>
 
         <div id="ativo">
-            <h2 id="viewCarro" style="color:#0059FF; margin:0; font-size: 18px;">--</h2>
-            <div id="viewVel" style="font-size: 3.5rem; font-weight: bold; color: #fff;">0.0</div>
-            <p style="margin: 0; color: #888; font-size: 12px;">KM/H</p>
+            <h2 id="viewCarro" style="color:#e67e22; margin-bottom: 5px; font-size: 16px;">--</h2>
+            <div id="viewVel" style="font-size: 3rem; font-weight: bold;">0.0</div>
+            <p style="margin: 0; color: #888; font-size: 12px; margin-bottom: 10px;">KM/H</p>
             
             <div class="odo-container">
-                <div id="viewDist" class="odo-distancia" onclick="ajusteManual()">0.000</div>
+                <div style="color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px;">Distância (KM)</div>
+                <div id="viewDist" class="odo-distancia">0.000</div>
+                <input type="number" id="inputAjuste" step="0.001">
                 <div class="odo-controls">
-                    <button class="btn-odo" style="background:#c0392b" onclick="ajustar(-0.001)">-1m</button>
-                    <button class="btn-odo" onclick="zerar()">ZERAR</button>
-                    <button class="btn-odo" style="background:#27ae60" onclick="ajustar(0.001)">+1m</button>
+                    <button class="btn-odo btn-minus" id="btnM1">-1m</button>
+                    <button class="btn-odo btn-reset" id="btnZerar">ZERAR</button>
+                    <button class="btn-odo btn-plus" id="btnP1">+1m</button>
                 </div>
             </div>
 
-            <div id="msgGps" class="status-gps">● BUSCANDO GPS...</div>
-            <button onclick="sair()" style="background:transparent; color:#555; font-size:10px; margin-top:10px; border:none;">ENCERRAR SESSÃO</button>
+            <div id="msgGps" class="status-gps">● AGUARDANDO GPS...</div>
+            <button class="btn-sair" id="btnSair">Encerrar Sessão</button>
         </div>
     </div>
 
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-            projectId: "cronometro-rally"
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        let distTotal = 0, ultimaPos = null, watchID = null;
+        let watchID = null, wakeLock = null, distTotal = 0, ultimaPos = null;
 
         function calcularDistancia(lat1, lon1, lat2, lon2) {
             const R = 6371;
-            const dLat = (lat2-lat1)*Math.PI/180;
-            const dLon = (lon2-lon1)*Math.PI/180;
-            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
             return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
         }
 
-        async function tentarIniciar() {
-            const num = document.getElementById('carro').value;
-            const nome = document.getElementById('nome').value;
-            if(!num || !nome) return alert("Preencha Nome e Número!");
-
-            const snap = await db.ref('configuracoes/provaAtiva').once('value');
-            if(!snap.val()) return alert("⚠️ PROVA NÃO LIBERADA PELO ADMIN!");
-
-            db.ref('competidores/'+num).update({nome, categoria: document.getElementById('categoria').value, pontos:0});
-            localStorage.setItem('rally_carro', num);
-            iniciarApp(num);
+        function atualizarDisplay() {
+            document.getElementById('viewDist').innerText = distTotal.toFixed(3);
+            localStorage.setItem('rally_distancia', distTotal);
         }
 
-        function iniciarApp(num) {
+        function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "CARRO " + num;
 
+            const salva = localStorage.getItem('rally_distancia');
+            if(salva) { distTotal = parseFloat(salva); atualizarDisplay(); }
+
+            if ('wakeLock' in navigator) {
+                navigator.wakeLock.request('screen').catch(()=>{});
+            }
+
+            db.ref(".info/connected").on("value", s => {
+                const m = document.getElementById('msgGps');
+                m.innerText = s.val() ? "● TRANSMITINDO AO VIVO" : "○ MODO OFFLINE";
+            });
+
             watchID = navigator.geolocation.watchPosition(p => {
-                const { latitude: lat, longitude: lng, speed, accuracy } = p.coords;
-                const vel = (speed || 0) * 3.6;
-                document.getElementById('viewVel').innerText = vel.toFixed(1);
-                document.getElementById('msgGps').innerText = `● GPS ATIVO (${Math.round(accuracy)}m)`;
+                const lat = p.coords.latitude;
+                const lng = p.coords.longitude;
+                const vel = (p.coords.speed || 0) * 3.6;
+                const accuracy = p.coords.accuracy;
 
-                if (accuracy < 40 && vel > 2) {
-                    if (ultimaPos) {
-                        const d = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                        if (d > 0.001 && d < 0.2) { distTotal += d; document.getElementById('viewDist').innerText = distTotal.toFixed(3); }
+                document.getElementById('viewVel').innerText = vel > 2.5 ? vel.toFixed(1) : "0.0";
+
+                // FILTRO DE ESTABILIDADE
+                if (accuracy < 30) {
+                    if (ultimaPos && vel > 3.0) {
+                        const trecho = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                        if (trecho > 0.005 && trecho < 0.2) {
+                            distTotal += trecho;
+                            atualizarDisplay();
+                        }
                     }
-                    ultimaPos = {lat, lng};
+                    ultimaPos = { lat, lng };
                 }
-                db.ref('posicoes/'+num).set({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
-                db.ref('rastros/'+num).push({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
-            }, null, {enableHighAccuracy: true});
+
+                db.ref('posicoes/' + num).set({ lat, lng, vel: vel.toFixed(1), ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
         }
 
-        function ajustar(v) { distTotal += v; document.getElementById('viewDist').innerText = distTotal.toFixed(3); }
-        function zerar() { if(confirm("Zerar Odômetro?")) { distTotal = 0; ajustar(0); } }
-        function ajusteManual() { 
-            let n = prompt("Ajustar Odômetro para:", distTotal.toFixed(3));
-            if(n !== null) { distTotal = parseFloat(n); ajustar(0); }
-        }
-        function sair() { if(confirm("Sair?")) { localStorage.clear(); location.reload(); } }
+        // CORREÇÃO DO BOTÃO INICIAR
+        document.getElementById('btnIniciar').onclick = async function() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+
+            if(!num || !nome) {
+                alert("Por favor, preencha o Nome e o Número do Carro!");
+                return;
+            }
+            
+            try {
+                // Tenta salvar no Firebase, mas prossegue mesmo se houver erro de rede
+                db.ref('competidores/' + num).update({ nome, categoria: cat }).catch(e => console.log("Offline update"));
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                console.error(e);
+                // Se o Firebase falhar drasticamente, ainda inicia o odômetro local
+                iniciarFluxoRastreio(num);
+            }
+        };
+
+        // Handlers de Odômetro
+        document.getElementById('viewDist').onclick = function() {
+            this.style.display = 'none';
+            const i = document.getElementById('inputAjuste');
+            i.style.display = 'block'; i.value = distTotal.toFixed(3); i.focus();
+        };
+
+        document.getElementById('inputAjuste').onblur = function() {
+            const n = parseFloat(this.value);
+            if (!isNaN(n) && n >= 0) { distTotal = n; atualizarDisplay(); }
+            this.style.display = 'none'; document.getElementById('viewDist').style.display = 'block';
+        };
+
+        document.getElementById('btnP1').onclick = () => { distTotal += 0.001; atualizarDisplay(); };
+        document.getElementById('btnM1').onclick = () => { if(distTotal > 0.001) distTotal -= 0.001; atualizarDisplay(); };
+        document.getElementById('btnZerar').onclick = () => { if(confirm("Zerar?")) { distTotal = 0; atualizarDisplay(); } };
+        
+        document.getElementById('btnSair').onclick = () => {
+            if(confirm("Encerrar Sessão?")) { 
+                if(watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.clear(); 
+                location.reload(); 
+            }
+        };
 
         window.onload = () => {
-            const salvo = localStorage.getItem('rally_carro');
-            if(salvo) iniciarApp(salvo);
+            const logado = localStorage.getItem('rally_carro_ativo');
+            if (logado) iniciarFluxoRastreio(logado);
         };
     </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
