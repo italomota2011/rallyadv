@@ -37,6 +37,12 @@
         .wake-lock-status { color: #666; font-size: 10px; margin-top: 10px; text-transform: uppercase; }
         
         .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
+
+        /* Estilos do Odômetro */
+        .odo-container { margin: 20px 0; border-top: 1px solid #333; padding-top: 15px; }
+        .odo-valor { font-size: 2.5rem; color: #f1c40f; font-weight: bold; cursor: pointer; margin-bottom: 5px; }
+        .odo-controles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+        .btn-odo { padding: 8px; font-size: 12px; background: #333; }
     </style>
 </head>
 <body>
@@ -61,8 +67,18 @@
         <div id="ativo" class="tracking">
             <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 5px;">Carro --</h2>
             <div id="viewVel" style="font-size: 4rem; font-weight: bold; line-height: 1;">0.0</div>
-            <p style="margin-top: 5px; color: #888;">KM/H</p>
+            <p style="margin-top: 5px; color: #888; margin-bottom: 0;">KM/H</p>
             
+            <div class="odo-container">
+                <div id="viewOdo" class="odo-valor" onclick="ajustarManual()">0.00</div>
+                <p style="margin: 0 0 10px 0; font-size: 12px; color: #888;">ODÔMETRO (KM)</p>
+                <div class="odo-controles">
+                    <button class="btn-odo" onclick="ajustarOdo(-0.001)">-1m</button>
+                    <button class="btn-odo" onclick="zerarOdo()" style="background: #444;">ZERAR</button>
+                    <button class="btn-odo" onclick="ajustarOdo(0.001)">+1m</button>
+                </div>
+            </div>
+
             <div class="status-container">
                 <div id="msgGps" class="status-gps">● CONECTANDO...</div>
                 <div id="detalheOffline" class="aviso-offline">DADOS PROTEGIDOS NO CELULAR, NÃO FECHE O SISTEMA.</div>
@@ -87,6 +103,49 @@
 
         let wakeLock = null;
         let watchID = null;
+
+        // VARIÁVEIS DO ODÔMETRO
+        let odoDistancia = 0; // Em quilômetros
+        let ultimaPosicao = null;
+
+        function atualizarDisplayOdo() {
+            document.getElementById('viewOdo').innerText = odoDistancia.toFixed(3);
+        }
+
+        function ajustarOdo(valor) {
+            odoDistancia = Math.max(0, odoDistancia + valor);
+            atualizarDisplayOdo();
+        }
+
+        function zerarOdo() {
+            if(confirm("Zerar odômetro?")) {
+                odoDistancia = 0;
+                atualizarDisplayOdo();
+            }
+        }
+
+        function ajustarManual() {
+            let novoValor = prompt("Ajustar Odômetro (KM):", odoDistancia.toFixed(3));
+            if (novoValor !== null) {
+                let parsed = parseFloat(novoValor.replace(',', '.'));
+                if (!isNaN(parsed)) {
+                    odoDistancia = Math.max(0, parsed);
+                    atualizarDisplayOdo();
+                }
+            }
+        }
+
+        // FÓRMULA DE HAVERSINE PARA DISTÂNCIA
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
 
         // MANTER TELA ACESA
         async function solicitarWakeLock() {
@@ -124,97 +183,21 @@
 
             // Captura de GPS de Alta Precisão
             watchID = navigator.geolocation.watchPosition(pos => {
-    // 1. Pega a velocidade original e a precisão do sinal
-    const speedMS = pos.coords.speed || 0;
-    const accuracy = pos.coords.accuracy || 0; // Precisão em metros
+                const speedMS = pos.coords.speed || 0;
+                const accuracy = pos.coords.accuracy || 0;
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
 
-    // 2. FILTRO DE FLUTUAÇÃO:
-    // Se a velocidade for menor que 0.6 m/s (aprox. 2 km/h), consideramos parado (0).
-    // Se a precisão for ruim (ex: maior que 30 metros), ignoramos para evitar saltos.
-    let velKMH = 0;
-    if (speedMS > 0.6 && accuracy < 35) {
-        velKMH = speedMS * 3.6;
-    }
-
-    // 3. Atualiza a tela para o competidor
-    document.getElementById('viewVel').innerText = velKMH.toFixed(1);
-    
-    // 4. Salva os dados filtrados
-    const coord = { 
-        lat: pos.coords.latitude, 
-        lng: pos.coords.longitude, 
-        vel: parseFloat(velKMH.toFixed(1)), 
-        ts: Date.now(),
-        acc: accuracy.toFixed(1) // Opcional: guardar a precisão ajuda a analisar erros depois
-    };
-
-    
-
-                // Envio de dados
-                db.ref('posicoes/' + num).set(coord);
-                db.ref('rastros/' + num).push(coord);
-                
-            }, (err) => {
-                console.error("Erro GPS:", err);
-            }, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
-        }
-
-        // Carregar sessão salva
-        window.onload = function() {
-            const salvo = localStorage.getItem('rally_carro_ativo');
-            if (salvo) {
-                iniciarFluxoRastreio(salvo);
-            }
-        };
-
-        // Reativar bloqueio de tela ao voltar ao app
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && localStorage.getItem('rally_carro_ativo')) {
-                solicitarWakeLock();
-            }
-        });
-
-        // Clique no Botão Iniciar
-        document.getElementById('btnIniciar').onclick = async function() {
-            const numRaw = document.getElementById('carro').value;
-            const nomeRaw = document.getElementById('nome').value.trim();
-            const cat = document.getElementById('categoria').value;
-            const num = parseInt(numRaw);
-
-            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-            if(num < 1 || num > 100) return alert("O número do carro deve ser entre 1 e 100!");
-
-            try {
-                const snapshot = await db.ref('competidores').once('value');
-                const competidores = snapshot.val() || {};
-
-                for (let id in competidores) {
-                    if (id == num) return alert("Este número de carro já está registrado!");
+                // LOGICA DO ODÔMETRO INDEPENDENTE
+                if (ultimaPosicao && accuracy < 30) {
+                    const dist = calcularDistancia(ultimaPosicao.lat, ultimaPosicao.lng, lat, lng);
+                    // Filtro para evitar saltos de GPS parado
+                    if (dist > 0.002) { 
+                        odoDistancia += dist;
+                        atualizarDisplayOdo();
+                    }
                 }
+                ultimaPosicao = { lat, lng };
 
-                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
-                localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(num);
-
-            } catch (e) {
-                alert("Erro ao conectar ao banco de dados.");
-            }
-        };
-
-        // Encerrar Sessão
-        function encerrarSessao() {
-            if(confirm("Deseja encerrar a sessão e parar o rastreio?")) {
-                if (watchID) navigator.geolocation.clearWatch(watchID);
-                if (wakeLock) {
-                    wakeLock.release().then(() => { wakeLock = null; });
-                }
-                localStorage.removeItem('rally_carro_ativo');
-                location.reload();
-            }
-        }
-    </script>
-</body>
-</html>
-
-
-
+                let velKMH = 0;
+                if (speedMS > 0.6
