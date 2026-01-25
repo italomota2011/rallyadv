@@ -9,30 +9,32 @@
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
         
+        /* Toolbar com scroll caso os botões não caibam */
         #toolbar { 
-            height: 60px; 
+            height: 70px; 
             background: #2d3748; 
             display: flex; 
             align-items: center; 
             padding: 0 15px; 
-            gap: 10px; 
+            gap: 8px; 
             z-index: 9999; 
             position: relative;
             overflow-x: auto;
+            white-space: nowrap;
         }
 
-        #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
+        #map { height: calc(100vh - 70px); width: 100%; display: block; background: #a0aec0; }
         
         button { 
-            padding: 8px 12px; 
+            padding: 8px 10px; 
             background: #4a5568; 
             color: white; 
             border: none; 
             border-radius: 4px; 
             cursor: pointer; 
             font-weight: bold; 
-            font-size: 11px; 
-            white-space: nowrap;
+            font-size: 10px; 
+            text-transform: uppercase;
         }
         button:hover { background: #718096; }
         
@@ -42,7 +44,7 @@
             border: none; 
             background: #1a202c; 
             color: white; 
-            width: 140px; 
+            width: 120px; 
         }
 
         .marker-label { 
@@ -63,21 +65,27 @@
 
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Buscar cidade...">
-        <button onclick="buscar()">🔍 BUSCAR</button>
+        <button onclick="buscar()">🔍 Buscar</button>
         
-        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
-        
-        <button id="btnStatusProva" onclick="alternarProva()" style="background: #27ae60;">🟢 ABRIR PROVA</button>
-        <button onclick="limparCarros()" style="background: #e67e22;">🚗 LIMPAR CARROS</button>
-        
-        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+        <div style="width: 2px; height: 30px; background: #4a5568;"></div>
 
-        <button onclick="salvar()" style="background: #38a169;">💾 SALVAR TRAJETO</button>
-        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ VER RASTRO</button>
-        <button onclick="apurar()" style="background: #dd6b20;">🏁 RODAR APURAÇÃO</button>
-        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 PONTOS</button>
-        <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f; border: 1px solid #f6e05e;">🏆 RANKING FINAL</button>
-        <button onclick="resetar()" style="background: #e53e3e;">⚠️ RESET TOTAL</button>
+        <button id="btnStatusProva" onclick="alternarProva()" style="background: #27ae60;">🟢 Abrir Prova</button>
+        <button onclick="salvar()" style="background: #38a169;">💾 Salvar Trajeto</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568;"></div>
+
+        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ Rastro</button>
+        <button onclick="apurar()" style="background: #dd6b20;">🏁 Rodar Apuração</button>
+        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 Pontos</button>
+        <button onclick="window.location.href='tempos.html'" style="background: #2c3e50;">⏱️ Hora Chegada/Tempos</button>
+        <button onclick="window.location.href='fotos.html'" style="background: #d35400;">📸 Fotos</button>
+        <button onclick="window.location.href='ranking-fotos.html'" style="background: #f39c12;">🏅 Ranking Fotos</button>
+        <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f;">🏆 Ranking Final</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568;"></div>
+
+        <button onclick="limparCarros()" style="background: #e67e22;">🚗 Resetar Carros</button>
+        <button onclick="resetar()" style="background: #e53e3e;">⚠️ Reset Total (Senha)</button>
     </div>
     
     <div id="map"></div>
@@ -89,6 +97,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
+        // CONFIGURAÇÃO FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
@@ -99,6 +108,7 @@
 
         let map, drawnItems;
 
+        // INICIALIZAÇÃO DO MAPA
         function initMap() {
             map = L.map('map').setView([-12.26, -38.96], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -106,4 +116,140 @@
             drawnItems = new L.FeatureGroup().addTo(map);
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
-                draw: { polyline: true
+                draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
+            });
+            map.addControl(drawControl);
+
+            map.on(L.Draw.Event.CREATED, (e) => {
+                const layer = e.layer;
+                if (e.layerType === 'polygon') {
+                    const v = prompt("Velocidade Radar (KM/H):", "60");
+                    layer.feature = layer.feature || { type: "Feature", properties: {} };
+                    layer.feature.properties.velocidade = parseInt(v) || 60;
+                }
+                if (e.layerType === 'circle') {
+                    layer.feature = layer.feature || { type: "Feature", properties: {} };
+                    layer.feature.properties.type = 'circle';
+                    layer.feature.properties.radius = layer.getRadius();
+                }
+                drawnItems.addLayer(layer);
+            });
+
+            carregarTrajeto();
+            rastrearCarros();
+            monitorarStatusProva();
+        }
+
+        // FUNÇÕES DE LOGICA
+        function monitorarStatusProva() {
+            db.ref('configuracoes/provaAtiva').on('value', snap => {
+                const btn = document.getElementById('btnStatusProva');
+                if (snap.val()) {
+                    btn.innerText = "🔴 Fechar Prova";
+                    btn.style.background = "#e53e3e";
+                } else {
+                    btn.innerText = "🟢 Abrir Prova";
+                    btn.style.background = "#27ae60";
+                }
+            });
+        }
+
+        function alternarProva() {
+            db.ref('configuracoes/provaAtiva').once('value', snap => {
+                db.ref('configuracoes/provaAtiva').set(!snap.val());
+            });
+        }
+
+        function salvar() {
+            const data = { type: "FeatureCollection", features: [] };
+            drawnItems.eachLayer(layer => {
+                const gj = layer.toGeoJSON();
+                if (layer instanceof L.Circle) {
+                    gj.properties.type = 'circle';
+                    gj.properties.radius = layer.getRadius();
+                }
+                data.features.push(gj);
+            });
+            db.ref('configuracoes/percurso').set(data).then(() => alert("✅ Trajeto Salvo!"));
+        }
+
+        function carregarTrajeto() {
+            db.ref('configuracoes/percurso').once('value', snap => {
+                if(snap.exists()) {
+                    L.geoJSON(snap.val(), {
+                        pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, {radius: f.properties.radius}) : null,
+                        onEachFeature: (f, l) => drawnItems.addLayer(l)
+                    });
+                }
+            });
+        }
+
+        function rastrearCarros() {
+            const markers = {};
+            db.ref('posicoes').on('value', snap => {
+                snap.forEach(c => {
+                    const id = c.key; const p = c.val();
+                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
+                    else markers[id] = L.marker([p.lat, p.lng], { 
+                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
+                    }).addTo(map);
+                });
+            });
+        }
+
+        async function buscar() {
+            const q = document.getElementById('cityInput').value;
+            if(!q) return;
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+            const data = await res.json();
+            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
+        }
+
+        function limparCarros() {
+            if(confirm("Deseja resetar todos os carros e posições?")) {
+                db.ref('competidores').remove();
+                db.ref('posicoes').remove();
+                db.ref('rastros').remove();
+                alert("Carros resetados!");
+            }
+        }
+
+        function resetar() {
+            if(prompt("Digite a senha para RESET TOTAL:") === "261291") {
+                db.ref('/').remove().then(() => location.reload());
+            }
+        }
+
+        // Funçao de Apuração Baseada no seu código original
+        window.apurar = async function() {
+            if(!confirm("Rodar apuração de radar?")) return;
+            const config = (await db.ref('configuracoes/percurso').once('value')).val();
+            const rastros = (await db.ref('rastros').once('value')).val();
+            const comps = (await db.ref('competidores').once('value')).val();
+            
+            for(let id in comps) {
+                let pen = 0;
+                const rastroArr = Object.values(rastros[id] || {}).sort((a,b)=>a.ts-b.ts);
+                config.features.forEach(feat => {
+                    if(feat.geometry.type==='Polygon') {
+                        const vMax = (feat.properties.velocidade || 60) * 1.1;
+                        let excessoMs = 0;
+                        for(let i=1; i<rastroArr.length; i++) {
+                            const p = rastroArr[i];
+                            const dur = p.ts - rastroArr[i-1].ts;
+                            if(dur < 10000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                excessoMs += dur;
+                            }
+                        }
+                        if(excessoMs > 10000) pen += (Math.floor((excessoMs-10000)/30000)+1)*300;
+                    }
+                });
+                db.ref(`competidores/${id}`).update({ pontos: 0 - pen });
+            }
+            alert("✅ Apuração Finalizada!");
+        };
+
+        window.onload = initMap;
+    </script>
+</body>
+</html>
