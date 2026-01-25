@@ -1,30 +1,82 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rally Tracker Pro</title>
-
+    <title>Piloto Rally</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
-    
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #FF0000; text-align: center; }
-        .logo { display: block; margin: 0 auto 15px auto; max-width: 250px; height: auto; }
-        input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #0059FF; border: none; font-weight: bold; cursor: pointer; }
-        #setup { display: block; } 
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 90%; max-width: 350px; text-align: center; border-top: 5px solid red; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 6px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; }
+        button { background: #0059FF; border: none; font-weight: bold; }
         #ativo { display: none; }
-        .odo-container { background: rgba(255, 255, 255, 0.05); padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
-        .odo-distancia { font-size: 3rem; font-weight: bold; font-family: monospace; }
-        .odo-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-        .btn-odo { padding: 10px; font-size: 12px; background: #333; }
-        .status-gps { color: #2ecc71; font-size: 12px; margin-top: 10px; }
+        .dist { font-size: 3rem; font-weight: bold; margin: 10px 0; font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <div id="setup">
-            <img src="
+<div class="card">
+    <div id="setup">
+        <h2>RALLY START</h2>
+        <input type="text" id="nome" placeholder="Seu Nome">
+        <input type="number" id="carro" placeholder="Nº do Carro">
+        <button onclick="checkAndStart()">INICIAR PROVA</button>
+    </div>
+
+    <div id="ativo">
+        <h3 id="vCarro">--</h3>
+        <div id="vVel" style="font-size: 2.5rem;">0.0</div>
+        <div class="dist" id="vDist">0.000</div>
+        <button onclick="localStorage.clear(); location.reload();" style="background:#444">SAIR</button>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    async function checkAndStart() {
+        const num = document.getElementById('carro').value;
+        const nome = document.getElementById('nome').value;
+        if(!num || !nome) return alert("Preencha tudo!");
+
+        // VERIFICA SE O ADMIN ABRIU A PROVA
+        const snap = await db.ref('configuracoes/provaAtiva').once('value');
+        if(!snap.val()) {
+            alert("Aguarde a liberação do administrador!");
+            return;
+        }
+
+        localStorage.setItem('rally_carro', num);
+        start(num);
+    }
+
+    function start(num) {
+        document.getElementById('setup').style.display = 'none';
+        document.getElementById('ativo').style.display = 'block';
+        document.getElementById('vCarro').innerText = "CARRO " + num;
+
+        navigator.geolocation.watchPosition(p => {
+            const lat = p.coords.latitude, lng = p.coords.longitude;
+            const vel = (p.coords.speed || 0) * 3.6;
+            document.getElementById('vVel').innerText = vel.toFixed(1) + " KM/H";
+            
+            db.ref('posicoes/'+num).set({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
+            db.ref('rastros/'+num).push({lat, lng, vel: vel.toFixed(1), ts: Date.now()});
+        }, null, {enableHighAccuracy: true});
+    }
+
+    window.onload = () => {
+        const c = localStorage.getItem('rally_carro');
+        if(c) start(c);
+    };
+</script>
+</body>
+</html>
