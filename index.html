@@ -124,15 +124,31 @@
 
             // Captura de GPS de Alta Precisão
             watchID = navigator.geolocation.watchPosition(pos => {
-                const vel = (pos.coords.speed || 0) * 3.6;
-                document.getElementById('viewVel').innerText = vel.toFixed(1);
-                
-                const coord = { 
-                    lat: pos.coords.latitude, 
-                    lng: pos.coords.longitude, 
-                    vel: vel.toFixed(1), 
-                    ts: Date.now() 
-                };
+    // 1. Pega a velocidade original e a precisão do sinal
+    const speedMS = pos.coords.speed || 0;
+    const accuracy = pos.coords.accuracy || 0; // Precisão em metros
+
+    // 2. FILTRO DE FLUTUAÇÃO:
+    // Se a velocidade for menor que 0.6 m/s (aprox. 2 km/h), consideramos parado (0).
+    // Se a precisão for ruim (ex: maior que 30 metros), ignoramos para evitar saltos.
+    let velKMH = 0;
+    if (speedMS > 0.6 && accuracy < 35) {
+        velKMH = speedMS * 3.6;
+    }
+
+    // 3. Atualiza a tela para o competidor
+    document.getElementById('viewVel').innerText = velKMH.toFixed(1);
+    
+    // 4. Salva os dados filtrados
+    const coord = { 
+        lat: pos.coords.latitude, 
+        lng: pos.coords.longitude, 
+        vel: parseFloat(velKMH.toFixed(1)), 
+        ts: Date.now(),
+        acc: accuracy.toFixed(1) // Opcional: guardar a precisão ajuda a analisar erros depois
+    };
+
+    
 
                 // Envio de dados
                 db.ref('posicoes/' + num).set(coord);
@@ -199,3 +215,4 @@
     </script>
 </body>
 </html>
+
