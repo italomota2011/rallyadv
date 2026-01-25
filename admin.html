@@ -2,36 +2,89 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Painel Admin Rally</title>
+    <title>Painel Admin Rally - Oficial</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
     <style>
         * { box-sizing: border-box; }
-        body, html { margin: 0; padding: 0; height: 100%; background: #1a202c; font-family: sans-serif; overflow: hidden; }
-        #toolbar { height: 65px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 1000; position: relative; overflow-x: auto; }
-        #map { height: calc(100vh - 65px); width: 100%; background: #2d3748; display: block; }
-        button { padding: 10px 14px; border: none; border-radius: 4px; color: white; font-weight: bold; cursor: pointer; font-size: 11px; flex-shrink: 0; }
-        input { padding: 8px; border-radius: 4px; border: none; width: 140px; background: #1a202c; color: white; }
-        .marker-label { background: #ed8936; border: 2px solid white; border-radius: 50%; color: white; font-weight: bold; text-align: center; line-height: 26px; width: 30px; height: 30px; }
+        html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
+        
+        #toolbar { 
+            height: 60px; 
+            background: #2d3748; 
+            display: flex; 
+            align-items: center; 
+            padding: 0 15px; 
+            gap: 10px; 
+            z-index: 9999; 
+            position: relative;
+            overflow-x: auto;
+        }
+
+        #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
+        
+        button { 
+            padding: 8px 12px; 
+            background: #4a5568; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            font-size: 11px; 
+            white-space: nowrap;
+        }
+        button:hover { background: #718096; }
+        
+        input { 
+            padding: 8px; 
+            border-radius: 4px; 
+            border: none; 
+            background: #1a202c; 
+            color: white; 
+            width: 140px; 
+        }
+
+        .marker-label { 
+            background: #ed8936; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            color: white; 
+            font-weight: bold; 
+            text-align: center; 
+            line-height: 26px; 
+            width: 30px; 
+            height: 30px; 
+            font-size: 12px; 
+        }
     </style>
 </head>
 <body>
 
     <div id="toolbar">
         <input type="text" id="cityInput" placeholder="Buscar cidade...">
-        <button onclick="buscar()" style="background: #4a5568;">🔍 BUSCAR</button>
-        <div style="width:2px; height:30px; background:#4a5568;"></div>
+        <button onclick="buscar()">🔍 BUSCAR</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+        
         <button id="btnStatusProva" onclick="alternarProva()" style="background: #27ae60;">🟢 ABRIR PROVA</button>
         <button onclick="limparCarros()" style="background: #e67e22;">🚗 LIMPAR CARROS</button>
+        
+        <div style="width: 2px; height: 30px; background: #4a5568; margin: 0 5px;"></div>
+
         <button onclick="salvar()" style="background: #38a169;">💾 SALVAR TRAJETO</button>
-        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ RASTRO</button>
-        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 RANKING</button>
+        <button onclick="window.location.href='rastro.html'" style="background: #805ad5;">🗺️ VER RASTRO</button>
+        <button onclick="apurar()" style="background: #dd6b20;">🏁 RODAR APURAÇÃO</button>
+        <button onclick="window.location.href='resultados.html'" style="background: #3182ce;">📊 PONTOS</button>
+        <button onclick="window.location.href='ranking-geral.html'" style="background: #b7791f; border: 1px solid #f6e05e;">🏆 RANKING FINAL</button>
+        <button onclick="resetar()" style="background: #e53e3e;">⚠️ RESET TOTAL</button>
     </div>
     
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
@@ -46,81 +99,11 @@
 
         let map, drawnItems;
 
-        // Inicia apenas quando a página estiver pronta
-        document.addEventListener("DOMContentLoaded", function() {
+        function initMap() {
             map = L.map('map').setView([-12.26, -38.96], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            
+
             drawnItems = new L.FeatureGroup().addTo(map);
             const drawControl = new L.Control.Draw({
                 edit: { featureGroup: drawnItems },
-                draw: { polyline: true, polygon: true, circle: true, rectangle: false, marker: false, circlemarker: false }
-            });
-            map.addControl(drawControl);
-
-            map.on(L.Draw.Event.CREATED, (e) => {
-                const layer = e.layer;
-                if (e.layerType === 'polygon') layer.feature = { properties: { velocidade: prompt("Velocidade Radar:", "60") } };
-                if (e.layerType === 'circle') layer.feature = { properties: { type: 'circle', radius: layer.getRadius() } };
-                drawnItems.addLayer(layer);
-            });
-
-            // Carregar dados iniciais
-            db.ref('configuracoes/percurso').once('value', snap => {
-                if(snap.exists()) L.geoJSON(snap.val(), {
-                    pointToLayer: (f, latlng) => f.properties?.type === 'circle' ? L.circle(latlng, {radius: f.properties.radius}) : null,
-                    onEachFeature: (f, l) => drawnItems.addLayer(l)
-                });
-            });
-
-            // Monitorar status da prova
-            db.ref('configuracoes/provaAtiva').on('value', snap => {
-                const btn = document.getElementById('btnStatusProva');
-                const ativa = snap.val();
-                btn.innerText = ativa ? "🔴 FECHAR PROVA" : "🟢 ABRIR PROVA";
-                btn.style.background = ativa ? "#e53e3e" : "#27ae60";
-            });
-
-            // Rastreio em tempo real
-            const markers = {};
-            db.ref('posicoes').on('value', snap => {
-                snap.forEach(c => {
-                    const id = c.key; const p = c.val();
-                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
-                });
-            });
-        });
-
-        function alternarProva() {
-            db.ref('configuracoes/provaAtiva').once('value', snap => db.ref('configuracoes/provaAtiva').set(!snap.val()));
-        }
-
-        function limparCarros() {
-            if(confirm("Remover todos os competidores e manter o mapa?")) {
-                db.ref('competidores').remove(); db.ref('posicoes').remove(); db.ref('rastros').remove();
-                alert("Limpeza concluída!");
-            }
-        }
-
-        function salvar() {
-            const data = { type: "FeatureCollection", features: [] };
-            drawnItems.eachLayer(l => {
-                const gj = l.toGeoJSON();
-                if (l instanceof L.Circle) { gj.properties.type = 'circle'; gj.properties.radius = l.getRadius(); }
-                data.features.push(gj);
-            });
-            db.ref('configuracoes/percurso').set(data).then(() => alert("Trajeto salvo!"));
-        }
-
-        async function buscar() {
-            const q = document.getElementById('cityInput').value;
-            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
-            const data = await res.json();
-            if(data[0]) map.setView([data[0].lat, data[0].lon], 14);
-        }
-    </script>
-</body>
-</html>
+                draw: { polyline: true
