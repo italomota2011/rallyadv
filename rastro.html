@@ -1,76 +1,97 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Análise de Telemetria - Rally</title>
+    <title>Resgate - Analise Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; overflow: hidden; }
-        #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); }
-        #map { flex-grow: 1; height: 100vh; background: #222; } /* Cor de fundo para teste */
-        h2 { color: #e67e22; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; display: block; }
-        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
-        .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.8; border: 1px solid #444; }
-        .leaflet-control-layers { background: white !important; color: black !important; }
+        body { margin: 0; padding: 0; display: flex; height: 100vh; background: #121212; color: white; font-family: sans-serif; }
+        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; z-index: 999; border-right: 2px solid #e67e22; }
+        #map { flex-grow: 1; height: 100vh; background: #222; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; cursor: pointer; }
+        button { background: #e67e22; color: white; border: none; font-weight: bold; }
+        .legenda { margin-top: 20px; padding: 10px; background: rgba(0,0,0,0.5); font-size: 13px; line-height: 1.6; }
     </style>
 </head>
 <body>
 
-<div id="sidebar">
-    <h2>🛰️ Telemetria</h2>
-    <select id="carSelect"><option value="">Buscando pilotos...</option></select>
-    <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
-    
-    <div id="resumo">
-        <div class="stats-card">Selecione um carro para analisar.</div>
+    <div id="sidebar">
+        <h2>🛰️ Rally Tracker</h2>
+        <label>Selecione o Carro:</label>
+        <select id="carSelect"><option>Carregando...</option></select>
+        <button onclick="verRastro()">VER NO MAPA</button>
+
+        <div class="legenda">
+            <strong>Cores:</strong><br>
+            <span style="color:#3498db">━━</span> Rota Planejada<br>
+            <span style="color:#e67e22">━━</span> Rastro Real
+        </div>
+        
+        <button style="background:#555; margin-top: 50px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
 
-    <div class="legenda">
-        <strong>Legenda:</strong><br>
-        <span style="color:#3498db">━━</span> Rota Oficial (Admin)<br>
-        <span style="color:#e67e22">━━</span> Rastro Real (GPS)<br>
-        <span style="color:#38a169">⬤</span> Waypoint OK<br>
-        <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-        <span style="color:red">⬤</span> Excesso Velocidade
-    </div>
-    
-    <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
-</div>
+    <div id="map"></div>
 
-<div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+    <script>
+        // 1. INICIAR MAPA
+        var map = L.map('map').setView([-12.26, -38.96], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-<script>
-    // 1. INICIALIZAR MAPA IMEDIATAMENTE (SEM DEPENDÊNCIAS)
-    const map = L.map('map').setView([-12.26, -38.96], 13);
-    
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OSM'
-    }).addTo(map);
+        // Camadas para desenhar
+        var layerRota = L.featureGroup().addTo(map);
+        var layerRastro = L.polyline([], {color: '#e67e22', weight: 5}).addTo(map);
 
-    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Esri'
-    });
+        // 2. FIREBASE
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-    // Camadas de dados
-    const camadas = {
-        rotaOficial: L.featureGroup().addTo(map),
-        rastroCarro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
-        alertas: L.featureGroup().addTo(map)
-    };
+        // 3. CARREGAR PILOTOS
+        db.ref('competidores').on('value', snap => {
+            let html = '<option value="">Escolha um piloto</option>';
+            snap.forEach(c => {
+                html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`;
+            });
+            document.getElementById('carSelect').innerHTML = html;
+        });
 
-    // 2. ADICIONAR SELETOR DE SATÉLITE
-    try {
-        const baseMaps = { "Rua": osm, "Satélite": satelite };
-        L.control.layers(baseMaps).addTo(map);
-    } catch(e) { console.error("Erro no seletor:", e); }
+        // 4. FUNÇÃO PRINCIPAL
+        async function verRastro() {
+            let id = document.getElementById('carSelect').value;
+            if(!id) return alert("Selecione um carro");
 
-    // 3. CONFIGURAR FIREBASE
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY
+            layerRota.clearLayers();
+            layerRastro.setLatLngs([]);
+
+            // Buscar Rastro e Rota do Admin
+            const [snapR, snapO] = await Promise.all([
+                db.ref('rastros/' + id).once('value'),
+                db.ref('configuracoes/percurso').once('value')
+            ]);
+
+            // Desenhar Rota Oficial (Admin)
+            if(snapO.val()) {
+                L.geoJSON(snapO.val(), {
+                    style: { color: '#3498db', weight: 8, opacity: 0.3 }
+                }).addTo(layerRota);
+            }
+
+            // Desenhar Rastro Real
+            if(snapR.val()) {
+                let pts = Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts).map(p => [p.lat, p.lng]);
+                layerRastro.setLatLngs(pts);
+                map.fitBounds(layerRastro.getBounds());
+            } else {
+                alert("Nenhum rastro encontrado para este carro.");
+            }
+        }
+    </script>
+</body>
+</html>
