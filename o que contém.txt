@@ -51,6 +51,11 @@ Não pode duplicar número do carro - ❌
 Só pode iniciar depois que o admin abrir prova - ❌
 
 
+🔴Como ver backup local?
+No console digite: localStorage.getItem('rally_backup_rastro')
+
+
+
 ❌✅
 🟢🔴🟡🟠🟣
 🟥🟪🟦🟩🟨🟧
