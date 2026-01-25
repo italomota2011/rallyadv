@@ -12,158 +12,18 @@
         .container { max-width: 1100px; margin: auto; }
         .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
         h1 { color: #e67e22; margin: 0; }
-        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; margin-top: 0; }
+        .controles { display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; }
+        input { padding: 10px; border-radius: 6px; border: 1px solid #4a5568; background: #2d3748; color: white; }
         
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
-        th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 1px solid #4a5568; font-size: 13px; text-transform: uppercase; }
-        td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; vertical-align: middle; }
-
-        .col-pos { width: 60px; font-weight: bold; color: #e67e22; }
-        .col-num { width: 60px; }
-        .col-piloto { width: auto; }
-        .col-tempo { width: 150px; font-family: monospace; color: #fbd38d; font-weight: bold; }
-        .col-pontos { width: 180px; text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
-
-        .text-right { text-align: right; }
+        .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        h2 { color: #f6ad55; margin-top: 0; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
         
-        #logoInvisivel { display: none; }
-        .btn { border-radius: 5px; font-weight: bold; transition: 0.3s; padding: 10px 20px; border: none; cursor: pointer; color: white; }
-        .btn-voltar { background: #4a5568; }
-        .btn-pdf { background: #38a169; }
-        input { background: #1a202c; color: white; border: 1px solid #4a5568; padding: 10px; border-radius: 5px; width: 100%; box-sizing: border-box; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
-
-    <div class="header-ranking">
-        <h1>🏆 Classificação Final</h1>
-    </div>
-
-    <div class="cat-card">
-        <label style="display:block; margin-bottom:8px; color:#a0aec0;">Nome da Etapa / Cidade:</label>
-        <input type="text" id="inputCidade" placeholder="Ex: Etapa de Verão - Salvador">
-        <div style="margin-top: 15px; display: flex; gap: 10px;">
-            <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
-            <button class="btn btn-pdf" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
-        </div>
-    </div>
-
-    <div id="rankingContent">A carregar classificação...</div>
-</div>
-
-<script>
-    const firebaseConfig = {
-        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-        authDomain: "cronometro-rally.firebaseapp.com",
-        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
-        projectId: "cronometro-rally",
-        appId: "1:341731891354:web:d0c34265be68015e98a723"
-    };
-    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
-
-    function tempoParaSegundos(tempo) {
-        if (!tempo || typeof tempo !== 'string' || tempo === "00:00:00") return 9999999; 
-        const partes = tempo.split(':');
-        return (+partes[0]) * 3600 + (+partes[1]) * 60 + (+partes[2]);
-    }
-
-    db.ref('competidores').on('value', snap => {
-        const data = snap.val();
-        if(!data) return document.getElementById('rankingContent').innerHTML = "Sem dados.";
-
-        let html = "";
-        categorias.forEach(cat => {
-            let list = [];
-            for(let id in data) {
-                if(data[id].categoria === cat) {
-                    const p = data[id];
-                    const ptsGPS = p.pontos || 0; 
-                    const bonus = p.pontosFotos || 0;
-                    const totalPts = ptsGPS + bonus;
-                    const tempoStr = p.tempoFormatado || p.tempo || "00:00:00";
-
-                    list.push({ 
-                        id, ...p, 
-                        tempoStr,
-                        tSeg: tempoParaSegundos(tempoStr),
-                        totalPts
-                    });
-                }
-            }
-            
-            list.sort((a, b) => {
-                if (a.tSeg !== b.tSeg) return a.tSeg - b.tSeg;
-                return b.totalPts - a.totalPts;
-            });
-
-            if(list.length > 0) {
-                html += `
-                <div class="cat-card">
-                    <h2>Categoria: ${cat}</h2>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="col-pos">Pos</th>
-                                <th class="col-num">Nº</th>
-                                <th class="col-piloto">Piloto</th>
-                                <th class="col-tempo">Tempo Total</th>
-                                <th class="col-pontos text-right">Pontuação Final</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-                list.forEach((p, i) => {
-                    html += `
-                    <tr>
-                        <td class="col-pos">${i + 1}º</td>
-                        <td class="col-num"><b>${p.id}</b></td>
-                        <td class="col-piloto">${p.nome}</td>
-                        <td class="col-tempo">${p.tempoStr}</td>
-                        <td class="col-pontos text-right">${p.totalPts.toLocaleString('pt-BR')} pts</td>
-                    </tr>`;
-                });
-                html += `</tbody></table></div>`;
-            }
-        });
-        document.getElementById('rankingContent').innerHTML = html;
-    });
-
-    async function exportarPDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('p', 'mm', 'a4');
-        const cidade = document.getElementById('inputCidade').value || "Resultado Geral";
-        const img = document.getElementById('logoInvisivel');
-
-        try { doc.addImage(img, 'JPEG', 90, 10, 30, 30); } catch (e) {}
-
-        doc.setFontSize(18);
-        doc.setTextColor(230, 126, 34);
-        doc.text("RELATÓRIO DE PROVA", 105, 50, { align: "center" });
-        doc.setFontSize(12);
-        doc.setTextColor(100, 100, 100);
-        doc.text(cidade, 105, 58, { align: "center" });
-
-        let finalY = 65;
-        document.querySelectorAll('.cat-card').forEach((card) => {
-            const h2 = card.querySelector('h2');
-            if(h2) {
-                const titulo = h2.innerText;
-                const tabela = card.querySelector('table');
-                
-                if (finalY > 240) { doc.addPage(); finalY = 20; }
-                
-                doc.setFontSize(14);
-                doc.setTextColor(0, 0, 0);
-                doc.text(titulo, 14, finalY);
-
-                doc.autoTable({ 
-                    html: tabela, 
-                    startY: finalY + 5, 
-                    theme: 'striped',
-                    headStyles: { fillColor: [230, 126, 34] },
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: #1a202c; color: #a0aec0; text-align: left; padding: 12px; font-size: 12px; text-transform: uppercase; }
+        td { padding: 12px; border-bottom: 1px solid #4a5568; }
+        
+        .col-pontos { text-align: right; font-weight: bold; }
+        .total-destaque { color: #63b3ed; font-size: 1.1rem; }
+        .penalidade { color: #fc8181; }
+        
+        .btn-pdf { background: #e67e22; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; }
