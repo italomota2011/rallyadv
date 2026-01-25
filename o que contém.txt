@@ -43,7 +43,9 @@ Envia dados com perca de internet - ✅
 Odometro - ✅
 Botão iniciar - ✅
 Cores padrão - ✅
-
+Não pode duplicar nome do piloto - ❌
+Não pode duplicar número do carro - ❌
+Número do carro não pode ser 0 nem maior que 100 - ❌
 
 rastro:
 
