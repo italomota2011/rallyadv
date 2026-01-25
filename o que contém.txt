@@ -1,4 +1,4 @@
-⭕ PÁGINA ADMIN=
+🔵 PÁGINA ADMIN=
 _______________________________________
 Botões:
 Buscar cidade - ✅
@@ -16,7 +16,7 @@ ________________________________________
 Funções do mapa todas ok - ✅
 ________________________________________
 
-⭕ Página 
+🔵 Página 
 
 
 Mapa funcionando;
@@ -35,4 +35,11 @@ Gostaria que eu criasse um pequeno código para você colocar no seu Mapa que mo
 
 
 ícones dos carros verde - online, mostrando o nome do piloto ao passar o mouse em cima
+
+❌
+🟢
+🔴
+🟡
+🟠
+🟣
 
