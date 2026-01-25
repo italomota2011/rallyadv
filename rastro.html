@@ -2,42 +2,42 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Análise Completa - Rally</title>
+    <title>Análise Telemetria - Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; overflow: hidden; }
-        #sidebar { width: 350px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; box-shadow: 2px 0 10px rgba(0,0,0,0.5); border-right: 2px solid #e67e22; }
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; background: #121212; color: white; }
+        #sidebar { width: 320px; background: #1e1e1e; padding: 20px; z-index: 1000; overflow-y: auto; border-right: 2px solid #e67e22; }
         #map { flex-grow: 1; height: 100vh; background: #222; }
-        h2 { color: #e67e22; margin-top: 0; font-size: 1.2rem; }
-        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; display: block; }
+        h2 { color: #e67e22; margin-top: 0; }
+        select, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 6px; border: none; font-size: 14px; }
         button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
-        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
+        .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 13px; }
         .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
-        .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; line-height: 1.8; border: 1px solid #444; }
+        .legenda { font-size: 12px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 5px; line-height: 1.6; border: 1px solid #444; }
         .leaflet-control-layers { background: white !important; color: black !important; }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2>🛰️ Telemetria Avançada</h2>
-    <select id="carSelect"><option value="">Buscando pilotos...</option></select>
-    <button onclick="analisarRastro()">ANALISAR DESEMPENHO</button>
+    <h2>🛰️ Telemetria</h2>
+    <select id="carSelect"><option value="">Carregando...</option></select>
+    <button onclick="analisarRastro()">ANALISAR RASTRO</button>
     
     <div id="resumo">
-        <div class="stats-card">Selecione um carro para processar radares e waypoints.</div>
+        <div class="stats-card">Selecione um carro acima.</div>
     </div>
 
     <div class="legenda">
-        <strong>Legenda de Mapa:</strong><br>
-        <span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial (Planejada)<br>
-        <span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real (Percorrido)<br>
-        <span style="color:#38a169; font-weight:bold;">⬤</span> Waypoint Validado (Visitado)<br>
-        <span style="color:#e74c3c; font-weight:bold;">⬤</span> Waypoint Perdido<br>
-        <span style="color:red; font-weight:bold;">⬤</span> Excesso de Velocidade no Radar
+        <strong>Legenda:</strong><br>
+        <span style="color:#3498db">━━</span> Rota Oficial<br>
+        <span style="color:#e67e22">━━</span> Rastro do Carro<br>
+        <span style="color:#38a169">⬤</span> Waypoint OK<br>
+        <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
+        <span style="color:red">⬤</span> Excesso Velocidade
     </div>
     
-    <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
+    <button style="background:#4a5568; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
 </div>
 
 <div id="map"></div>
@@ -48,33 +48,74 @@
 <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
 <script>
-    // 1. INICIALIZAR MAPA COM SATÉLITE POR PADRÃO
-    const map = L.map('map').setView([-12.26, -38.96], 13);
+    // 1. INICIALIZAÇÃO IMEDIATA DO MAPA
+    var map = L.map('map').setView([-12.26, -38.96], 13);
     
-    const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Imagery © Esri'
-    }).addTo(map);
+    // Camadas Base
+    var camadaSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri'
+    }).addTo(map); // Adiciona satélite por padrão
 
-    const rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OSM'
+    var camadaRua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: 'OSM'
     });
 
-    const baseMaps = { "Satélite": satelite, "Rua": rua };
+    // Controle de Troca de Mapa (Rua/Satélite)
+    var baseMaps = { "Satélite": camadaSatelite, "Rua": camadaRua };
     L.control.layers(baseMaps).addTo(map);
 
-    const camadas = {
-        percurso: L.featureGroup().addTo(map),
-        rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.9}).addTo(map),
-        alertas: L.featureGroup().addTo(map)
+    // Camadas de Desenho
+    var camadas = {
+        rota: L.featureGroup().addTo(map),
+        rastro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
+        avisos: L.featureGroup().addTo(map)
     };
 
-    // 2. FIREBASE
+    // 2. CONFIGURAÇÃO FIREBASE
     const firebaseConfig = {
         apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
         databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
     };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    
+    try {
+        firebase.initializeApp(firebaseConfig);
+        var db = firebase.database();
 
-    // Carregar Lista
-    db.ref('competidores').
+        // Carregar Competidores
+        db.ref('competidores').on('value', snap => {
+            let select = document.getElementById('carSelect');
+            let html = '<option value="">Escolha o Piloto...</option>';
+            snap.forEach(c => {
+                html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`;
+            });
+            select.innerHTML = html;
+        });
+    } catch (e) { console.error("Erro Firebase:", e); }
+
+    // 3. FUNÇÃO DE ANÁLISE
+    async function analisarRastro() {
+        let id = document.getElementById('carSelect').value;
+        if(!id) return alert("Selecione um carro!");
+
+        camadas.rota.clearLayers();
+        camadas.avisos.clearLayers();
+        camadas.rastro.setLatLngs([]);
+        document.getElementById('resumo').innerHTML = "Processando...";
+
+        try {
+            const [snapR, snapO] = await Promise.all([
+                db.ref('rastros/' + id).once('value'),
+                db.ref('configuracoes/percurso').once('value')
+            ]);
+
+            const rastro = snapR.val();
+            const rota = snapO.val();
+
+            if(!rastro) {
+                document.getElementById('resumo').innerHTML = "Sem dados de GPS.";
+                return alert("Nenhum rastro encontrado.");
+            }
+
+            // Desenhar Rastro
+            let rastroArr = Object.values(rastro).sort((a,b) => a.ts - b.ts);
+            camadas.rastro.setLatLngs(rastroArr.map(p => [p.
