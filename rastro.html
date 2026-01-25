@@ -2,40 +2,31 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Analise Final - Rally</title>
+    <title>Analise Rally</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; display: flex; height: 100vh; background: #121212; color: white; font-family: sans-serif; }
-        #sidebar { width: 330px; background: #1e1e1e; padding: 20px; z-index: 999; border-right: 2px solid #e67e22; overflow-y: auto; }
+        body { margin: 0; display: flex; height: 100vh; background: #121212; color: white; font-family: sans-serif; }
+        #sidebar { width: 300px; background: #1e1e1e; padding: 20px; z-index: 1000; border-right: 2px solid #e67e22; }
         #map { flex-grow: 1; height: 100vh; background: #222; }
-        h2 { color: #e67e22; margin-top: 0; }
-        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; cursor: pointer; border: none; }
-        button { background: #e67e22; color: white; font-weight: bold; }
+        select, button { width: 100%; padding: 12px; margin-top: 10px; border-radius: 5px; border: none; }
+        button { background: #e67e22; color: white; font-weight: bold; cursor: pointer; }
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-top: 15px; font-size: 13px; }
-        .legenda { margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 12px; line-height: 1.8; }
-        .penal-item { color: #ff6b6b; display: block; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
+        .legenda { margin-top: 20px; font-size: 12px; line-height: 1.8; opacity: 0.8; }
     </style>
 </head>
 <body>
 
     <div id="sidebar">
         <h2>🛰️ Telemetria</h2>
-        <label>Competidor:</label>
-        <select id="carSelect"><option>Carregando pilotos...</option></select>
-        <button onclick="analisar()">ANALISAR DESEMPENHO</button>
-
+        <select id="carSelect"><option>Conectando...</option></select>
+        <button onclick="analisar()">ANALISAR</button>
         <div id="resumo"></div>
-
         <div class="legenda">
-            <strong>Legenda:</strong><br>
             <span style="color:#3498db">━━</span> Rota Oficial<br>
             <span style="color:#e67e22">━━</span> Rastro Real<br>
-            <span style="color:#38a169">⬤</span> Waypoint OK<br>
-            <span style="color:#e74c3c">⬤</span> Waypoint Perdido<br>
-            <span style="color:red">⬤</span> Excesso Velocidade
+            <span style="color:#38a169">⬤</span> WP OK | <span style="color:#e74c3c">⬤</span> WP Perdido
         </div>
-        
-        <button style="background:#444; margin-top: 30px;" onclick="location.href='admin.html'">VOLTAR</button>
+        <button style="background:#444; margin-top:20px;" onclick="location.href='admin.html'">VOLTAR</button>
     </div>
 
     <div id="map"></div>
@@ -46,51 +37,48 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // 1. INICIAR MAPA IMEDIATAMENTE
+        // 1. INICIAR MAPA IMEDIATAMENTE (O mapa TEM que aparecer aqui)
         var map = L.map('map').setView([-12.26, -38.96], 13);
         
-        // Camadas de Mapa
-        var rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-        var satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        // Camada Satélite (Esri)
+        var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             attribution: 'Esri'
-        }).addTo(map); // Satélite inicia como padrão
+        }).addTo(map);
 
-        L.control.layers({ "Satélite": satelite, "Rua": rua }).addTo(map);
+        var rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
+        L.control.layers({"Satélite": sat, "Rua": rua}).addTo(map);
 
-        // Camadas de Desenho
         var camadas = {
             rota: L.featureGroup().addTo(map),
             rastro: L.polyline([], {color: '#e67e22', weight: 4}).addTo(map),
             alertas: L.featureGroup().addTo(map)
         };
 
-        // 2. FIREBASE
+        // 2. FIREBASE (Configuração mínima)
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com"
         };
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        var db = firebase.database();
 
-        // Carregar competidores
+        // Carregar lista de pilotos
         db.ref('competidores').on('value', snap => {
-            let html = '<option value="">Selecione o piloto...</option>';
+            let html = '<option value="">Selecione o piloto</option>';
             snap.forEach(c => {
                 html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`;
             });
             document.getElementById('carSelect').innerHTML = html;
         });
 
-        // 3. ANÁLISE DE RADARES E WAYPOINTS
+        // 3. FUNÇÃO DE ANÁLISE
         async function analisar() {
             let id = document.getElementById('carSelect').value;
-            if(!id) return alert("Escolha um carro!");
+            if(!id) return;
 
-            // Limpeza
             camadas.rota.clearLayers();
             camadas.alertas.clearLayers();
             camadas.rastro.setLatLngs([]);
-            document.getElementById('resumo').innerHTML = "Processando...";
 
             try {
                 const [snapR, snapO] = await Promise.all([
@@ -98,48 +86,55 @@
                     db.ref('configuracoes/percurso').once('value')
                 ]);
 
-                const rastroData = snapR.val();
-                const rotaOficial = snapO.val();
+                if(snapR.val()) {
+                    let rastroArr = Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts);
+                    camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
+                    map.fitBounds(camadas.rastro.getBounds());
 
-                if(!rastroData) {
-                    document.getElementById('resumo').innerHTML = "";
-                    return alert("Sem rastro para este carro.");
+                    // Só executa o processamento de radares se o Turf.js carregou
+                    if(typeof turf !== 'undefined' && snapO.val()) {
+                        processarTelemetria(rastroArr, snapO.val());
+                    }
+                } else {
+                    alert("Sem dados de rastro.");
                 }
+            } catch (e) { console.error(e); }
+        }
 
-                // Desenha Rastro
-                let rastroArr = Object.values(rastroData).sort((a,b)=>a.ts - b.ts);
-                camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-
-                let penalidades = 0;
-                let htmlPenal = "";
-
-                // Processar Cruzamento de Dados (Turf)
-                if(rotaOficial && rotaOficial.features) {
-                    rotaOficial.features.forEach((feat, i) => {
-                        
-                        // Radar (Polígono)
-                        if(feat.geometry.type.includes('Polygon')) {
-                            L.geoJSON(feat, {style: {color:'#3498db', fillOpacity:0.1}}).addTo(camadas.rota);
-                            let vMax = (feat.properties.velocidade || 60) * 1.1;
-                            let tempoExcesso = 0;
-
-                            rastroArr.forEach((p, idx) => {
-                                if(idx > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if(p.vel > vMax) {
-                                        tempoExcesso += (p.ts - rastroArr[idx-1].ts);
-                                        L.circleMarker([p.lat, p.lng], {radius:2, color:'red'}).addTo(camadas.alertas);
-                                    }
-                                }
-                            });
-                            if(tempoExcesso > 10000) {
-                                let pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
-                                penalidades += pts;
-                                htmlPenal += `<span class="penal-item">⚠️ Excesso Radar: -${pts} pts</span>`;
+        function processarTelemetria(rastroArr, rotaOficial) {
+            let pen = 0;
+            rotaOficial.features.forEach(feat => {
+                // Waypoints (Círculos)
+                if(feat.properties?.type === 'circle') {
+                    let coords = feat.geometry.coordinates;
+                    let raioM = feat.properties.radius || 50;
+                    let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
+                    
+                    L.circle([coords[1], coords[0]], {
+                        radius: raioM,
+                        color: visitou ? '#38a169' : '#e74c3c',
+                        fillOpacity: 0.3
+                    }).addTo(camadas.rota);
+                    if(!visitou) pen += 20000;
+                }
+                // Radares (Polígonos)
+                else if(feat.geometry.type.includes('Polygon')) {
+                    L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
+                    let vMax = (feat.properties.velocidade || 60) * 1.1;
+                    let excessoMs = 0;
+                    rastroArr.forEach((p, i) => {
+                        if(i > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                            if(p.vel > vMax) {
+                                excessoMs += (p.ts - rastroArr[i-1].ts);
+                                L.circleMarker([p.lat, p.lng], {radius:2, color:'red'}).addTo(camadas.alertas);
                             }
                         }
-                        
-                        // Waypoint (Círculo)
-                        else if(feat.properties?.type === 'circle') {
-                            let coords = feat.geometry.coordinates;
-                            let raioM = feat.properties.radius || 50;
-                            let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000
+                    });
+                    if(excessoMs > 10000) pen += 300;
+                }
+            });
+            document.getElementById('resumo').innerHTML = `<div class="stats-card">Penalidade Total: -${pen} pts</div>`;
+        }
+    </script>
+</body>
+</html>
