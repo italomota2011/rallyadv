@@ -25,17 +25,16 @@
     <div id="sidebar">
         <h2>🛰️ Analisador GPS</h2>
         <label>Competidor para Análise:</label>
-        <select id="carSelect"><option value="">Carregando competidores...</option></select>
+        <select id="carSelect"><option value="">Carregando...</option></select>
         <button onclick="analisar()">PROCESSAR TELEMETRIA</button>
         <div id="resumo">
             <div class="stats-card">Selecione um carro e clique em analisar.</div>
         </div>
         <div class="legenda">
-            <strong>Dicionário do Mapa:</strong>
-            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada</div>
-            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real</div>
-            <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint OK</div>
-            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso Velocidade</div>
+            <strong>Dicionário:</strong>
+            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Oficial</div>
+            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Trajeto do Carro</div>
+            <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
         </div>
         <button style="background:#444; margin-top: 15px; padding: 10px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
     </div>
@@ -48,7 +47,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
 
     <script>
-        // 1. INICIALIZAR MAPA
+        // 1. CONFIGURAÇÃO DO MAPA
         var map = L.map('map').setView([-12.26, -38.96], 13);
         var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri' }).addTo(map);
         var rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
@@ -68,111 +67,9 @@
         firebase.initializeApp(firebaseConfig);
         var db = firebase.database();
 
+        // Carregar lista de competidores
         db.ref('competidores').on('value', snap => {
             const select = document.getElementById('carSelect');
             let html = '<option value="">Selecione um Carro</option>';
             if (snap.exists()) {
-                snap.forEach(c => { html += `<option value="${c.key}">Carro ${c.key} - ${c.val().nome}</option>`; });
-            }
-            select.innerHTML = html;
-        });
-
-        // 3. FUNÇÃO PRINCIPAL
-        async function analisar() {
-            const id = document.getElementById('carSelect').value;
-            if(!id) return;
-
-            camadas.rota.clearLayers();
-            camadas.alertas.clearLayers();
-            camadas.rastro.setLatLngs([]);
-            document.getElementById('resumo').innerHTML = "Processando dados...";
-
-            try {
-                const [snapR, snapO] = await Promise.all([
-                    db.ref('rastros/' + id).once('value'),
-                    db.ref('configuracoes/percurso').once('value')
-                ]);
-
-                if(!snapR.exists()) {
-                    document.getElementById('resumo').innerHTML = '<div class="stats-card">Nenhum rastro encontrado.</div>';
-                    return;
-                }
-
-                // Organizar Rastro
-                let rastroArr = Object.values(snapR.val()).sort((a,b) => a.ts - b.ts);
-                camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-                map.fitBounds(camadas.rastro.getBounds(), {padding: [40, 40]});
-
-                let pen = 0;
-                let logs = "";
-
-                if(snapO.exists()) {
-                    const rotaGeo = snapO.val();
-                    
-                    rotaGeo.features.forEach(feat => {
-                        // A. LINHA AZUL
-                        if(feat.geometry && feat.geometry.type === 'LineString') {
-                            const pts = feat.geometry.coordinates.map(c => [c[1], c[0]]);
-                            L.polyline(pts, {color: '#3498db', weight: 6, opacity: 0.6}).addTo(camadas.rota);
-                        }
-
-                        // B. WAYPOINTS (CÍRCULOS)
-                        if(feat.properties && feat.properties.type === 'circle') {
-                            const coords = feat.geometry.coordinates;
-                            const raioM = feat.properties.radius || 50;
-                            const visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
-                            
-                            L.circle([coords[1], coords[0]], { 
-                                radius: raioM, 
-                                color: visitou ? '#38a169' : '#e74c3c', 
-                                fillOpacity: 0.3 
-                            }).addTo(camadas.rota);
-
-                            if(!visitou) { pen += 20000; logs += "❌ Waypoint Perdido (-20.000)<br>"; }
-                        }
-
-                        // C. RADARES (POLÍGONOS)
-                        if(feat.geometry && feat.geometry.type.includes('Polygon')) {
-                            L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
-                            
-                            // Proteção: define 60 se a velocidade não existir nas propriedades
-                            const vLimite = feat.properties && feat.properties.velocidade ? feat.properties.velocidade : 60;
-                            const vMaxTolerada = vLimite * 1.1;
-                            let tempoExcesso = 0;
-
-                            rastroArr.forEach((p, i) => {
-                                if(i > 0 && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                    if(p.vel > vMaxTolerada) {
-                                        tempoExcesso += (p.ts - rastroArr[i-1].ts);
-                                        // Adiciona bolinha vermelha com Popup
-                                        L.circleMarker([p.lat, p.lng], {radius: 4, color: 'red', fillOpacity: 1})
-                                         .bindPopup(`<b>Excesso!</b><br>Limite: ${vLimite} km/h<br>Carro: ${p.vel.toFixed(1)} km/h`)
-                                         .addTo(camadas.alertas);
-                                    }
-                                }
-                            });
-
-                            if(tempoExcesso > 10000) {
-                                const ptsRadar = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
-                                pen += ptsRadar;
-                                logs += `⚠️ Radar: Excesso (${ptsRadar} pts)<br>`;
-                            }
-                        }
-                    });
-                }
-
-                document.getElementById('resumo').innerHTML = `
-                    <div class="stats-card">
-                        <strong>Carro ${id}</strong><hr>
-                        ${logs || "✅ Sem penalidades."}<br>
-                        <b>Penalidade Total: -${pen} pts</b>
-                    </div>`;
-
-            } catch (err) {
-                console.error("Erro na análise:", err);
-                alert("Erro ao processar telemetria. Verifique o console.");
-            }
-        }
-    </script>
-</body>
-</html>
+                snap.forEach(
