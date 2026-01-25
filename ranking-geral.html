@@ -13,19 +13,26 @@
         .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
         h1 { color: #e67e22; margin: 0; }
         .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
-        td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
-        .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
-        .tempo-col { font-family: monospace; color: #fbd38d; font-weight: bold; }
-        .penal-col { color: #fc8181; }
-        .foto-col { color: #63b3ed; }
-        .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; margin-top: 0; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; table-layout: fixed; }
+        th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 1px solid #4a5568; font-size: 13px; text-transform: uppercase; }
+        td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; vertical-align: middle; }
+
+        /* Ajuste de Larguras de Coluna */
+        .col-pos { width: 60px; font-weight: bold; color: #e67e22; }
+        .col-num { width: 60px; }
+        .col-piloto { width: auto; }
+        .col-tempo { width: 150px; font-family: monospace; color: #fbd38d; font-weight: bold; }
+        .col-pontos { width: 180px; text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+
+        .text-right { text-align: right; }
+        
         #logoInvisivel { display: none; }
-        .btn { border-radius: 5px; font-weight: bold; transition: 0.3s; padding: 10px; border: none; cursor: pointer; color: white; }
+        .btn { border-radius: 5px; font-weight: bold; transition: 0.3s; padding: 10px 20px; border: none; cursor: pointer; color: white; }
         .btn-voltar { background: #4a5568; }
         .btn-pdf { background: #38a169; }
+        input { background: #1a202c; color: white; border: 1px solid #4a5568; padding: 10px; border-radius: 5px; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -34,12 +41,12 @@
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
     <div class="header-ranking">
-        <h1>🏆 Classificação Final (Tempo + Desempate Pontos)</h1>
+        <h1>🏆 Classificação Final</h1>
     </div>
 
     <div class="cat-card">
-        <label>Nome da Etapa:</label>
-        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin-top:5px; border-radius:5px; border:none; background: #1a202c; color: white;" placeholder="Ex: Etapa de Verão">
+        <label style="display:block; margin-bottom:8px; color:#a0aec0;">Nome da Etapa / Cidade:</label>
+        <input type="text" id="inputCidade" placeholder="Ex: Etapa de Verão - Salvador">
         <div style="margin-top: 15px; display: flex; gap: 10px;">
             <button class="btn btn-voltar" onclick="location.href='admin.html'">VOLTAR</button>
             <button class="btn btn-pdf" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
@@ -92,12 +99,9 @@
                 }
             }
             
-            // LÓGICA DE CLASSIFICAÇÃO E DESEMPATE:
             list.sort((a, b) => {
-                if (a.tSeg !== b.tSeg) {
-                    return a.tSeg - b.tSeg; // 1º Critério: Menor Tempo
-                }
-                return b.totalPts - a.totalPts; // 2º Critério (Desempate): Maior Pontuação
+                if (a.tSeg !== b.tSeg) return a.tSeg - b.tSeg;
+                return b.totalPts - a.totalPts;
             });
 
             if(list.length > 0) {
@@ -107,22 +111,22 @@
                     <table>
                         <thead>
                             <tr>
-                                <th class="pos-col">Pos</th>
-                                <th>Nº</th>
-                                <th>Piloto</th>
-                                <th>Tempo Total</th>
-                                <th>Pontuação (GPS+Fotos)</th>
+                                <th class="col-pos">Pos</th>
+                                <th class="col-num">Nº</th>
+                                <th class="col-piloto">Piloto</th>
+                                <th class="col-tempo">Tempo Total</th>
+                                <th class="col-pontos text-right">Pontuação Final</th>
                             </tr>
                         </thead>
                         <tbody>`;
                 list.forEach((p, i) => {
                     html += `
                     <tr>
-                        <td class="pos-col">${i + 1}º</td>
-                        <td><b>${p.id}</b></td>
-                        <td>${p.nome}</td>
-                        <td class="tempo-col">${p.tempoStr}</td>
-                        <td class="pontos-col">${p.totalPts.toLocaleString('pt-BR')} pts</td>
+                        <td class="col-pos">${i + 1}º</td>
+                        <td class="col-num"><b>${p.id}</b></td>
+                        <td class="col-piloto">${p.nome}</td>
+                        <td class="col-tempo">${p.tempoStr}</td>
+                        <td class="col-pontos text-right">${p.totalPts.toLocaleString('pt-BR')} pts</td>
                     </tr>`;
                 });
                 html += `</tbody></table></div>`;
@@ -147,7 +151,7 @@
         doc.text(cidade, 105, 58, { align: "center" });
 
         let finalY = 65;
-        document.querySelectorAll('.cat-card').forEach((card, idx) => {
+        document.querySelectorAll('.cat-card').forEach((card) => {
             if(card.querySelector('h2')) {
                 const titulo = card.querySelector('h2').innerText;
                 const tabela = card.querySelector('table');
@@ -159,12 +163,15 @@
                     html: tabela, 
                     startY: finalY + 5, 
                     theme: 'striped',
-                    headStyles: { fillColor: [230, 126, 34] }
+                    headStyles: { fillColor: [230, 126, 34] },
+                    columnStyles: {
+                        4: { halign: 'right' } // Alinha a 5ª coluna (Pontos) à direita no PDF
+                    }
                 });
                 finalY = doc.lastAutoTable.finalY + 15;
             }
         });
-        doc.save(`Ranking_Final_${cidade}.pdf`);
+        doc.save(`Ranking_Final_${cidade.replace(/\s+/g, '_')}.pdf`);
     }
 </script>
 </body>
