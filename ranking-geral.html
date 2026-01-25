@@ -160,21 +160,14 @@
                 doc.setTextColor(0, 0, 0);
                 doc.text(titulo, 14, finalY);
                 doc.autoTable({ 
-    html: tabela, 
-    startY: finalY + 5, 
-    theme: 'striped',
-    headStyles: { fillColor: [230, 126, 34], halign: 'center' }, // Centraliza cabeçalho
-    columnStyles: {
-        0: { halign: 'center' }, // POS
-        1: { halign: 'center' }, // Nº
-        2: { halign: 'center' }, // Piloto 
-        3: { halign: 'center' },  // Penalidade
-        4: { halign: 'center', fontStyle: 'bold' } // Pontuação Final (Centralizada e Negrito)
-    },
-    didDrawPage: function (data) {
-        finalY = data.cursor.y;
-    }
-});
+                    html: tabela, 
+                    startY: finalY + 5, 
+                    theme: 'striped',
+                    headStyles: { fillColor: [230, 126, 34] },
+                    columnStyles: {
+                        4: { halign: 'right' } // Alinha a 5ª coluna (Pontos) à direita no PDF
+                    }
+                });
                 finalY = doc.lastAutoTable.finalY + 15;
             }
         });
