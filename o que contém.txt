@@ -1,6 +1,6 @@
-🔵 PÁGINA ADMIN=
+🔵 PÁGINA ADMIN =
 _______________________________________
-Botões:
+🟥 Botões:
 Buscar cidade - ✅
 Salvar trajeto - ✅
 Rastro - ✅
@@ -12,13 +12,13 @@ Fotos - ✅
 Ranking Fotos - ✅
 Ranking Final - ✅
 Reset com senha - ✅
+
+🟥Funções do mapa todas ok - ✅
 ________________________________________
-Funções do mapa todas ok - ✅
-________________________________________
 
-🔵 Página 
+🔵 PÁGINA RASTRO = 
 
-
+_________________________________________
 Mapa funcionando;
 Todos os cálculos funcionando;
 Odometro precisa de ajustes;
@@ -42,4 +42,4 @@ Gostaria que eu criasse um pequeno código para você colocar no seu Mapa que mo
 🟡
 🟠
 🟣
-
+🟥🟪🟦🟩🟨🟧
