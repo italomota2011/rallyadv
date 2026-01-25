@@ -8,9 +8,9 @@
     <style>
         * { box-sizing: border-box; }
         html, body { margin: 0; padding: 0; height: 100%; width: 100%; background: #1a202c; overflow: hidden; font-family: sans-serif; }
-        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; }
+        #toolbar { height: 60px; background: #2d3748; display: flex; align-items: center; padding: 0 15px; gap: 10px; z-index: 9999; position: relative; overflow-x: auto; }
         #map { height: calc(100vh - 60px); width: 100%; display: block; background: #a0aec0; }
-        button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; }
+        button { padding: 8px 12px; background: #4a5568; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 11px; white-space: nowrap; }
         button:hover { background: #718096; }
         .btn-apurar { background: #e67e22 !important; }
         .btn-limpar { background: #e53e3e !important; }
@@ -73,20 +73,28 @@
             const data = drawnItems.toGeoJSON();
             data.features.forEach((f, i) => {
                 const layer = Object.values(drawnItems._layers)[i];
-                f.properties.velocidade = layer.options.velocidade;
-                f.properties.radius = layer._mRadius;
-                f.properties.type = layer.options.type;
+                if(layer.options.type === 'circle') {
+                    f.properties.type = 'circle';
+                    f.properties.radius = layer._mRadius;
+                    f.properties.penalidade = layer.options.penalidade;
+                } else {
+                    f.properties.velocidade = layer.options.velocidade;
+                }
             });
             db.ref('configuracoes/percurso').set(data).then(() => alert("Percurso Salvo!"));
         };
 
         db.ref('configuracoes/percurso').once('value', snap => {
-            if(!snap.val()) return;
-            L.geoJSON(snap.val(), {
+            const val = snap.val();
+            if(!val) return;
+            L.geoJSON(val, {
                 onEachFeature: (f, l) => {
                     if(f.properties.type === 'circle') {
-                        const circle = L.circle([f.geometry.coordinates[1], f.geometry.coordinates[0]], { radius: f.properties.radius });
-                        circle.options.type = 'circle';
+                        const circle = L.circle([f.geometry.coordinates[1], f.geometry.coordinates[0]], { 
+                            radius: f.properties.radius,
+                            type: 'circle',
+                            penalidade: f.properties.penalidade 
+                        });
                         circle.addTo(drawnItems);
                     } else {
                         l.options.velocidade = f.properties.velocidade;
@@ -102,50 +110,10 @@
             const rastros = snapRastros.val();
             const percurso = snapPercurso.val();
 
-            if(!rastros || !percurso) return alert("Dados insuficientes!");
+            if(!rastros || !percurso) return alert("Dados insuficientes para apurar!");
 
             for(let id in rastros) {
                 let pen = 0;
                 const rastroArr = Object.values(rastros[id]).sort((a,b) => a.ts - b.ts);
 
-                percurso.features.forEach(feat => {
-                    if(feat.geometry.type === 'Polygon') {
-                        const vMax = (feat.properties.velocidade || 60) * 1.1;
-                        let tempoExcessoMs = 0;
-
-                        for(let i=1; i < rastroArr.length; i++) {
-                            const p = rastroArr[i];
-                            const vAtual = parseFloat(p.vel) || 0; // CORREÇÃO AQUI
-                            const duration = p.ts - rastroArr[i-1].ts;
-
-                            if(duration < 15000 && vAtual > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                tempoExcessoMs += duration;
-                            }
-                        }
-                        if(tempoExcessoMs > 10000) {
-                            pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                        }
-                    } else if(feat.properties?.type === 'circle') {
-                        const centro = feat.geometry.coordinates;
-                        const raioKm = feat.properties.radius / 1000;
-                        
-                        const visitou = rastroArr.some(pt => 
-                            turf.distance(turf.point([pt.lng, pt.lat]), turf.point([centro[0], centro[1]])) <= raioKm
-                        );
-                        
-                        if(!visitou) pen += 20000;
-                    }
-                });
-                db.ref(`competidores/${id}`).update({ pontos: 0 - pen });
-            }
-            alert("✅ Apuração de telemetria concluída!");
-        };
-
-        window.resetar = function() {
-            if(prompt("Senha de Segurança:") === "261291") {
-                db.ref('/').remove().then(() => location.reload());
-            }
-        };
-    </script>
-</body>
-</html>
+                per
