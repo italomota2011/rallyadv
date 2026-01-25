@@ -13,16 +13,14 @@
         .header-ranking { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a5568; padding-bottom: 20px; }
         h1 { color: #e67e22; margin: 0; }
         .cat-card { background: #2d3748; border-radius: 12px; padding: 20px; margin-bottom: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; margin-top: 0; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
-        th { text-align: left; color: #a0aec0; padding: 12px 10px; border-bottom: 2px solid #4a5568; font-size: 13px; text-transform: uppercase; }
-        td { padding: 12px 10px; border-bottom: 1px solid #3e4b5f; }
+        h2 { color: #e67e22; border-bottom: 1px solid #4a5568; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; color: #a0aec0; padding: 10px; border-bottom: 1px solid #4a5568; font-size: 13px; }
+        td { padding: 12px; border-bottom: 1px solid #3e4b5f; }
         .pos-col { width: 50px; font-weight: bold; color: #e67e22; }
-        .tempo-col { color: #cbd5e0; font-family: 'Courier New', monospace; font-weight: bold; }
-        .penal-col { color: #fc8181; } 
-        .foto-col { color: #63b3ed; } 
+        .penal-col { color: #fc8181; } /* Vermelho para penalidades */
+        .foto-col { color: #63b3ed; } /* Azul para bônus de fotos */
         .pontos-col { text-align: right; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
-        .btn { padding: 10px 20px; border-radius: 5px; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; }
         #logoInvisivel { display: none; }
     </style>
 </head>
@@ -32,9 +30,32 @@
     <img id="logoInvisivel" src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRakETPU1WsKmBi2ppw7axi6RJ9ie0KAWookA&s" crossorigin="anonymous">
 
     <div class="header-ranking">
-        <h1>🏆 Classificação Final</h1>
+        <h1>🏆 Classificação Final (GPS + Fotos)</h1>
     </div>
 
-    <div class="cat-card">
+    <div class="cat-card" style="background: #2d3748; padding: 15px; margin-bottom: 20px;">
         <label>Nome da Etapa:</label>
-        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin: 10px 0; border-radius:5px; border:none; background
+        <input type="text" id="inputCidade" style="width:100%; padding:10px; margin-top:5px; border-radius:5px; border:none;" placeholder="Ex: Etapa de Verão">
+        <div style="margin-top: 15px; display: flex; gap: 10px;">
+            <button class="btn" style="background:#4a5568; color:white; padding:10px; border:none; cursor:pointer;" onclick="location.href='admin.html'">VOLTAR</button>
+            <button class="btn" style="background:#38a169; color:white; padding:10px; border:none; cursor:pointer;" onclick="exportarPDF()">GERAR PDF OFICIAL</button>
+        </div>
+    </div>
+
+    <div id="rankingContent">Calculando pontuações combinadas...</div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+        authDomain: "cronometro-rally.firebaseapp.com",
+        databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+        projectId: "cronometro-rally",
+        appId: "1:341731891354:web:d0c34265be68015e98a723"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const categorias = ["BAIANO 4x2", "BAIANO 4x4", "INICIANTE 4x2", "INICIANTE 4x4", "ANTIGOS"];
+
+    db.ref('competidores').on('value', snap => {
