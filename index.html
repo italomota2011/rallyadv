@@ -144,39 +144,36 @@
             }, null, { enableHighAccuracy: true });
         }
 
-        // CORREÇÃO DO BOTÃO INICIAR
         // CORREÇÃO DO BOTÃO INICIAR COM VALIDAÇÕES DE SEGURANÇA
         document.getElementById('btnIniciar').onclick = async function() {
-            const num = document.getElementById('carro').value;
+            const numRaw = document.getElementById('carro').value; // Valor bruto (ex: "01")
             const nome = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
 
-            // 1. Validação de preenchimento básico
-            if(!num || !nome) {
+            if(!numRaw || !nome) {
                 alert("Por favor, preencha o Nome e o Número do Carro!");
                 return;
             }
 
-            // 2. Validação de intervalo do carro (Não 0, Máximo 100)
-            const numCarro = parseInt(num);
+            // CONVERSÃO PARA NÚMERO (Remove zeros à esquerda)
+            const numCarro = parseInt(numRaw, 10); 
+
             if (numCarro <= 0 || numCarro > 100) {
                 alert("O número do carro deve estar entre 1 e 100!");
                 return;
             }
 
             try {
-                // 3. Validação de duplicidade (Nome e Número)
                 const snapshot = await db.ref('competidores').once('value');
                 const competidores = snapshot.val();
 
                 if (competidores) {
                     for (let id in competidores) {
-                        // Verifica se o número já existe
-                        if (id === num) {
-                            alert("Este número de carro já está em uso por outro piloto!");
+                        // Compara como números para que 1 seja igual a 01
+                        if (parseInt(id, 10) === numCarro) {
+                            alert("Este número de carro (" + numCarro + ") já está em uso!");
                             return;
                         }
-                        // Verifica se o nome já existe (ignora maiúsculas/minúsculas)
                         if (competidores[id].nome.toLowerCase() === nome.toLowerCase()) {
                             alert("Este nome de piloto já está cadastrado!");
                             return;
@@ -184,15 +181,14 @@
                     }
                 }
 
-                // Se passou em todas as travas, salva e inicia
-                await db.ref('competidores/' + num).set({ nome, categoria: cat });
-                localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(num);
+                // SALVA SEMPRE O NÚMERO PADRONIZADO (Sem zeros à esquerda)
+                await db.ref('competidores/' + numCarro).set({ nome, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', numCarro);
+                iniciarFluxoRastreio(numCarro);
                 
             } catch (e) {
-                console.error("Erro na validação:", e);
-                // Em caso de erro de rede, permite o início local para não travar o piloto
-                iniciarFluxoRastreio(num);
+                console.error("Erro:", e);
+                iniciarFluxoRastreio(numCarro);
             }
         };
 
@@ -228,6 +224,7 @@
     </script>
 </body>
 </html>
+
 
 
 
