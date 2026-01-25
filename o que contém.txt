@@ -14,6 +14,8 @@ Ranking Final - ✅
 Reset com senha - ✅
 
 🟥Funções do mapa todas ok - ✅
+
+PopUp com nome do piloto ao clicar no numero do carro - ❌
 ________________________________________
 
 🔵 PÁGINA RASTRO = 
@@ -47,21 +49,7 @@ Não pode duplicar nome do piloto - ❌
 Não pode duplicar número do carro - ❌
 Número do carro não pode ser 0 nem maior que 100 - ❌
 
-rastro:
 
-adicionar velocidade popup
-adicionar penal saída rota
-proibir nome repetido
-
-Gostaria que eu criasse um pequeno código para você colocar no seu Mapa que mostre quais pilotos estão "Offline" (pararam de enviar dados há mais de 1 minuto)?
-
-
-ícones dos carros verde - online, mostrando o nome do piloto ao passar o mouse em cima
-
-❌
-🟢
-🔴
-🟡
-🟠
-🟣
+❌✅
+🟢🔴🟡🟠🟣
 🟥🟪🟦🟩🟨🟧
