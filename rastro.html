@@ -14,7 +14,6 @@
         .stats-card { background: #252525; padding: 15px; border-radius: 8px; border-left: 4px solid #e67e22; margin-bottom: 10px; font-size: 14px; }
         .penalidade-item { color: #ff6b6b; font-size: 12px; margin-top: 5px; border-top: 1px solid #333; padding-top: 5px; }
         .legenda { font-size: 12px; background: rgba(0,0,0,0.7); padding: 10px; border-radius: 5px; line-height: 1.6; }
-        /* Estilo para o controle de camadas (satélite) */
         .leaflet-control-layers { background: #2d3748 !important; color: white !important; border: none !important; }
     </style>
 </head>
@@ -57,150 +56,19 @@
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
         
-        // Inicialização segura
         if (!firebase.apps.length) {
             firebase.initializeApp(firebaseConfig);
         }
         const db = firebase.database();
 
-        // Configuração dos Mapas (Rua e Satélite)
-        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap'
-        });
-
-        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Imagery © Esri'
-        });
+        const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' });
+        const satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Imagery © Esri' });
 
         const map = L.map('map', {
             center: [-12.26, -38.96],
             zoom: 13,
-            layers: [osm] // Mapa padrão
+            layers: [osm]
         });
 
-        // Controle de Alternância de Mapas (Igual ao Admin)
-        const baseMaps = {
-            "Mapa de Rua": osm,
-            "Satélite": satelite
-        };
-        L.control.layers(baseMaps).addTo(map);
-        
-        let layers = {
-            rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
-            percurso: L.featureGroup().addTo(map),
-            penalidades: L.featureGroup().addTo(map)
-        };
-
-        // Carregar competidores no select
-        db.ref('competidores').on('value', snap => {
-            let opt = '<option value="">Selecione um Piloto...</option>';
-            const data = snap.val();
-            if(data) {
-                Object.keys(data).sort((a,b)=>a-b).forEach(id => {
-                    opt += `<option value="${id}">Carro ${id} - ${data[id].nome}</option>`;
-                });
-                document.getElementById('carSelect').innerHTML = opt;
-            } else {
-                document.getElementById('carSelect').innerHTML = '<option>Nenhum carro encontrado</option>';
-            }
-        }, error => {
-            console.error("Erro Firebase:", error);
-            alert("Erro ao carregar dados do Firebase.");
-        });
-
-        async function analisarRastro() {
-            const id = document.getElementById('carSelect').value;
-            if(!id) return;
-
-            layers.percurso.clearLayers();
-            layers.penalidades.clearLayers();
-            layers.rastro.setLatLngs([]);
-
-            try {
-                const [snapRastro, snapConfig] = await Promise.all([
-                    db.ref('rastros/' + id).once('value'),
-                    db.ref('configuracoes/percurso').once('value')
-                ]);
-
-                const rastroData = snapRastro.val();
-                const config = snapConfig.val();
-
-                if(!rastroData) return alert("Este carro não possui dados de rastro.");
-                if(!config) return alert("Percurso não configurado no Admin.");
-
-                const rastroArr = Object.values(rastroData).sort((a, b) => a.ts - b.ts);
-                layers.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-
-                // 1. Desenhar Radares
-                L.geoJSON(config, {
-                    filter: (f) => f.geometry.type === 'Polygon',
-                    style: { color: '#3498db', weight: 3, fillOpacity: 0.2 }
-                }).addTo(layers.percurso);
-
-                let resumoHtml = `<div class="stats-card"><strong>Relatório Carro ${id}</strong><br>`;
-                let totalPenalidades = 0;
-
-                config.features.forEach((feat, idx) => {
-                    if(feat.geometry.type === 'Polygon') {
-                        const vMaxPermitida = (feat.properties.velocidade || 60) * 1.1; 
-                        let tempoExcessoMs = 0;
-
-                        rastroArr.forEach((p, i) => {
-                            if (i === 0) return;
-                            const pontoTurf = turf.point([p.lng, p.lat]);
-                            if(turf.booleanPointInPolygon(pontoTurf, feat)) {
-                                if(p.vel > vMaxPermitida) {
-                                    tempoExcessoMs += (p.ts - rastroArr[i-1].ts);
-                                    L.circleMarker([p.lat, p.lng], { radius: 6, color: 'red', fillOpacity: 0.9 })
-                                     .bindPopup(`<b>EXCESSO NO RADAR ${idx+1}</b><br>Vel: ${p.vel.toFixed(1)} km/h`)
-                                     .addTo(layers.penalidades);
-                                }
-                            }
-                        });
-
-                        if(tempoExcessoMs > 10000) {
-                            const pontosPerdidos = (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
-                            totalPenalidades += pontosPerdidos;
-                            resumoHtml += `<div class="penalidade-item">⚠️ Radar ${idx+1}: ${pontosPerdidos} pts</div>`;
-                        }
-
-                    } else if(feat.properties?.type === 'circle') {
-                        const coords = feat.geometry.coordinates;
-                        const raioM = feat.properties.radius;
-                        const raioKm = raioM / 1000;
-                        
-                        const visitou = rastroArr.some(pt => 
-                            turf.distance(turf.point([pt.lng, pt.lat]), turf.point(coords)) <= raioKm
-                        );
-
-                        // Waypoint Verde/Vermelho
-                        L.circle([coords[1], coords[0]], {
-                            radius: raioM,
-                            color: visitou ? '#38a169' : '#e74c3c',
-                            fillOpacity: 0.3,
-                            weight: 3
-                        }).bindPopup(`Waypoint: ${visitou ? 'Visitado' : 'NÃO VISITADO'}`)
-                          .addTo(layers.percurso);
-
-                        if(!visitou) {
-                            totalPenalidades += 20000;
-                            resumoHtml += `<div class="penalidade-item">❌ Waypoint Perdido: 20.000 pts</div>`;
-                        }
-                    }
-                });
-
-                resumoHtml += `<br><b>Total:</b> -${totalPenalidades} pts</div>`;
-                document.getElementById('resumo').innerHTML = resumoHtml;
-                
-                if (layers.rastro.getLatLngs().length > 0) {
-                    map.fitBounds(layers.rastro.getBounds(), { padding: [50, 50] });
-                }
-
-            } catch (err) {
-                console.error(err);
-                alert("Erro ao processar telemetria.");
-            }
-        }
-    </script>
-</body>
-</html>
+        const baseMaps = { "Mapa de Rua": osm, "Satélite": satelite };
+        L.control.layers
