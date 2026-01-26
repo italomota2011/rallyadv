@@ -126,37 +126,52 @@
                         // Cálculo de Radares
                         // Cálculo de Radares (ATUALIZADO COM FILTRO DE FLUTUAÇÃO)
                         else if(feat.geometry.type.includes('Polygon')) {
-                            L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
-                            
-                            const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% de tolerância
-                            let tempoExcesso = 0;
+    L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
+    
+    const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% de tolerância
+    let tempoExcessoNoRadar = 0; // Reinicia o contador para cada radar diferente
 
-                            rastroArr.forEach((p, i) => {
-                                if(i > 0) {
-                                    const duration = p.ts - rastroArr[i-1].ts;
+    rastroArr.forEach((p, i) => {
+        if(i > 0) {
+            const duration = p.ts - rastroArr[i-1].ts; // Calcula o tempo entre pontos
 
-                                    // FILTROS: duration < 30s (perda de sinal) e p.vel > 2 (carro parado)
-                                    if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                        tempoExcesso += duration;
-                                        
-                                        // Bolinha vermelha com detalhes ao clicar
-                                        L.circleMarker([p.lat, p.lng], {
-                                            radius: 4, 
-                                            color: 'red', 
-                                            fillColor: '#f03', 
-                                            fillOpacity: 1
-                                        }).addTo(camadas.alertas)
-                                          .bindPopup(`<b>EXCESSO</b><br>Vel: ${p.vel} km/h<br>Limite: ${feat.properties.velocidade} km/h`);
-                                    }
-                                }
-                            });
+            // Filtros de consistência e verificação se o ponto está dentro do radar
+            if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                tempoExcessoNoRadar += duration; // Acumula o tempo de infração neste radar
+                
+                const horario = new Date(p.ts).toLocaleTimeString('pt-BR');
+                const tempoAcumuladoSegundos = Math.round(tempoExcessoNoRadar / 1000);
 
-                            if(tempoExcesso > 10000) {
-                                let pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
-                                pen += pts;
-                                logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcesso/1000)}s (-${pts} pts)<br>`;
-                            }
-                        }
+                // Criar o marcador com o popup detalhado
+                L.circleMarker([p.lat, p.lng], {
+                    radius: 6, 
+                    color: '#000', 
+                    weight: 1,
+                    fillColor: 'red', 
+                    fillOpacity: 0.9
+                }).addTo(camadas.alertas)
+                  .bindPopup(`
+                    <div style="font-family: sans-serif; min-width: 160px;">
+                        <strong style="color: #e74c3c;">⚠️ INFRAÇÃO DETECTADA</strong><hr>
+                        <b>Horário:</b> ${horario}<br>
+                        <b>Velocidade:</b> <span style="color:red;">${p.vel} km/h</span><br>
+                        <b>Limite (+10%):</b> ${vMax.toFixed(1)} km/h<br>
+                        <hr>
+                        <b>Tempo Acumulado:</b> <span style="font-size: 1.1em; font-weight: bold;">${tempoAcumuladoSegundos}s</span><br>
+                        <small style="color: #666;">Radar: ${feat.properties.nome || 'Sem Nome'}</small>
+                    </div>
+                `);
+            }
+        }
+    });
+
+    // Aplicação da penalidade final baseada no tempo total do radar
+    if(tempoExcessoNoRadar > 10000) {
+        let pts = (Math.floor((tempoExcessoNoRadar - 10000) / 30000) + 1) * 300;
+        pen += pts;
+        logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcessoNoRadar/1000)}s (-${pts} pts)<br>`;
+    }
+}
                     });
                 }
 
@@ -172,4 +187,5 @@
     </script>
 </body>
 </html>
+
 
