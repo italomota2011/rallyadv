@@ -33,11 +33,11 @@
         </div>
         <div class="legenda">
             <strong>Dicionário do Mapa:</strong>
-            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada (Admin)</div>
-            <div class="item-legenda"><span style="color:#e67e22; font-weight:bold;">━━</span> Rastro Real (Carro)</div>
-            <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
-            <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Não Visitado</div>
+            <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada</div>
+            <div class="item-legenda"><span style="color:#4CAF50; font-size:16px;">●</span> Rastro Normal (OK)</div>
             <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
+            <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
+            <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Perdido</div>
         </div>
         <button style="background:#444; margin-top: 15px; padding: 10px;" onclick="location.href='admin.html'">VOLTAR AO PAINEL</button>
     </div>
@@ -57,7 +57,6 @@
 
         var camadas = {
             rota: L.featureGroup().addTo(map),
-            rastro: L.polyline([], {color: '#e67e22', weight: 4, opacity: 0.8}).addTo(map),
             alertas: L.featureGroup().addTo(map)
         };
 
@@ -83,7 +82,6 @@
 
             camadas.rota.clearLayers();
             camadas.alertas.clearLayers();
-            camadas.rastro.setLatLngs([]);
             document.getElementById('resumo').innerHTML = "Processando telemetria...";
 
             try {
@@ -93,95 +91,87 @@
                 ]);
 
                 if(!snapR.exists()) {
-                    document.getElementById('resumo').innerHTML = '<div class="stats-card">Sem dados de rastro para este carro.</div>';
+                    document.getElementById('resumo').innerHTML = '<div class="stats-card">Sem rastro disponível.</div>';
                     return;
                 }
 
                 let rastroArr = Object.values(snapR.val()).sort((a,b)=>a.ts-b.ts);
-                camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
-                map.fitBounds(camadas.rastro.getBounds(), {padding: [40, 40]});
+                map.fitBounds(L.latLngBounds(rastroArr.map(p => [p.lat, p.lng])), {padding: [40, 40]});
 
                 let penTotal = 0;
                 let logs = "";
+                let pontosInfracao = new Set();
 
                 if(snapO.exists()) {
                     const rota = snapO.val();
                     rota.features.forEach(feat => {
-                        
-                        // DESENHAR LINHA AZUL
+                        // Linha guia azul
                         if(feat.geometry.type === 'LineString') {
-                            let pontosAzuis = feat.geometry.coordinates.map(c => [c[1], c[0]]);
-                            L.polyline(pontosAzuis, {color: '#3498db', weight: 6, opacity: 0.6}).addTo(camadas.rota);
+                            L.polyline(feat.geometry.coordinates.map(c => [c[1], c[0]]), {color: '#3498db', weight: 4, opacity: 0.5}).addTo(camadas.rota);
                         }
 
-                        // Cálculo de Waypoints
+                        // Waypoints
                         if(feat.properties?.type === 'circle') {
                             let coords = feat.geometry.coordinates;
                             let raioM = feat.properties.radius || 50;
                             let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
-                            L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.3 }).addTo(camadas.rota);
-                            if(!visitou) { penTotal += 20000; logs += "❌ Waypoint Perdido (-20.000)<br>"; }
+                            L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.2 }).addTo(camadas.rota);
+                            if(!visitou) { penTotal += 20000; logs += "❌ WP Perdido (-20.000)<br>"; }
                         }
-                        
-                        // Cálculo de Radares
+
+                        // Radares (Polígonos)
                         else if(feat.geometry.type.includes('Polygon')) {
                             L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
-                            
-                            const vMax = (feat.properties.velocidade || 60) * 1.1; 
-                            let tempoExcessoNoRadar = 0;
+                            const vMax = (feat.properties.velocidade || 60) * 1.1;
+                            let tempoExcesso = 0;
 
                             rastroArr.forEach((p, i) => {
                                 if(i > 0) {
-                                    const duration = p.ts - rastroArr[i-1].ts;
-
-                                    if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                                        tempoExcessoNoRadar += duration;
+                                    const dur = p.ts - rastroArr[i-1].ts;
+                                    if(dur < 30000 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                        tempoExcesso += dur;
+                                        pontosInfracao.add(p.ts);
                                         
-                                        const horario = new Date(p.ts).toLocaleTimeString('pt-BR');
-                                        const tempoAcumuladoSegundos = Math.round(tempoExcessoNoRadar / 1000);
-
                                         L.circleMarker([p.lat, p.lng], {
-                                            radius: 6, 
-                                            color: '#000', 
-                                            weight: 1,
-                                            fillColor: 'red', 
-                                            fillOpacity: 0.9
-                                        }).addTo(camadas.alertas)
-                                          .bindPopup(`
-                                            <div style="min-width: 160px;">
-                                                <strong style="color: #e74c3c;">⚠️ INFRAÇÃO DETECTADA</strong><hr>
-                                                <b>Horário:</b> ${horario}<br>
-                                                <b>Velocidade:</b> <span style="color:red; font-weight:bold;">${p.vel} km/h</span><br>
-                                                <b>Limite (+10%):</b> ${vMax.toFixed(1)} km/h<br>
-                                                <hr>
-                                                <b>Tempo Acumulado:</b> <span style="font-size: 1.1em; font-weight: bold;">${tempoAcumuladoSegundos}s</span><br>
-                                                <small style="color: #666;">Radar: ${feat.properties.nome || 'Zona de Velocidade'}</small>
-                                            </div>
+                                            radius: 6, color: '#000', weight: 1, fillColor: 'red', fillOpacity: 1
+                                        }).addTo(camadas.alertas).bindPopup(`
+                                            <strong>🚩 EXCESSO</strong><br>
+                                            Velocidade: ${p.vel} km/h<br>
+                                            Tempo Acumulado: ${Math.round(tempoExcesso/1000)}s
                                         `);
                                     }
                                 }
                             });
-
-                            if(tempoExcessoNoRadar > 10000) {
-                                let pts = (Math.floor((tempoExcessoNoRadar - 10000) / 30000) + 1) * 300;
+                            if(tempoExcesso > 10000) {
+                                let pts = (Math.floor((tempoExcesso - 10000) / 30000) + 1) * 300;
                                 penTotal += pts;
-                                logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcessoNoRadar/1000)}s (-${pts} pts)<br>`;
+                                logs += `⚠️ Radar: Excesso (${Math.round(tempoExcesso/1000)}s) -${pts} pts<br>`;
                             }
                         }
                     });
                 }
 
+                // Desenha o rastro normal (pontos verdes)
+                rastroArr.forEach(p => {
+                    if(!pontosInfracao.has(p.ts)) {
+                        L.circleMarker([p.lat, p.lng], {
+                            radius: 3, color: '#1b5e20', weight: 1, fillColor: '#4CAF50', fillOpacity: 0.7
+                        }).addTo(camadas.alertas).bindPopup(`
+                            <b>Ponto de Rastro</b><br>
+                            Hora: ${new Date(p.ts).toLocaleTimeString('pt-BR')}<br>
+                            Vel: ${p.vel} km/h
+                        `);
+                    }
+                });
+
                 document.getElementById('resumo').innerHTML = `
                     <div class="stats-card">
                         <strong>Resultado: Carro ${id}</strong><hr>
-                        ${logs || "✅ Percurso sem penalidades."}<br>
-                        <b>Penalidade Final: -${penTotal} pts</b>
+                        ${logs || "✅ Sem penalidades de radar."}<br>
+                        <b>Total: -${penTotal} pts</b>
                     </div>`;
 
-            } catch (e) { 
-                console.error(e);
-                document.getElementById('resumo').innerHTML = '<div class="stats-card" style="border-left-color:red">Erro ao processar dados. Verifique o console.</div>';
-            }
+            } catch (e) { console.error(e); }
         }
     </script>
 </body>
