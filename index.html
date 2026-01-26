@@ -97,7 +97,9 @@
 
         let wakeLock = null;
         let watchID = null;
-        let odoTotal = 0;
+        
+        // DECLARAÇÃO ÚNICA: Busca o valor salvo imediatamente ou começa em 0
+        let odoTotal = parseFloat(localStorage.getItem('rally_odo_total')) || 0;
         let ultimaPos = null;
 
         async function solicitarWakeLock() {
@@ -218,11 +220,8 @@
         }
 
         window.onload = function() {
-            const odoSalvo = localStorage.getItem('rally_odo_total');
-            if (odoSalvo) {
-                odoTotal = parseFloat(odoSalvo);
-                document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
-            }
+            // Garante que o visor mostre o valor recuperado assim que abrir
+            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
 
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
