@@ -37,16 +37,7 @@
         .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
         .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
         /* Esconder o vídeo de fallback */
-        #wakeLockVideo { 
-    position: fixed; 
-    top: 0; 
-    left: 0; 
-    width: 10px; 
-    height: 10px; 
-    opacity: 0.01; 
-    pointer-events: none; 
-    z-index: -1;
-}
+        #wakeLockVideo { position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -112,6 +103,7 @@
 
         // --- FUNÇÕES DE WAKE LOCK (TELA ACESA) ---
         async function solicitarWakeLock() {
+            // Tenta API Moderna
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -132,19 +124,19 @@
                     document.getElementById('statusTela').innerText = "Tela Acesa (Modo Vídeo)";
                     document.getElementById('statusTela').style.color = "#f1c40f";
                 }).catch(e => {
-                    document.getElementById('statusTela').innerText = "⚠️ Erro: Tela pode apagar!";
-                    document.getElementById('statusTela').style.color = "#ff4444";
+                    document.getElementById('statusTela').innerText = "Erro ao manter tela acesa";
                 });
             }
         }
 
+        // Reativar quando voltar para a aba (Essencial para iOS)
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible' && document.getElementById('ativo').style.display === 'block') {
                 await solicitarWakeLock();
             }
         });
 
-        // --- FUNÇÕES DO ODÔMETRO COM BACKUP LOCAL ---
+        // --- FUNÇÕES DO ODÔMETRO ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -158,9 +150,7 @@
         }
 
         function atualizarTelaOdo() { 
-            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
-            // BACKUP LOCAL: Salva o valor atual do odômetro no aparelho
-            localStorage.setItem('rally_odo_valor', odoTotal);
+            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); 
         }
 
         function ajusteManualOdo() {
@@ -190,13 +180,7 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            // Recupera o odômetro salvo anteriormente, se existir
-            const odoSalvo = localStorage.getItem('rally_odo_valor');
-            if (odoSalvo) {
-                odoTotal = parseFloat(odoSalvo);
-                atualizarTelaOdo();
-            }
-
+            // Re-solicita para garantir
             solicitarWakeLock();
 
             db.ref(".info/connected").on("value", (snap) => {
@@ -224,7 +208,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.005) { 
+                    if (dist > 0.005 && kmh > 2) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
@@ -254,33 +238,44 @@
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
         };
-document.getElementById('btnIniciar').onclick = async function() {
-            // Tenta manter a tela acesa (Essencial para iPhone)
+
+        document.getElementById('btnIniciar').onclick = async function() {
+            // --- GATILHO PARA IOS: Deve ser a primeira coisa no clique ---
             solicitarWakeLock();
 
             const numRaw = document.getElementById('carro').value;
             const nomeRaw = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
             const num = parseInt(numRaw);
 
             if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
             
-            // Inicia direto, sem validar no servidor se a prova está aberta
             try {
-                // Salva os dados do piloto localmente e no Firebase
-                const cat = document.getElementById('categoria').value;
+                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+                if (statusSnap.val() !== true) {
+                    return alert("🚫 A prova está fechada.");
+                }
+
+                const snapshot = await db.ref('competidores').once('value');
+                const competidores = snapshot.val() || {};
+                if (competidores[num]) return alert("Este número de carro já existe!");
+
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
-                
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
             } catch (e) {
-                // Se o Firebase falhar, ele inicia o odômetro local de qualquer forma
-                console.log("Erro Firebase: Iniciando em modo offline.");
-                localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(num);
+                alert("Erro de conexão.");
             }
         };
+
+        function encerrarSessao() {
+            if(confirm("Encerrar prova?")) {
+                if (watchID) navigator.geolocation.clearWatch(watchID);
+                if (wakeLock) wakeLock.release();
+                localStorage.removeItem('rally_carro_ativo');
+                location.reload();
+            }
+        }
     </script>
 </body>
 </html>
-
-
