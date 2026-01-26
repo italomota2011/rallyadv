@@ -140,24 +140,12 @@
                                         tempoExcesso += duration;
                                         
                                         // Bolinha vermelha com detalhes ao clicar
-                                        // Localize este trecho no seu rastroArr.forEach:
-L.circleMarker([p.lat, p.lng], {
-    radius: 5, // Aumentado levemente para facilitar o clique
-    color: '#121212',
-    weight: 1,
-    fillColor: 'red', 
-    fillOpacity: 1
-}).addTo(camadas.alertas)
-  .bindPopup(`
-    <div style="color: #333; font-family: sans-serif;">
-        <strong style="color: #e74c3c;">🚨 INFRAÇÃO DE VELOCIDADE</strong><br>
-        <hr style="margin: 5px 0">
-        <b>Velocidade Real:</b> <span style="font-size:1.1em">${p.vel} km/h</span><br>
-        <b>Limite da Zona:</b> ${feat.properties.velocidade} km/h (+10% tol.)<br>
-        <b>Horário:</b> ${new Date(p.ts).toLocaleTimeString()}<br>
-        <small style="color: #666;">Coordenadas: ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}</small>
-    </div>
-`);.addTo(camadas.alertas)
+                                        L.circleMarker([p.lat, p.lng], {
+                                            radius: 4, 
+                                            color: 'red', 
+                                            fillColor: '#f03', 
+                                            fillOpacity: 1
+                                        }).addTo(camadas.alertas)
                                           .bindPopup(`<b>EXCESSO</b><br>Vel: ${p.vel} km/h<br>Limite: ${feat.properties.velocidade} km/h`);
                                     }
                                 }
@@ -184,5 +172,4 @@ L.circleMarker([p.lat, p.lng], {
     </script>
 </body>
 </html>
-
 
