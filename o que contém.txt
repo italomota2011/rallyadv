@@ -71,6 +71,11 @@ No código atual do rastro.html, você faz Object.values(snapR.val()). Se o comp
 
 Dica: Considere salvar as chaves do Firebase de forma que elas já venham ordenadas (o Firebase já ordena por chave se você usar o push(), que gera IDs baseados em tempo).
 
+Arquivo,Sugestão Técnica,Motivo
+index.html,Adicionar localStorage para o odoTotal.,"Se o navegador do piloto atualizar no meio do mato, ele não perde a quilometragem percorrida."
+admin.html,"Botão para ""Limpar Apenas Rastros"".",Útil para limpar testes feitos antes da largada oficial sem precisar deletar os competidores cadastrados.
+rastro.html,"Filtro de ""Velocidade Fantasma"".","Adicione um if (p.vel > 160) para ignorar pontos onde o GPS deu um salto impossível, evitando penalidades injustas."
+
 
 ❌✅
 🟢🔴🟡🟠🟣
