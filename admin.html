@@ -267,9 +267,33 @@ window.excluirCarro = async function() {
         }
     }
 };
+    // Função para monitorar e alternar o status da prova
+function monitorarStatusProva() {
+    const btn = document.getElementById('btnStatusProva');
+    db.ref('configuracoes/provaAberta').on('value', snap => {
+        const aberta = snap.val();
+        if (aberta) {
+            btn.innerText = "🔓 PROVA ABERTA";
+            btn.style.background = "#38a169"; // Verde
+        } else {
+            btn.innerText = "🔒 PROVA FECHADA";
+            btn.style.background = "#e53e3e"; // Vermelho
+        }
+    });
+}
+
+window.alternarStatusProva = function() {
+    const ref = db.ref('configuracoes/provaAberta');
+    ref.once('value', snap => {
+        ref.set(!snap.val());
+    });
+};
+
+// Chame monitorarStatusProva() dentro da sua função initMap()
     </script>
 </body>
 </html>
+
 
 
 
