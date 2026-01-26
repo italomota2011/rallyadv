@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/1.0.0/NoSleep.min.js"></script>
+    
     <title>Rally Tracker Pro</title>
 
     <link rel="manifest" href="manifest.json">
@@ -90,6 +92,7 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
+        let noSleep = new NoSleep();
         let wakeLock = null;
         let watchID = null;
         let odoTotal = 0;
@@ -145,6 +148,7 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
+            noSleep.enable();
             solicitarWakeLock();
 
             // Status de Conexão Firebase
@@ -242,6 +246,7 @@
         function encerrarSessao() {
             if(confirm("Encerrar prova?")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
+                noSleep.disable();
                 localStorage.removeItem('rally_carro_ativo');
                 location.reload();
             }
@@ -249,4 +254,5 @@
     </script>
 </body>
 </html>
+
 
