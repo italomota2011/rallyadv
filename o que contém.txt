@@ -12,7 +12,7 @@ Fotos - ✅
 Ranking Fotos - ✅
 Ranking Final - ✅
 Reset com senha - ✅
-Botão abrir/fechar prova - ❌
+Botão abrir/fechar prova - ✅
 Botão excluir carro - ✅
 PopUp com nome do piloto ao clicar no numero do carro - ❌
 
@@ -46,7 +46,7 @@ _______________________________________________
 Não apaga tela - ✅
 Odometro - ✅
 Botão iniciar - ✅
-Só pode iniciar depois que o admin abrir prova - ❌
+Só pode iniciar depois que o admin abrir prova - ✅
 
 
 
