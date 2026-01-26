@@ -102,6 +102,7 @@
 
             carregarTrajeto();
             rastrearCarros();
+            atualizarSeletorCarros();
             
             // Força o redimensionamento para garantir que o mapa apareça
             setTimeout(() => { map.invalidateSize(); }, 500);
@@ -214,9 +215,61 @@ if(tempoExcessoMs > 10000) {
         window.resetar = function() {
             if(prompt("Senha de Segurança:") === "261291") db.ref('/').remove().then(() => location.reload());
         };
+        // Função para manter a lista de carros do seletor atualizada
+function atualizarSeletorCarros() {
+    const selector = document.getElementById('carSelector');
+    db.ref('competidores').on('value', snap => {
+        // Limpa o seletor mantendo a opção padrão
+        selector.innerHTML = '<option value="">Selecionar Carro...</option>';
+        
+        snap.forEach(child => {
+            const carId = child.key;
+            const option = document.createElement('option');
+            option.value = carId;
+            option.textContent = `Carro ${carId}`;
+            selector.appendChild(option);
+        });
+    });
+}
+
+// Chame a função de atualizar quando o mapa iniciar
+// Adicione esta linha dentro do seu window.onload ou initMap:
+// atualizarSeletorCarros();
+
+window.excluirCarro = async function() {
+    const carId = document.getElementById('carSelector').value;
+    
+    if (!carId) {
+        alert("Por favor, selecione um carro primeiro.");
+        return;
+    }
+
+    const confirmacao = confirm(`⚠️ ATENÇÃO: Deseja realmente excluir o Carro ${carId}?\nIsso apagará o cadastro, rastro e pontos.`);
+    
+    if (confirmacao) {
+        try {
+            // Remove de todas as referências do banco
+            await Promise.all([
+                db.ref(`competidores/${carId}`).remove(),
+                db.ref(`posicoes/${carId}`).remove(),
+                db.ref(`rastros/${carId}`).remove(),
+                db.ref(`tempos/${carId}`).remove()
+            ]);
+            
+            alert(`✅ Carro ${carId} removido com sucesso!`);
+            
+            // Recarrega a página para limpar marcadores do mapa
+            location.reload(); 
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao excluir carro.");
+        }
+    }
+};
     </script>
 </body>
 </html>
+
 
 
 
