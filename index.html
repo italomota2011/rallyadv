@@ -148,7 +148,10 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            noSleep.enable();
+            try {
+            noSleep.enable();} catch (err) {
+        console.log("NoSleep aguardando interação do usuário.");
+    }
             solicitarWakeLock();
 
             // Status de Conexão Firebase
@@ -210,6 +213,13 @@
         }
 
         window.onload = function() {
+            document.body.addEventListener('click', function enableNoSleep() {
+    if (localStorage.getItem('rally_carro_ativo')) {
+        noSleep.enable();
+    }
+    // Remove o listener após o primeiro clique para não rodar sempre
+    document.body.removeEventListener('click', enableNoSleep);
+}, false);
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
         };
