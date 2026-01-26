@@ -211,25 +211,33 @@
         };
 
         document.getElementById('btnIniciar').onclick = async function() {
-            const numRaw = document.getElementById('carro').value;
-            const nomeRaw = document.getElementById('nome').value.trim();
-            const cat = document.getElementById('categoria').value;
-            const num = parseInt(numRaw);
+    const numRaw = document.getElementById('carro').value;
+    const nomeRaw = document.getElementById('nome').value.trim();
+    const cat = document.getElementById('categoria').value;
+    const num = parseInt(numRaw);
 
-            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-            
-            try {
-                const snapshot = await db.ref('competidores').once('value');
-                const competidores = snapshot.val() || {};
-                if (competidores[num]) return alert("Este número de carro já existe!");
+    if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
+    
+    try {
+        // 1. VERIFICA SE A PROVA ESTÁ ABERTA
+        const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+        if (statusSnap.val() !== true) {
+            return alert("🚫 A prova está fechada no momento. Aguarde a liberação da organização.");
+        }
 
-                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
-                localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(num);
-            } catch (e) {
-                alert("Erro de conexão.");
-            }
-        };
+        // 2. VERIFICA SE O CARRO JÁ EXISTE
+        const snapshot = await db.ref('competidores').once('value');
+        const competidores = snapshot.val() || {};
+        if (competidores[num]) return alert("Este número de carro já existe!");
+
+        // Prossegue com o cadastro
+        await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+        localStorage.setItem('rally_carro_ativo', num);
+        iniciarFluxoRastreio(num);
+    } catch (e) {
+        alert("Erro de conexão ou permissão.");
+    }
+};
 
         function encerrarSessao() {
             if(confirm("Encerrar prova?")) {
@@ -241,3 +249,4 @@
     </script>
 </body>
 </html>
+
