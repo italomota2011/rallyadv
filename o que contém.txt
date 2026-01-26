@@ -66,6 +66,10 @@ Atualmente, você envia para o Firebase toda vez que o GPS reporta (pode ser 1x 
 
 Dica: Você pode continuar atualizando o Odômetro e a Velocidade na tela a cada segundo, mas enviar para o servidor (db.ref().set()) apenas a cada 5 ou 10 segundos, ou quando houver um deslocamento significativo.
 
+A. Otimização do Objeto de Rastro
+No código atual do rastro.html, você faz Object.values(snapR.val()). Se o competidor tiver 10 mil pontos, o sort() pode demorar.
+
+Dica: Considere salvar as chaves do Firebase de forma que elas já venham ordenadas (o Firebase já ordena por chave se você usar o push(), que gera IDs baseados em tempo).
 
 
 ❌✅
