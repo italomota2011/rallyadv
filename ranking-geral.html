@@ -23,8 +23,9 @@
         .col-pos { width: 60px; font-weight: bold; color: #e67e22; }
         .col-num { width: 60px; }
         .col-piloto { width: auto; }
-        .col-tempo { width: 150px; font-family: monospace; color: #fbd38d; font-weight: bold; }
-        .col-pontos { width: 180px; text-align: center; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
+        .col-tempo { width: 130px; font-family: monospace; color: #fbd38d; font-weight: bold; }
+        .col-penal { width: 110px; text-align: center; color: #fc8181; font-weight: bold; } /* Nova Coluna */
+        .col-pontos { width: 150px; text-align: center; font-weight: bold; color: #48bb78; font-size: 1.1rem; }
 
         .text-center { text-align: center; }
         
@@ -94,6 +95,7 @@
                         id, ...p, 
                         tempoStr,
                         tSeg: tempoParaSegundos(tempoStr),
+                        ptsGPS,
                         totalPts
                     });
                 }
@@ -114,7 +116,8 @@
                                 <th class="col-pos">Pos</th>
                                 <th class="col-num">Nº</th>
                                 <th class="col-piloto">Piloto</th>
-                                <th class="col-tempo">Tempo Total</th>
+                                <th class="col-tempo">Tempo</th>
+                                <th class="col-penal" style="text-align:center;">Penalização</th>
                                 <th class="col-pontos">Pontuação Final</th>
                             </tr>
                         </thead>
@@ -126,6 +129,7 @@
                         <td class="col-num"><b>${p.id}</b></td>
                         <td class="col-piloto">${p.nome}</td>
                         <td class="col-tempo">${p.tempoStr}</td>
+                        <td class="col-penal">${p.ptsGPS.toLocaleString('pt-BR')}</td>
                         <td class="col-pontos">${p.totalPts.toLocaleString('pt-BR')} pts</td>
                     </tr>`;
                 });
@@ -159,22 +163,23 @@
                 doc.setFontSize(14);
                 doc.setTextColor(0, 0, 0);
                 doc.text(titulo, 14, finalY);
-                // ... dentro da função exportarPDF ...
-doc.autoTable({ 
-    html: tabela, 
-    startY: finalY + 5, 
-    theme: 'striped',
-    headStyles: { 
-        fillColor: [230, 126, 34],
-        halign: 'center' // Centraliza o texto do cabeçalho
-    },
-    columnStyles: {
-        0: { cellWidth: 15, halign: 'center' }, // Pos
-        1: { cellWidth: 15, halign: 'center' }, // Nº
-        3: { halign: 'center' },                // Tempo
-        4: { halign: 'center' }                 // Pontos (Índice 4 = 5ª coluna)
-    }
-});
+
+                doc.autoTable({ 
+                    html: tabela, 
+                    startY: finalY + 5, 
+                    theme: 'striped',
+                    headStyles: { 
+                        fillColor: [230, 126, 34],
+                        halign: 'center' 
+                    },
+                    columnStyles: {
+                        0: { cellWidth: 12, halign: 'center' }, // Pos
+                        1: { cellWidth: 12, halign: 'center' }, // Nº
+                        3: { cellWidth: 35, halign: 'center' }, // Tempo
+                        4: { cellWidth: 35, halign: 'center' }, // Penalização (Nova)
+                        5: { halign: 'center' }                // Pontos Final
+                    }
+                });
                 finalY = doc.lastAutoTable.finalY + 15;
             }
         });
