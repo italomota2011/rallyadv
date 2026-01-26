@@ -33,7 +33,7 @@
         .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
         .odo-box { margin-top: 15px; padding: 15px 10px; border-top: 1px solid #333; background: rgba(0,0,0,0.2); border-radius: 10px; }
         .odo-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-        .odo-val { font-size: 5rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
+        .odo-val { font-size: 4rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
         .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
         .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
     </style>
@@ -95,7 +95,26 @@
         let odoTotal = 0;
         let ultimaPos = null;
 
-        // Funções do Odômetro
+        // --- FUNÇÕES DE TELA ACESA (WAKE LOCK) ---
+        async function solicitarWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log("Wake Lock ativo.");
+                } catch (err) {
+                    console.error("Erro WakeLock:", err);
+                }
+            }
+        }
+
+        // Reativa se o piloto voltar para o navegador
+        document.addEventListener('visibilitychange', () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                solicitarWakeLock();
+            }
+        });
+
+        // --- FUNÇÕES DO ODÔMETRO ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -134,12 +153,7 @@
             return R * c; 
         }
 
-        async function solicitarWakeLock() {
-            if ('wakeLock' in navigator) {
-                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
-            }
-        }
-
+        // --- FLUXO PRINCIPAL ---
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
@@ -147,7 +161,6 @@
             
             solicitarWakeLock();
 
-            // Status de Conexão Firebase
             db.ref(".info/connected").on("value", (snap) => {
                 const msg = document.getElementById('msgGps');
                 const detalhe = document.getElementById('detalheOffline');
@@ -169,14 +182,10 @@
                 const speedMS = position.coords.speed || 0;
                 const kmh = Math.round(speedMS * 3.6);
 
-                // --- FILTRO DE ESTABILIDADE ---
-                // Se a precisão for ruim (> 30m), ignora para não "pular" o odômetro
                 if (accuracy > 30) return;
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    
-                    // Só move o odômetro se deslocou mais de 5 metros e está a mais de 2km/h
                     if (dist > 0.005 && kmh > 2) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
@@ -186,10 +195,8 @@
                     ultimaPos = { lat, lng };
                 }
 
-                // Atualiza Velocidade na Tela
                 document.getElementById('viewVel').innerText = kmh.toFixed(1);
                 
-                // Gravação no Firebase (Conforme sua estrutura original)
                 const timestamp = Date.now();
                 const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
                 
@@ -211,42 +218,5 @@
         };
 
         document.getElementById('btnIniciar').onclick = async function() {
-    const numRaw = document.getElementById('carro').value;
-    const nomeRaw = document.getElementById('nome').value.trim();
-    const cat = document.getElementById('categoria').value;
-    const num = parseInt(numRaw);
-
-    if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-    
-    try {
-        // 1. VERIFICA SE A PROVA ESTÁ ABERTA
-        const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
-        if (statusSnap.val() !== true) {
-            return alert("🚫 A prova está fechada no momento. Aguarde a liberação da organização.");
-        }
-
-        // 2. VERIFICA SE O CARRO JÁ EXISTE
-        const snapshot = await db.ref('competidores').once('value');
-        const competidores = snapshot.val() || {};
-        if (competidores[num]) return alert("Este número de carro já existe!");
-
-        // Prossegue com o cadastro
-        await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
-        localStorage.setItem('rally_carro_ativo', num);
-        iniciarFluxoRastreio(num);
-    } catch (e) {
-        alert("Erro de conexão ou permissão.");
-    }
-};
-
-        function encerrarSessao() {
-            if(confirm("Encerrar prova?")) {
-                if (watchID) navigator.geolocation.clearWatch(watchID);
-                localStorage.removeItem('rally_carro_ativo');
-                location.reload();
-            }
-        }
-    </script>
-</body>
-</html>
-
+            const numRaw = document.getElementById('carro').value;
+            const nomeRaw = document.getElementById('nome').value.trim();
