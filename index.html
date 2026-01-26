@@ -13,43 +13,63 @@
         let watchID = null;
         let ultimaPos = null;
 
-        // 1. AJUSTE: LER O VALOR IMEDIATAMENTE
-        let odoTotal = 0;
-        const odoNoBancoLocal = localStorage.getItem('rally_odo_total');
-        if (odoNoBancoLocal) {
-            odoTotal = parseFloat(odoNoBancoLocal);
-        }
+        // --- BLOCO DE RECUPERAÇÃO ULTRA-RÁPIDA ---
+        // Lemos o valor antes de qualquer outra função existir
+        let odoTotal = parseFloat(localStorage.getItem('rally_odo_total')) || 0;
 
-        // Função para atualizar o visor e o banco local ao mesmo tempo
         function atualizarTelaOdo() { 
             const display = document.getElementById('displayOdo');
             if (display) {
                 display.innerText = odoTotal.toFixed(3);
             }
+            // Salvamos como string para garantir que o navegador não se confunda
             localStorage.setItem('rally_odo_total', odoTotal.toString()); 
         }
 
-        // ... (Mantenha as funções solicitarWakeLock, ativarFallbackVideo e calcularDistancia iguais)
+        // --- FUNÇÕES DE CONTROLE ---
+        function alterarOdo(v) { 
+            odoTotal = Math.max(0, odoTotal + v); 
+            atualizarTelaOdo(); 
+        }
 
+        function zerarOdo() { 
+            if(confirm("Zerar odômetro?")) { 
+                odoTotal = 0; 
+                atualizarTelaOdo(); 
+            } 
+        }
+
+        function ajusteManualOdo() {
+            let n = prompt("Ajustar Odômetro (KM):", odoTotal.toFixed(3));
+            if(n !== null) { 
+                let val = parseFloat(n.replace(',','.'));
+                if(!isNaN(val)) {
+                    odoTotal = Math.max(0, val);
+                    atualizarTelaOdo();
+                }
+            }
+        }
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371; 
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c; 
+        }
+
+        // --- GPS E TRANSMISSÃO ---
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            // 2. AJUSTE: Garantir que ao entrar na tela de rastreio o valor apareça
+            // Força o valor salvo a aparecer na tela assim que o GPS liga
             atualizarTelaOdo();
             solicitarWakeLock();
-
-            db.ref(".info/connected").on("value", (snap) => {
-                const msg = document.getElementById('msgGps');
-                if (snap.val() === true) {
-                    msg.innerText = "● TRANSMITINDO AO VIVO";
-                    msg.classList.remove('status-offline');
-                } else {
-                    msg.innerText = "○ SEM SINAL DE INTERNET";
-                    msg.classList.add('status-offline');
-                }
-            });
 
             watchID = navigator.geolocation.watchPosition(position => {
                 const lat = position.coords.latitude;
@@ -62,7 +82,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.005) { 
+                    if (dist > 0.002) { // 2 metros de movimento já conta
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
@@ -72,21 +92,34 @@
                 }
 
                 document.getElementById('viewVel').innerText = kmh.toFixed(1);
-                const dados = { lat, lng, vel: kmh, acc: accuracy, ts: Date.now() };
-                db.ref('posicoes/' + num).set(dados);
-            }, (err) => { console.error(err); }, { enableHighAccuracy: true });
+                db.ref('posicoes/' + num).set({ lat, lng, vel: kmh, acc: accuracy, ts: Date.now() });
+            }, (err) => { console.error(err); }, { enableHighAccuracy: true, maximumAge: 0 });
         }
 
-        // 3. AJUSTE: O WINDOW.ONLOAD AGORA É MAIS "AGRESSIVO"
+        // --- INICIALIZAÇÃO AO CARREGAR PÁGINA ---
         window.onload = function() {
-            // Tenta atualizar o visor assim que a página termina de desenhar
+            // 1. Mostra o valor que está na memória imediatamente
             atualizarTelaOdo();
 
+            // 2. Verifica se deve voltar para a tela de rastreio
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) {
                 iniciarFluxoRastreio(salvo);
             }
         };
 
-        // ... (Mantenha o resto das funções: zerarOdo, alterarOdo, ajusteManualOdo, encerrarSessao iguais)
+        // WakeLock (Mantenha igual ao seu)
+        async function solicitarWakeLock() {
+            if ('wakeLock' in navigator) {
+                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
+            }
+        }
+
+        function encerrarSessao() {
+            if(confirm("Encerrar prova? Isso limpará os dados do celular.")) {
+                if (watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.clear(); // Limpa TUDO
+                location.reload();
+            }
+        }
     </script>
