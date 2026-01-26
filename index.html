@@ -103,7 +103,6 @@
 
         // --- FUNÇÕES DE WAKE LOCK (TELA ACESA) ---
         async function solicitarWakeLock() {
-            // Tenta API Moderna
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
@@ -124,19 +123,19 @@
                     document.getElementById('statusTela').innerText = "Tela Acesa (Modo Vídeo)";
                     document.getElementById('statusTela').style.color = "#f1c40f";
                 }).catch(e => {
-                    document.getElementById('statusTela').innerText = "Erro ao manter tela acesa";
+                    document.getElementById('statusTela').innerText = "⚠️ Erro: Tela pode apagar!";
+                    document.getElementById('statusTela').style.color = "#ff4444";
                 });
             }
         }
 
-        // Reativar quando voltar para a aba (Essencial para iOS)
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible' && document.getElementById('ativo').style.display === 'block') {
                 await solicitarWakeLock();
             }
         });
 
-        // --- FUNÇÕES DO ODÔMETRO ---
+        // --- FUNÇÕES DO ODÔMETRO COM BACKUP LOCAL ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -150,7 +149,9 @@
         }
 
         function atualizarTelaOdo() { 
-            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); 
+            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
+            // BACKUP LOCAL: Salva o valor atual do odômetro no aparelho
+            localStorage.setItem('rally_odo_valor', odoTotal);
         }
 
         function ajusteManualOdo() {
@@ -180,7 +181,13 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            // Re-solicita para garantir
+            // Recupera o odômetro salvo anteriormente, se existir
+            const odoSalvo = localStorage.getItem('rally_odo_valor');
+            if (odoSalvo) {
+                odoTotal = parseFloat(odoSalvo);
+                atualizarTelaOdo();
+            }
+
             solicitarWakeLock();
 
             db.ref(".info/connected").on("value", (snap) => {
@@ -208,7 +215,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.005 && kmh > 2) { 
+                    if (dist > 0.005) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
@@ -240,7 +247,6 @@
         };
 
         document.getElementById('btnIniciar').onclick = async function() {
-            // --- GATILHO PARA IOS: Deve ser a primeira coisa no clique ---
             solicitarWakeLock();
 
             const numRaw = document.getElementById('carro').value;
@@ -258,24 +264,15 @@
 
                 const snapshot = await db.ref('competidores').once('value');
                 const competidores = snapshot.val() || {};
-                if (competidores[num]) return alert("Este número de carro já existe!");
+                
+                // Se o carro for o mesmo que já estava ativo, permite continuar sem erro de "duplicado"
+                if (competidores[num] && localStorage.getItem('rally_carro_ativo') != num) {
+                    return alert("Este número de carro já existe!");
+                }
 
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(num);
-            } catch (e) {
-                alert("Erro de conexão.");
-            }
-        };
-
-        function encerrarSessao() {
-            if(confirm("Encerrar prova?")) {
-                if (watchID) navigator.geolocation.clearWatch(watchID);
-                if (wakeLock) wakeLock.release();
-                localStorage.removeItem('rally_carro_ativo');
-                location.reload();
-            }
-        }
+                iniciarFluxoRastreio(
     </script>
 </body>
 </html>
