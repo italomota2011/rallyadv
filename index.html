@@ -3,8 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <script src="NoSleep.min.js"></script>
-    
     <title>Rally Tracker Pro</title>
 
     <link rel="manifest" href="manifest.json">
@@ -92,24 +90,10 @@
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
 
-        let noSleep = null;
         let wakeLock = null;
         let watchID = null;
         let odoTotal = 0;
         let ultimaPos = null;
-
-        window.addEventListener('load', function() {
-            try {
-                if (typeof NoSleep !== 'undefined') {
-                    noSleep = new NoSleep();
-                    console.log("NoSleep pronto.");
-                } else {
-                    console.error("Biblioteca NoSleep não carregou.");
-                }
-            } catch (e) {
-                console.error("Erro ao inicializar NoSleep:", e);
-            }
-        });
 
         // Funções do Odômetro
         function alterarOdo(v) { 
@@ -161,13 +145,6 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            if (noSleep) {
-                try {
-                    noSleep.enable();
-                } catch (err) {
-                    console.log("NoSleep aguardando interação.");
-                }
-            }
             solicitarWakeLock();
 
             // Status de Conexão Firebase
@@ -229,13 +206,6 @@
         }
 
         window.onload = function() {
-            document.body.addEventListener('click', function enableNoSleep() {
-    if (localStorage.getItem('rally_carro_ativo')) {
-        noSleep.enable();
-    }
-    // Remove o listener após o primeiro clique para não rodar sempre
-    document.body.removeEventListener('click', enableNoSleep);
-}, false);
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
         };
@@ -272,7 +242,6 @@
         function encerrarSessao() {
             if(confirm("Encerrar prova?")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
-                noSleep.disable();
                 localStorage.removeItem('rally_carro_ativo');
                 location.reload();
             }
@@ -280,6 +249,4 @@
     </script>
 </body>
 </html>
-
-
 
