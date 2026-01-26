@@ -36,7 +36,6 @@
         .odo-val { font-size: 5rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
         .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
         .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
-        /* Esconder o vídeo de fallback */
         #wakeLockVideo { position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
     </style>
 </head>
@@ -101,20 +100,14 @@
         let odoTotal = 0;
         let ultimaPos = null;
 
-        // --- FUNÇÕES DE WAKE LOCK (TELA ACESA) ---
         async function solicitarWakeLock() {
-            // Tenta API Moderna
             if ('wakeLock' in navigator) {
                 try {
                     wakeLock = await navigator.wakeLock.request('screen');
                     document.getElementById('statusTela').innerText = "Tela Bloqueada (Sempre Acesa)";
                     document.getElementById('statusTela').style.color = "#2ecc71";
-                } catch (err) {
-                    ativarFallbackVideo();
-                }
-            } else {
-                ativarFallbackVideo();
-            }
+                } catch (err) { ativarFallbackVideo(); }
+            } else { ativarFallbackVideo(); }
         }
 
         function ativarFallbackVideo() {
@@ -123,20 +116,16 @@
                 video.play().then(() => {
                     document.getElementById('statusTela').innerText = "Tela Acesa (Modo Vídeo)";
                     document.getElementById('statusTela').style.color = "#f1c40f";
-                }).catch(e => {
-                    document.getElementById('statusTela').innerText = "Erro ao manter tela acesa";
-                });
+                }).catch(e => { console.log("Wake Lock falhou"); });
             }
         }
 
-        // Reativar quando voltar para a aba (Essencial para iOS)
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible' && document.getElementById('ativo').style.display === 'block') {
                 await solicitarWakeLock();
             }
         });
 
-        // --- FUNÇÕES DO ODÔMETRO ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -150,7 +139,8 @@
         }
 
         function atualizarTelaOdo() { 
-            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); 
+            document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
+            localStorage.setItem('rally_odo_total', odoTotal); 
         }
 
         function ajusteManualOdo() {
@@ -180,7 +170,6 @@
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            // Re-solicita para garantir
             solicitarWakeLock();
 
             db.ref(".info/connected").on("value", (snap) => {
@@ -208,7 +197,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.005 && kmh > 2) { 
+                    if (dist > 0.005) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
@@ -218,31 +207,29 @@
                 }
 
                 document.getElementById('viewVel').innerText = kmh.toFixed(1);
-                
                 const timestamp = Date.now();
                 const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
-                
                 db.ref('posicoes/' + num).set(dados);
                 db.ref('rastros/' + num).push(dados);
 
-            }, (err) => {
-                console.error("Erro GPS:", err);
-            }, { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 10000 
+            }, (err) => { console.error("Erro GPS:", err); }, { 
+                enableHighAccuracy: true, maximumAge: 0, timeout: 10000 
             });
         }
 
         window.onload = function() {
+            const odoSalvo = localStorage.getItem('rally_odo_total');
+            if (odoSalvo) {
+                odoTotal = parseFloat(odoSalvo);
+                document.getElementById('displayOdo').innerText = odoTotal.toFixed(3);
+            }
+
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
         };
 
         document.getElementById('btnIniciar').onclick = async function() {
-            // --- GATILHO PARA IOS: Deve ser a primeira coisa no clique ---
             solicitarWakeLock();
-
             const numRaw = document.getElementById('carro').value;
             const nomeRaw = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
@@ -252,9 +239,7 @@
             
             try {
                 const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
-                if (statusSnap.val() !== true) {
-                    return alert("🚫 A prova está fechada.");
-                }
+                if (statusSnap.val() !== true) return alert("🚫 A prova está fechada.");
 
                 const snapshot = await db.ref('competidores').once('value');
                 const competidores = snapshot.val() || {};
@@ -263,16 +248,15 @@
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
-            } catch (e) {
-                alert("Erro de conexão.");
-            }
+            } catch (e) { alert("Erro de conexão."); }
         };
 
         function encerrarSessao() {
             if(confirm("Encerrar prova?")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
-                if (wakeLock) wakeLock.release();
+                if (wakeLock) { try { wakeLock.release(); } catch(e) {} }
                 localStorage.removeItem('rally_carro_ativo');
+                localStorage.removeItem('rally_odo_total');
                 location.reload();
             }
         }
