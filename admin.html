@@ -148,17 +148,33 @@
         }
 
         function rastrearCarros() {
-            const markers = {};
-            db.ref('posicoes').on('value', snap => {
-                snap.forEach(c => {
-                    const id = c.key; const p = c.val();
-                    if(markers[id]) markers[id].setLatLng([p.lat, p.lng]);
-                    else markers[id] = L.marker([p.lat, p.lng], { 
-                        icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
-                    }).addTo(map);
+    const markers = {};
+    
+    // Escuta as posições em tempo real
+    db.ref('posicoes').on('value', snap => {
+        snap.forEach(c => {
+            const id = c.key; 
+            const p = c.val();
+            
+            if(markers[id]) {
+                markers[id].setLatLng([p.lat, p.lng]);
+            } else {
+                // Cria o marcador com o ícone de número
+                markers[id] = L.marker([p.lat, p.lng], { 
+                    icon: L.divIcon({ className:'marker-label', html: id, iconSize:[30,30] }) 
+                }).addTo(map);
+
+                // Adiciona o Popup que busca o nome ao ser clicado
+                markers[id].on('click', function() {
+                    db.ref(`competidores/${id}/nome`).once('value', nomeSnap => {
+                        const nomeComp = nomeSnap.val() || "Não cadastrado";
+                        markers[id].bindPopup(`<b>Carro: ${id}</b><br>Piloto: ${nomeComp}`).openPopup();
+                    });
                 });
-            });
-        }
+            }
+        });
+    });
+}
 
         window.apurar = async function() {
             if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
@@ -294,6 +310,7 @@ window.alternarStatusProva = function() {
     </script>
 </body>
 </html>
+
 
 
 
