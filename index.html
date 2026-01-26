@@ -37,7 +37,16 @@
         .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
         .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
         /* Esconder o vídeo de fallback */
-        #wakeLockVideo { position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
+        #wakeLockVideo { 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 10px; 
+    height: 10px; 
+    opacity: 0.01; 
+    pointer-events: none; 
+    z-index: -1;
+}
     </style>
 </head>
 <body>
@@ -273,3 +282,4 @@ document.getElementById('btnIniciar').onclick = async function() {
     </script>
 </body>
 </html>
+
