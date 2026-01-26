@@ -18,6 +18,7 @@
         .legenda { padding: 12px; background: rgba(255,255,255,0.05); border-radius: 8px; font-size: 11px; line-height: 1.8; border: 1px solid #333; }
         .item-legenda { display: flex; align-items: center; gap: 8px; }
         .leaflet-control-layers { background: white !important; color: black !important; border-radius: 8px !important; }
+        .leaflet-popup-content-wrapper { background: #fff; color: #333; border-radius: 8px; }
     </style>
 </head>
 <body>
@@ -100,16 +101,15 @@
                 camadas.rastro.setLatLngs(rastroArr.map(p => [p.lat, p.lng]));
                 map.fitBounds(camadas.rastro.getBounds(), {padding: [40, 40]});
 
-                let pen = 0;
+                let penTotal = 0;
                 let logs = "";
 
                 if(snapO.exists()) {
                     const rota = snapO.val();
                     rota.features.forEach(feat => {
                         
-                        // DESENHAR LINHA AZUL (MÉTODO SIMPLES)
+                        // DESENHAR LINHA AZUL
                         if(feat.geometry.type === 'LineString') {
-                            // Converte coordenadas [lng, lat] para [lat, lng] que o Leaflet usa
                             let pontosAzuis = feat.geometry.coordinates.map(c => [c[1], c[0]]);
                             L.polyline(pontosAzuis, {color: '#3498db', weight: 6, opacity: 0.6}).addTo(camadas.rota);
                         }
@@ -120,58 +120,54 @@
                             let raioM = feat.properties.radius || 50;
                             let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
                             L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.3 }).addTo(camadas.rota);
-                            if(!visitou) { pen += 20000; logs += "❌ Waypoint Perdido (-20.000)<br>"; }
+                            if(!visitou) { penTotal += 20000; logs += "❌ Waypoint Perdido (-20.000)<br>"; }
                         }
                         
                         // Cálculo de Radares
-                        // Cálculo de Radares (ATUALIZADO COM FILTRO DE FLUTUAÇÃO)
                         else if(feat.geometry.type.includes('Polygon')) {
-    L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
-    
-    const vMax = (feat.properties.velocidade || 60) * 1.1; // 10% de tolerância
-    let tempoExcessoNoRadar = 0; // Reinicia o contador para cada radar diferente
+                            L.geoJSON(feat, {style:{color:'#3498db', weight:1, fillOpacity:0.1}}).addTo(camadas.rota);
+                            
+                            const vMax = (feat.properties.velocidade || 60) * 1.1; 
+                            let tempoExcessoNoRadar = 0;
 
-    rastroArr.forEach((p, i) => {
-        if(i > 0) {
-            const duration = p.ts - rastroArr[i-1].ts; // Calcula o tempo entre pontos
+                            rastroArr.forEach((p, i) => {
+                                if(i > 0) {
+                                    const duration = p.ts - rastroArr[i-1].ts;
 
-            // Filtros de consistência e verificação se o ponto está dentro do radar
-            if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
-                tempoExcessoNoRadar += duration; // Acumula o tempo de infração neste radar
-                
-                const horario = new Date(p.ts).toLocaleTimeString('pt-BR');
-                const tempoAcumuladoSegundos = Math.round(tempoExcessoNoRadar / 1000);
+                                    if(duration < 30000 && p.vel > 2 && p.vel > vMax && turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), feat)) {
+                                        tempoExcessoNoRadar += duration;
+                                        
+                                        const horario = new Date(p.ts).toLocaleTimeString('pt-BR');
+                                        const tempoAcumuladoSegundos = Math.round(tempoExcessoNoRadar / 1000);
 
-                // Criar o marcador com o popup detalhado
-                L.circleMarker([p.lat, p.lng], {
-                    radius: 6, 
-                    color: '#000', 
-                    weight: 1,
-                    fillColor: 'red', 
-                    fillOpacity: 0.9
-                }).addTo(camadas.alertas)
-                  .bindPopup(`
-                    <div style="font-family: sans-serif; min-width: 160px;">
-                        <strong style="color: #e74c3c;">⚠️ INFRAÇÃO DETECTADA</strong><hr>
-                        <b>Horário:</b> ${horario}<br>
-                        <b>Velocidade:</b> <span style="color:red;">${p.vel} km/h</span><br>
-                        <b>Limite (+10%):</b> ${vMax.toFixed(1)} km/h<br>
-                        <hr>
-                        <b>Tempo Acumulado:</b> <span style="font-size: 1.1em; font-weight: bold;">${tempoAcumuladoSegundos}s</span><br>
-                        <small style="color: #666;">Radar: ${feat.properties.nome || 'Sem Nome'}</small>
-                    </div>
-                `);
-            }
-        }
-    });
+                                        L.circleMarker([p.lat, p.lng], {
+                                            radius: 6, 
+                                            color: '#000', 
+                                            weight: 1,
+                                            fillColor: 'red', 
+                                            fillOpacity: 0.9
+                                        }).addTo(camadas.alertas)
+                                          .bindPopup(`
+                                            <div style="min-width: 160px;">
+                                                <strong style="color: #e74c3c;">⚠️ INFRAÇÃO DETECTADA</strong><hr>
+                                                <b>Horário:</b> ${horario}<br>
+                                                <b>Velocidade:</b> <span style="color:red; font-weight:bold;">${p.vel} km/h</span><br>
+                                                <b>Limite (+10%):</b> ${vMax.toFixed(1)} km/h<br>
+                                                <hr>
+                                                <b>Tempo Acumulado:</b> <span style="font-size: 1.1em; font-weight: bold;">${tempoAcumuladoSegundos}s</span><br>
+                                                <small style="color: #666;">Radar: ${feat.properties.nome || 'Zona de Velocidade'}</small>
+                                            </div>
+                                        `);
+                                    }
+                                }
+                            });
 
-    // Aplicação da penalidade final baseada no tempo total do radar
-    if(tempoExcessoNoRadar > 10000) {
-        let pts = (Math.floor((tempoExcessoNoRadar - 10000) / 30000) + 1) * 300;
-        pen += pts;
-        logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcessoNoRadar/1000)}s (-${pts} pts)<br>`;
-    }
-}
+                            if(tempoExcessoNoRadar > 10000) {
+                                let pts = (Math.floor((tempoExcessoNoRadar - 10000) / 30000) + 1) * 300;
+                                penTotal += pts;
+                                logs += `⚠️ Radar: Excesso por ${Math.round(tempoExcessoNoRadar/1000)}s (-${pts} pts)<br>`;
+                            }
+                        }
                     });
                 }
 
@@ -179,13 +175,14 @@
                     <div class="stats-card">
                         <strong>Resultado: Carro ${id}</strong><hr>
                         ${logs || "✅ Percurso sem penalidades."}<br>
-                        <b>Penalidade Final: -${pen} pts</b>
+                        <b>Penalidade Final: -${penTotal} pts</b>
                     </div>`;
 
-            } catch (e) { console.error(e); }
+            } catch (e) { 
+                console.error(e);
+                document.getElementById('resumo').innerHTML = '<div class="stats-card" style="border-left-color:red">Erro ao processar dados. Verifique o console.</div>';
+            }
         }
     </script>
 </body>
 </html>
-
-
