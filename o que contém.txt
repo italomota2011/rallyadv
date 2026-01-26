@@ -50,6 +50,21 @@ Odometro - ✅
 Botão iniciar - ✅
 Só pode iniciar depois que o admin abrir prova - ✅
 
+1. Volatilidade do Odômetro
+Se o navegador sofrer um "crash" ou o piloto atualizar a página (F5) sem querer, a variável let odoTotal = 0 será reiniciada.
+
+Correção: Salve o valor no localStorage a cada alteração e recupere-o no onload.
+
+
+Ajuste no Filtro do Odômetro
+Em trilhas lentas ou "fechadas", a velocidade pode cair abaixo de 2km/h.
+
+Dica: Em vez de travar por kmh > 2, tente usar apenas o dist > 0.005 (5 metros) e valide se o tempo entre as posições é coerente.
+
+4. Otimização do Envio (Debounce)
+Atualmente, você envia para o Firebase toda vez que o GPS reporta (pode ser 1x por segundo). Isso gasta muita bateria e dados.
+
+Dica: Você pode continuar atualizando o Odômetro e a Velocidade na tela a cada segundo, mas enviar para o servidor (db.ref().set()) apenas a cada 5 ou 10 segundos, ou quando houver um deslocamento significativo.
 
 
 
