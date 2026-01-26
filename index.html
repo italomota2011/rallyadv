@@ -13,8 +13,8 @@
         let watchID = null;
         let ultimaPos = null;
 
-        // --- BLOCO DE RECUPERAÇÃO ULTRA-RÁPIDA ---
-        // Lemos o valor antes de qualquer outra função existir
+        // --- BLOCO DE RECUPERAÇÃO PRIORITÁRIA ---
+        // Lemos o valor antes de qualquer outra coisa rodar
         let odoTotal = parseFloat(localStorage.getItem('rally_odo_total')) || 0;
 
         function atualizarTelaOdo() { 
@@ -22,11 +22,11 @@
             if (display) {
                 display.innerText = odoTotal.toFixed(3);
             }
-            // Salvamos como string para garantir que o navegador não se confunda
+            // Salva sempre como string para evitar erros de leitura do navegador
             localStorage.setItem('rally_odo_total', odoTotal.toString()); 
         }
 
-        // --- FUNÇÕES DE CONTROLE ---
+        // --- FUNÇÕES DE AJUSTE ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -61,13 +61,13 @@
             return R * c; 
         }
 
-        // --- GPS E TRANSMISSÃO ---
+        // --- RASTREIO E GPS ---
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
-            // Força o valor salvo a aparecer na tela assim que o GPS liga
+            // Força o valor guardado a aparecer imediatamente
             atualizarTelaOdo();
             solicitarWakeLock();
 
@@ -82,7 +82,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.002) { // 2 metros de movimento já conta
+                    if (dist > 0.002) { // Movimentos acima de 2 metros
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
@@ -96,30 +96,48 @@
             }, (err) => { console.error(err); }, { enableHighAccuracy: true, maximumAge: 0 });
         }
 
-        // --- INICIALIZAÇÃO AO CARREGAR PÁGINA ---
+        // --- CARREGAMENTO INICIAL ---
         window.onload = function() {
-            // 1. Mostra o valor que está na memória imediatamente
+            // Garante que o visor mostre o que está na memória mal a página abra
             atualizarTelaOdo();
 
-            // 2. Verifica se deve voltar para a tela de rastreio
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) {
                 iniciarFluxoRastreio(salvo);
             }
         };
 
-        // WakeLock (Mantenha igual ao seu)
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
                 try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
             }
         }
 
+        document.getElementById('btnIniciar').onclick = async function() {
+            const numRaw = document.getElementById('carro').value;
+            const nomeRaw = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+            const num = parseInt(numRaw);
+
+            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
+            
+            try {
+                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+                if (statusSnap.val() !== true) return alert("🚫 A prova está fechada.");
+
+                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) { alert("Erro de ligação."); }
+        };
+
         function encerrarSessao() {
-            if(confirm("Encerrar prova? Isso limpará os dados do celular.")) {
+            if(confirm("Encerrar prova? Isto limpará os dados de odômetro do telemóvel.")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
-                localStorage.clear(); // Limpa TUDO
+                localStorage.removeItem('rally_carro_ativo');
+                localStorage.removeItem('rally_odo_total');
                 location.reload();
             }
         }
     </script>
+
