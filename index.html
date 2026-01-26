@@ -245,34 +245,31 @@
             const salvo = localStorage.getItem('rally_carro_ativo');
             if (salvo) iniciarFluxoRastreio(salvo);
         };
-
-        document.getElementById('btnIniciar').onclick = async function() {
+document.getElementById('btnIniciar').onclick = async function() {
+            // Tenta manter a tela acesa (Essencial para iPhone)
             solicitarWakeLock();
 
             const numRaw = document.getElementById('carro').value;
             const nomeRaw = document.getElementById('nome').value.trim();
-            const cat = document.getElementById('categoria').value;
             const num = parseInt(numRaw);
 
             if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
             
+            // Inicia direto, sem validar no servidor se a prova está aberta
             try {
-                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
-                if (statusSnap.val() !== true) {
-                    return alert("🚫 A prova está fechada.");
-                }
-
-                const snapshot = await db.ref('competidores').once('value');
-                const competidores = snapshot.val() || {};
-                
-                // Se o carro for o mesmo que já estava ativo, permite continuar sem erro de "duplicado"
-                if (competidores[num] && localStorage.getItem('rally_carro_ativo') != num) {
-                    return alert("Este número de carro já existe!");
-                }
-
+                // Salva os dados do piloto localmente e no Firebase
+                const cat = document.getElementById('categoria').value;
                 await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                
                 localStorage.setItem('rally_carro_ativo', num);
-                iniciarFluxoRastreio(
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                // Se o Firebase falhar, ele inicia o odômetro local de qualquer forma
+                console.log("Erro Firebase: Iniciando em modo offline.");
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            }
+        };
     </script>
 </body>
 </html>
