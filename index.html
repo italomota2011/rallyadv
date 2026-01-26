@@ -36,9 +36,15 @@
         .odo-val { font-size: 5rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
         .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
         .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
+        /* Esconder o vídeo de fallback */
+        #wakeLockVideo { position: absolute; width: 1px; height: 1px; opacity: 0.01; pointer-events: none; }
     </style>
 </head>
 <body>
+
+    <video id="wakeLockVideo" playsinline muted loop>
+        <source src="https://raw.githubusercontent.com/bower-media-samples/big-buck-bunny-1080p-30s/master/video.mp4" type="video/mp4">
+    </video>
 
     <div class="card">
         <div id="setup">
@@ -95,7 +101,42 @@
         let odoTotal = 0;
         let ultimaPos = null;
 
-        // Funções do Odômetro
+        // --- FUNÇÕES DE WAKE LOCK (TELA ACESA) ---
+        async function solicitarWakeLock() {
+            // Tenta API Moderna
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    document.getElementById('statusTela').innerText = "Tela Bloqueada (Sempre Acesa)";
+                    document.getElementById('statusTela').style.color = "#2ecc71";
+                } catch (err) {
+                    ativarFallbackVideo();
+                }
+            } else {
+                ativarFallbackVideo();
+            }
+        }
+
+        function ativarFallbackVideo() {
+            const video = document.getElementById('wakeLockVideo');
+            if (video) {
+                video.play().then(() => {
+                    document.getElementById('statusTela').innerText = "Tela Acesa (Modo Vídeo)";
+                    document.getElementById('statusTela').style.color = "#f1c40f";
+                }).catch(e => {
+                    document.getElementById('statusTela').innerText = "Erro ao manter tela acesa";
+                });
+            }
+        }
+
+        // Reativar quando voltar para a aba (Essencial para iOS)
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible' && document.getElementById('ativo').style.display === 'block') {
+                await solicitarWakeLock();
+            }
+        });
+
+        // --- FUNÇÕES DO ODÔMETRO ---
         function alterarOdo(v) { 
             odoTotal = Math.max(0, odoTotal + v); 
             atualizarTelaOdo(); 
@@ -134,20 +175,14 @@
             return R * c; 
         }
 
-        async function solicitarWakeLock() {
-            if ('wakeLock' in navigator) {
-                try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
-            }
-        }
-
         function iniciarFluxoRastreio(num) {
             document.getElementById('setup').style.display = 'none';
             document.getElementById('ativo').style.display = 'block';
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
+            // Re-solicita para garantir
             solicitarWakeLock();
 
-            // Status de Conexão Firebase
             db.ref(".info/connected").on("value", (snap) => {
                 const msg = document.getElementById('msgGps');
                 const detalhe = document.getElementById('detalheOffline');
@@ -169,14 +204,10 @@
                 const speedMS = position.coords.speed || 0;
                 const kmh = Math.round(speedMS * 3.6);
 
-                // --- FILTRO DE ESTABILIDADE ---
-                // Se a precisão for ruim (> 30m), ignora para não "pular" o odômetro
                 if (accuracy > 30) return;
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    
-                    // Só move o odômetro se deslocou mais de 5 metros e está a mais de 2km/h
                     if (dist > 0.005 && kmh > 2) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
@@ -186,10 +217,8 @@
                     ultimaPos = { lat, lng };
                 }
 
-                // Atualiza Velocidade na Tela
                 document.getElementById('viewVel').innerText = kmh.toFixed(1);
                 
-                // Gravação no Firebase (Conforme sua estrutura original)
                 const timestamp = Date.now();
                 const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
                 
@@ -211,37 +240,38 @@
         };
 
         document.getElementById('btnIniciar').onclick = async function() {
-    const numRaw = document.getElementById('carro').value;
-    const nomeRaw = document.getElementById('nome').value.trim();
-    const cat = document.getElementById('categoria').value;
-    const num = parseInt(numRaw);
+            // --- GATILHO PARA IOS: Deve ser a primeira coisa no clique ---
+            solicitarWakeLock();
 
-    if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
-    
-    try {
-        // 1. VERIFICA SE A PROVA ESTÁ ABERTA
-        const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
-        if (statusSnap.val() !== true) {
-            return alert("🚫 A prova está fechada no momento. Aguarde a liberação da organização.");
-        }
+            const numRaw = document.getElementById('carro').value;
+            const nomeRaw = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+            const num = parseInt(numRaw);
 
-        // 2. VERIFICA SE O CARRO JÁ EXISTE
-        const snapshot = await db.ref('competidores').once('value');
-        const competidores = snapshot.val() || {};
-        if (competidores[num]) return alert("Este número de carro já existe!");
+            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
+            
+            try {
+                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+                if (statusSnap.val() !== true) {
+                    return alert("🚫 A prova está fechada.");
+                }
 
-        // Prossegue com o cadastro
-        await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
-        localStorage.setItem('rally_carro_ativo', num);
-        iniciarFluxoRastreio(num);
-    } catch (e) {
-        alert("Erro de conexão ou permissão.");
-    }
-};
+                const snapshot = await db.ref('competidores').once('value');
+                const competidores = snapshot.val() || {};
+                if (competidores[num]) return alert("Este número de carro já existe!");
+
+                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                alert("Erro de conexão.");
+            }
+        };
 
         function encerrarSessao() {
             if(confirm("Encerrar prova?")) {
                 if (watchID) navigator.geolocation.clearWatch(watchID);
+                if (wakeLock) wakeLock.release();
                 localStorage.removeItem('rally_carro_ativo');
                 location.reload();
             }
@@ -249,4 +279,3 @@
     </script>
 </body>
 </html>
-
