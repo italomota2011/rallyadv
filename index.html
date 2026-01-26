@@ -215,6 +215,8 @@
     const nomeRaw = document.getElementById('nome').value.trim();
     const cat = document.getElementById('categoria').value;
     const num = parseInt(numRaw);
+    const noSleep = new NoSleep();
+noSleep.enable();
 
     if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
     
@@ -246,7 +248,9 @@
                 location.reload();
             }
         }
+   src="https://cdnjs.cloudflare.com/ajax/libs/nosleep/0.12.0/NoSleep.min.js">
     </script>
 </body>
 </html>
+
 
