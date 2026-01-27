@@ -39,7 +39,9 @@
     </style>
 </head>
 <body>
-
+<video id="videoWakeLock" playsinline loop muted style="display:none;">
+    <source src="data:video/mp4;base64,AAAAHGZ0eXBtcDQyAAAAAG1wNDJpc29tYXZjMQAAAZhtZGF0ANAHAAABeW1vb3YAAABsbXZoZAAAAADbe6S823ukvAAAA+gAAAAAAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABidHJhawAAAFx0a2hkAAAAAdt7pLzbe6S8AAAAAQAAAAAAA+gAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAfxtZWRpYQAAACxtZGhkAAAAANt7pLzbe6S8AAAAAAAQAAAALmhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABU21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAt1cmwgAAAAAQAAAFptdGJsAAAALXN0c2QAAAAAAAAAAQAAAB1hdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAgACABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGP//AAAALWF2Y0MBQsAV/+EAFWdCwBfQCgYmAAAAMAAAABAnAAA8Y8iSFAAAAAAOc3R0cwAAAAAAAAABAAAACAAAAGAAAAAoc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAAAAAAAAAgAAAAoc3RjbwAAAAAAAAABAAAAUAAAAB51ZHRhAAAAFm5hbWUAAAAAAAAAAGJsYW5rAAACemZyZWU=" type="video/mp4">
+</video>
     <div class="card">
         <div id="setup">
             <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
@@ -133,7 +135,24 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c; 
         }
+function manterTelaAtivaVideo() {
+    const video = document.getElementById('videoWakeLock');
+    
+    const playVideo = () => {
+        video.play().catch(e => console.log("Aguardando interação para vídeo"));
+    };
 
+    playVideo();
+
+    // Se o usuário alternar janelas e voltar, força o play novamente
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === 'visible') {
+            playVideo();
+        }
+    });
+
+    video.addEventListener('pause', playVideo);
+}
         async function solicitarWakeLock() {
             if ('wakeLock' in navigator) {
                 try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
@@ -146,7 +165,7 @@
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
             solicitarWakeLock();
-
+manterTelaAtivaVideo();
             // Status de Conexão Firebase
             db.ref(".info/connected").on("value", (snap) => {
                 const msg = document.getElementById('msgGps');
@@ -249,4 +268,5 @@
     </script>
 </body>
 </html>
+
 
