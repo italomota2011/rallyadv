@@ -238,7 +238,7 @@
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    if (dist > 0.005 && kmh > 2) { 
+                    if (dist > 0.005) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
