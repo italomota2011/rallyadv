@@ -27,6 +27,7 @@ Legenda - ✅
 Seleção de carro - ✅
 Botão voltar ao painel - ✅
 PopUp com as penalizações de velocidade - ✅
+Penalidade se sair da rota- ❌
 Pontuação correta de waypoint - ❌
 Pontuação correta de radar - ❌
 Mudar rastro do carro para bolinhas verdes e velocidade - ✅
@@ -47,6 +48,7 @@ _______________________________________________
 
 Backup Local (localStorage)- ❌
 Backup do odometro - ❌
+Filtro de precisão para o seu odômetro - ❌
 Odometro - ✅
 Botão iniciar - ✅
 Só pode iniciar depois que o admin abrir prova - ✅
