@@ -114,7 +114,7 @@
         }
     });
 
-    // CONFIGURAÇÃO DE ALTA PERFORMANCE
+    // CONFIGURAÇÃO DE ALTA PERFORMANCE COM FILTRO DE ESTABILIDADE
     watchID = navigator.geolocation.watchPosition(position => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
@@ -122,9 +122,13 @@
         const speedMS = position.coords.speed || 0;
         const kmh = Math.round(speedMS * 3.6);
 
-        // FILTRO DE RUÍDO: Ignora pontos com baixa precisão (maior que 20 metros)
-        // Em rali de velocidade, pontos imprecisos criam "atários" falsos no rastro.
+        // 1. FILTRO DE PRECISÃO: Ignora se o sinal estiver muito ruim
         if (accuracy > 20) return; 
+
+        // 2. FILTRO DE ESTABILIDADE (ZONA MORTA): 
+        // Se a velocidade for menor que 3km/h, ignoramos o ponto para não "sujar" o GPS
+        // Isso impede o Rabbit e o seu App de ficarem somando odômetro parados.
+        if (kmh < 3) return;
 
         const timestamp = Date.now();
         const dados = { 
@@ -135,16 +139,15 @@
             ts: timestamp 
         };
         
-        // Envia imediatamente para o Firebase
         db.ref('posicoes/' + num).set(dados);
         db.ref('rastros/' + num).push(dados);
 
     }, (err) => {
         console.error("Erro GPS:", err);
     }, { 
-        enableHighAccuracy: true, // Força o uso do GPS (não Wi-Fi/Torre)
-        maximumAge: 0,            // Não aceita posições antigas do cache
-        timeout: 27000            // Tempo máximo de espera por sinal
+        enableHighAccuracy: true,
+        maximumAge: 1000, // Permite usar a posição de 1 segundo atrás para suavizar a disputa entre apps
+        timeout: 27000 
     });
 }
 
