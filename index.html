@@ -26,8 +26,6 @@
         #setup { display: block; } 
         .tracking { text-align: center; display: none; }
         .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
-        /* Estilo para o contador de pontos */
-        #status-datalogger { font-size: 12px; color: #666; margin-top: 10px; border-top: 1px solid #333; padding-top: 10px; }
     </style>
 </head>
 <body>
@@ -49,9 +47,109 @@
         </div>
 
         <div id="ativo" class="tracking">
-            <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 5px;">Carro --</h2>
-            <p style="color: #2ecc71; font-weight: bold; margin: 5px 0;">● RASTREIO ATIVO</p>
-            <p style="font-size: 12px; color: #888;">Você pode minimizar e abrir o Rabbit.<br>O rastro continuará sendo gravado.</p>
+            <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 10px;">Carro --</h2>
+            <p style="color: #2ecc71; font-weight: bold;">● RASTREIO ATIVO</p>
+            <p style="font-size: 12px; color: #888;">Pontos no rastro: <span id="countPts" style="color:#0d0af0; font-weight:bold;">0</span></p>
+            <p style="font-size: 11px; color: #555; margin-top: 20px;">Você pode minimizar para usar o Rabbit.<br>O rastro está sendo gravado.</p>
+            <button class="btn-sair" onclick="encerrarSessao()">Encerrar e Enviar Rastro</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        const app = firebase.initializeApp(firebaseConfig);
+        const db = firebase.database(app);
+
+        let watchID = null;
+        let rastroDatalogger = []; // Variável para acumular o rastro
+
+        // Registro do Service Worker (se existir sw.js)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+
+        function iniciarFluxoRastreio(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "Carro " + num;
+
+            watchID = navigator.geolocation.watchPosition(position => {
+                const { latitude, longitude, speed, accuracy } = position.coords;
+                if (accuracy > 40) return;
+
+                const ponto = {
+                    lat: latitude,
+                    lng: longitude,
+                    vel: Math.round((speed || 0) * 3.6),
+                    ts: Date.now()
+                };
+
+                // Grava na memória e atualiza contador
+                rastroDatalogger.push(ponto);
+                document.getElementById('countPts').innerText = rastroDatalogger.length;
+
+                // Envia posição atual ao banco (para o Admin ver no mapa)
+                db.ref('posicoes/' + num).set(ponto);
+
+            }, null, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+        }
+
+        document.getElementById('btnIniciar').onclick = async function() {
+            const numRaw = document.getElementById('carro').value;
+            const nomeRaw = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+            const num = parseInt(numRaw);
+
+            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
             
-            <div id="status-datalogger">
-                Pontos capturados: <span id="countPts" style="color: #0d0af0; font-weight: bold;">0</span>
+            try {
+                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+                if (statusSnap.val() !== true) return alert("🚫 Prova Fechada!");
+
+                const snapshot = await db.ref('competidores').once('value');
+                const competidores = snapshot.val() || {};
+                if (competidores[num]) return alert("Este número de carro já existe!");
+
+                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                alert("Erro de conexão.");
+            }
+        };
+
+        async function encerrarSessao() {
+            if(!confirm("Encerrar e enviar rastro completo?")) return;
+            const num = localStorage.getItem('rally_carro_ativo');
+            
+            try {
+                document.querySelector('.btn-sair').innerText = "ENVIANDO...";
+                
+                // Envio final para o novo nó
+                await db.ref('rastros_completos/' + num).set({
+                    log: rastroDatalogger,
+                    finalizadoEm: Date.now()
+                });
+
+                if (watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.removeItem('rally_carro_ativo');
+                alert("Rastro enviado!");
+                location.reload();
+            } catch (e) {
+                alert("Erro ao enviar.");
+            }
+        }
+
+        window.onload = function() {
+            const salvo = localStorage.getItem('rally_carro_ativo');
+            if (salvo) iniciarFluxoRastreio(salvo);
+        };
+    </script>
+</body>
+</html>
