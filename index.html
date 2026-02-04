@@ -9,26 +9,20 @@
     <meta name="theme-color" content="#0d0af0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
-    <meta name="mobile-web-app-capable" content="yes">
 
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #ffffff; z-index: 10; }
+        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #ffffff; }
         .logo { display: block; margin: 0 auto 20px auto; max-width: 150px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #f80303; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:active { transform: scale(0.98); }
-        #setup { display: block; } 
-        .tracking { text-align: center; display: none; }
-        .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
-        
-        /* Contador visual para segurança do piloto */
-        .log-info { margin-top: 15px; font-size: 12px; color: #666; border-top: 1px solid #333; padding-top: 10px; }
+        button { background: #f80303; border: none; font-weight: bold; cursor: pointer; }
+        #ativo { display: none; text-align: center; }
+        .btn-sair { background: transparent; color: #666; font-size: 11px; text-decoration: underline; border: none; margin-top: 20px; }
+        .count-box { background: #000; padding: 15px; border-radius: 10px; margin: 15px 0; border: 1px solid #333; }
     </style>
 </head>
 <body>
@@ -36,8 +30,8 @@
     <div class="card">
         <div id="setup">
             <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
-            <h2 style="color:#ffffff; text-align:center; margin-top: 0;">Rally de Aventura</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
+            <h2 style="text-align:center; margin-top: 0;">Rally de Aventura</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto">
             <select id="categoria">
                 <option>BAIANO 4x2</option>
                 <option>BAIANO 4x4</option>
@@ -45,86 +39,41 @@
                 <option>INICIANTE 4x4</option>
                 <option>ANTIGOS</option>
             </select>
-            <input type="number" id="carro" placeholder="Nº do Carro" min="1" max="100">
+            <input type="number" id="carro" placeholder="Nº do Carro">
             <button id="btnIniciar">INICIAR PROVA</button>
         </div>
 
-        <div id="ativo" class="tracking">
-            <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 5px;">Carro --</h2>
-            <div style="font-size: 14px; color: #2ecc71; font-weight: bold; margin-bottom: 15px;">● DATALOGGER ATIVO</div>
+        <div id="ativo">
+            <h2 id="viewCarro" style="color:#0d0af0;">Carro --</h2>
+            <p>🔴 GRAVANDO RASTRO</p>
             
-            <p style="font-size: 12px; color: #888;">
-                O rastro está sendo gravado em segundo plano.<br>
-                Use o <b>Rabbit</b> normalmente.
-            </p>
-
-            <div class="log-info">
-                Pontos registrados: <span id="countPts" style="color:#0d0af0; font-weight:bold;">0</span>
+            <div class="count-box">
+                <span style="font-size: 12px; color: #888;">PONTOS COLETADOS</span><br>
+                <span id="countPts" style="font-size: 2rem; font-weight: bold; color: #fff;">0</span>
             </div>
-            
-            <button class="btn-sair" onclick="encerrarSessao()">Encerrar e Enviar Rastro</button>
+
+            <p style="font-size: 11px; color: #555;">Pode minimizar. O rastro está seguro.</p>
+            <button class="btn-sair" onclick="encerrarSessao()">FINALIZAR E ENVIAR</button>
         </div>
     </div>
 
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
         let watchID = null;
-        let rastroMemoria = []; // Aqui ficam os dados enquanto o app está minimizado
+        let rastroMemoria = [];
 
-        // Ativação do Service Worker
+        // Registrar SW para background
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
+            navigator.serviceWorker.register('sw.js').catch(() => {});
         }
 
         function iniciarFluxoRastreio(num) {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
-            document.getElementById('viewCarro').innerText = "Carro " + num;
-            
-            // Tenta manter a CPU ativa (WakeLock)
-            if ('wakeLock' in navigator) {
-                navigator.wakeLock.request('screen').catch(()=>{});
-            }
-
-            watchID = navigator.geolocation.watchPosition(position => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const speed = position.coords.speed || 0;
-                const accuracy = position.coords.accuracy;
-
-                if (accuracy > 40) return;
-
-                const ponto = {
-                    lat: lat,
-                    lng: lng,
-                    vel: Math.round(speed * 3.6),
-                    ts: Date.now()
-                };
-
-                // Adiciona ao Datalogger (Memória)
-                rastroMemoria.push(ponto);
-                document.getElementById('countPts').innerText = rastroMemoria.length;
-
-                // Envio em tempo real (para o rastro.html funcionar ao vivo se houver internet)
-                db.ref('posicoes/' + num).set(ponto);
-
-            }, null, { enableHighAccuracy: true, maximumAge: 0 });
-        }
-
-        // Lógica do Botão Iniciar (Fiel à original)
-        document.getElementById('btnIniciar').onclick = async function() {
-            const numRaw = document.getElementById('carro').value;
-            const nomeRaw = document.getElementById('nome').value.trim();
-            const cat = document.getElementById('categoria').value;
-            const num = parseInt(numRaw);
-
-            if(!nomeRaw || !numRaw) return alert("Preencha todos os
+            document.getElementById('setup').style.
