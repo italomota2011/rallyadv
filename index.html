@@ -128,7 +128,7 @@
         // 2. FILTRO DE ESTABILIDADE (ZONA MORTA): 
         // Se a velocidade for menor que 5km/h, ignoramos o ponto para não "sujar" o GPS
         // Isso impede o Rabbit e o seu App de ficarem somando odômetro parados.
-        if (kmh < 5) return;
+        if (kmh < 3) return;
 
         const timestamp = Date.now();
         const dados = { 
