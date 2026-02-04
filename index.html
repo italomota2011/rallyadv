@@ -94,49 +94,59 @@
         }
 
         function iniciarFluxoRastreio(num) {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
-            document.getElementById('viewCarro').innerText = "Carro " + num;
-            
-            solicitarWakeLock();
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('ativo').style.display = 'block';
+    document.getElementById('viewCarro').innerText = "Carro " + num;
+    
+    solicitarWakeLock();
 
-            db.ref(".info/connected").on("value", (snap) => {
-                const msg = document.getElementById('msgGps');
-                const detalhe = document.getElementById('detalheOffline');
-                if (snap.val() === true) {
-                    msg.innerText = "● TRANSMITINDO AO VIVO";
-                    msg.classList.remove('status-offline');
-                    detalhe.style.display = 'none';
-                } else {
-                    msg.innerText = "○ SEM SINAL DE INTERNET";
-                    msg.classList.add('status-offline');
-                    detalhe.style.display = 'block';
-                }
-            });
-
-            watchID = navigator.geolocation.watchPosition(position => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                const speedMS = position.coords.speed || 0;
-                const kmh = Math.round(speedMS * 3.6);
-
-                if (accuracy > 50) return;
-
-                const timestamp = Date.now();
-                const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
-                
-                db.ref('posicoes/' + num).set(dados);
-                db.ref('rastros/' + num).push(dados);
-
-            }, (err) => {
-                console.error("Erro GPS:", err);
-            }, { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 10000 
-            });
+    db.ref(".info/connected").on("value", (snap) => {
+        const msg = document.getElementById('msgGps');
+        const detalhe = document.getElementById('detalheOffline');
+        if (snap.val() === true) {
+            msg.innerText = "● TRANSMITINDO AO VIVO";
+            msg.classList.remove('status-offline');
+            detalhe.style.display = 'none';
+        } else {
+            msg.innerText = "○ SEM SINAL DE INTERNET";
+            msg.classList.add('status-offline');
+            detalhe.style.display = 'block';
         }
+    });
+
+    // CONFIGURAÇÃO DE ALTA PERFORMANCE
+    watchID = navigator.geolocation.watchPosition(position => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+        const speedMS = position.coords.speed || 0;
+        const kmh = Math.round(speedMS * 3.6);
+
+        // FILTRO DE RUÍDO: Ignora pontos com baixa precisão (maior que 20 metros)
+        // Em rali de velocidade, pontos imprecisos criam "atários" falsos no rastro.
+        if (accuracy > 20) return; 
+
+        const timestamp = Date.now();
+        const dados = { 
+            lat, 
+            lng, 
+            vel: kmh, 
+            acc: accuracy, 
+            ts: timestamp 
+        };
+        
+        // Envia imediatamente para o Firebase
+        db.ref('posicoes/' + num).set(dados);
+        db.ref('rastros/' + num).push(dados);
+
+    }, (err) => {
+        console.error("Erro GPS:", err);
+    }, { 
+        enableHighAccuracy: true, // Força o uso do GPS (não Wi-Fi/Torre)
+        maximumAge: 0,            // Não aceita posições antigas do cache
+        timeout: 27000            // Tempo máximo de espera por sinal
+    });
+}
 
         window.onload = function() {
             const salvo = localStorage.getItem('rally_carro_ativo');
