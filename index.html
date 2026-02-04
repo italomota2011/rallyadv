@@ -24,39 +24,4 @@
         button { background: #f80303; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:active { transform: scale(0.98); }
         #setup { display: block; } 
-        .tracking { text-align: center; display: none; }
-        .status-container { margin-top: 15px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid #333; }
-        .status-gps { color: #2ecc71; font-weight: bold; font-size: 14px; }
-        .status-offline { color: #f1c40f !important; }
-        .aviso-offline { display: none; font-size: 11px; color: #f1c40f; margin-top: 5px; text-transform: uppercase; font-weight: bold; }
-        .wake-lock-status { color: #666; font-size: 10px; margin-top: 10px; text-transform: uppercase; }
-        .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
-        .odo-box { margin-top: 15px; padding: 15px 10px; border-top: 1px solid #333; background: rgba(0,0,0,0.2); border-radius: 10px; }
-        .odo-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
-        .odo-val { font-size: 5rem; font-weight: bold; color: #f1c40f; margin: 2px 0; cursor: pointer; font-family: monospace; }
-        .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
-        .btn-mini { padding: 10px; font-size: 14px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
-        
-        /* NOVO: Contador de pontos do Datalogger */
-        .datalogger-info { font-size: 10px; color: #555; margin-top: 5px; }
-    </style>
-</head>
-<body>
-
-    <div class="card">
-        <div id="setup">
-            <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
-            <h2 style="color:#ffffff; text-align:center; margin-top: 0;">Rally de Aventura</h2>
-            <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
-            <select id="categoria">
-                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
-                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
-                <option>ANTIGOS</option>
-            </select>
-            <input type="number" id="carro" placeholder="Nº do Carro" min="1" max="100">
-            <button id="btnIniciar">INICIAR PROVA</button>
-        </div>
-
-        <div id="ativo" class="tracking">
-            <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 4px;">Carro --</h2>
-            <div id="viewVel" style="font-size: 2rem
+        .tracking { text-align: center
