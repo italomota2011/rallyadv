@@ -71,7 +71,7 @@
             
             <div class="status-container">
                 <div id="msgGps" class="status-gps">● CONECTANDO...</div>
-                <div id="detalheOffline" class="aviso-offline">DADOS PROTEGIDOS NO CELULAR.</div>
+                <div id="detalheOffline" class="aviso-offline">NÃO FECHE O SISTEMA.</div>
             </div>
 
             <div id="statusTela" class="wake-lock-status">Tela Bloqueada (Sempre Acesa)</div>
@@ -156,7 +156,7 @@
                     msg.classList.remove('status-offline');
                     detalhe.style.display = 'none';
                 } else {
-                    msg.innerText = "○ SEM SINAL DE INTERNET";
+                    msg.innerText = "○ SEM SINAL DE INTERNET, NÃO FECHE O SISTEMA!";
                     msg.classList.add('status-offline');
                     detalhe.style.display = 'block';
                 }
@@ -170,14 +170,14 @@
                 const kmh = Math.round(speedMS * 3.6);
 
                 // --- FILTRO DE ESTABILIDADE ---
-                // Se a precisão for ruim (> 30m), ignora para não "pular" o odômetro
-                if (accuracy > 30) return;
+                // Se a precisão for ruim (> 20m), ignora para não "pular" o odômetro
+                if (accuracy > 20) return;
 
                 if (ultimaPos) {
                     const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
                     
                     // Só move o odômetro se deslocou mais de 5 metros e está a mais de 2km/h
-                    if (dist > 0.005 && kmh > 2) { 
+                    if (dist > 0.005 && kmh > 7) { 
                         odoTotal += dist;
                         atualizarTelaOdo();
                         ultimaPos = { lat, lng }; 
