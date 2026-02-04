@@ -9,7 +9,6 @@
     <meta name="theme-color" content="#0d0af0">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
     <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
     <meta name="mobile-web-app-capable" content="yes">
 
@@ -22,7 +21,6 @@
         .logo { display: block; margin: 0 auto 20px auto; max-width: 150px; height: auto; }
         input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
         button { background: #f80303; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:active { transform: scale(0.98); }
         #setup { display: block; } 
         .tracking { text-align: center; display: none; }
         .btn-sair { background: transparent; color: #444; font-size: 11px; margin-top: 20px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
@@ -48,8 +46,8 @@
 
         <div id="ativo" class="tracking">
             <h2 id="viewCarro" style="color:#0d0af0; margin-bottom: 10px;">Carro --</h2>
-            <p style="color: #2ecc71; font-weight: bold;">● RASTREIO ATIVO</p>
-            <p style="font-size: 12px; color: #888;">Pontos no rastro: <span id="countPts" style="color:#0d0af0; font-weight:bold;">0</span></p>
+            <p style="color: #2ecc71; font-weight: bold;">● RASTREIO FILTRADO</p>
+            <p style="font-size: 12px; color: #888;">Pontos Gravados: <span id="countPts" style="color:#0d0af0; font-weight:bold;">0</span></p>
             <button class="btn-sair" onclick="encerrarSessao()">Encerrar e Enviar Rastro</button>
         </div>
     </div>
@@ -57,13 +55,12 @@
     <script>
         const firebaseConfig = {
             apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
-            authDomain: "cronometro-rally.firebaseapp.com",
             databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
             projectId: "cronometro-rally",
             appId: "1:341731891354:web:d0c34265be68015e98a723"
         };
-        const app = firebase.initializeApp(firebaseConfig);
-        const db = firebase.database(app);
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
         let watchID = null;
         let rastroDatalogger = [];
@@ -82,13 +79,14 @@
             watchID = navigator.geolocation.watchPosition(position => {
                 const { latitude, longitude, speed, accuracy } = position.coords;
                 
-                // Filtro de Precisão
+                // Filtro 1: Precisão (Ignora se o sinal estiver muito instável)
                 if (accuracy > 30) return;
 
-                // Filtro de Movimento (evita subir pontos parado)
+                // Filtro 2: Movimento Significativo (aprox. 4-5 metros)
                 if (ultimaLat !== null) {
-                    const d = Math.sqrt(Math.pow(latitude - ultimaLat, 2) + Math.pow(longitude - ultimaLng, 2));
-                    if (d < 0.00003 && (speed || 0) < 0.5) return; 
+                    const dist = Math.sqrt(Math.pow(latitude - ultimaLat, 2) + Math.pow(longitude - ultimaLng, 2));
+                    // Se estiver devagar (parado) e a distância for mínima, ignora para não afetar o Rabbit
+                    if (dist < 0.00004 && (speed || 0) < 0.8) return; 
                 }
 
                 ultimaLat = latitude;
@@ -105,53 +103,38 @@
                 document.getElementById('countPts').innerText = rastroDatalogger.length;
                 db.ref('posicoes/' + num).set(ponto);
 
-            }, null, { enableHighAccuracy: true, maximumAge: 0 });
+            }, null, { enableHighAccuracy: true, maximumAge: 1000 });
         }
 
         document.getElementById('btnIniciar').onclick = async function() {
-            const numRaw = document.getElementById('carro').value;
-            const nomeRaw = document.getElementById('nome').value.trim();
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value.trim();
             const cat = document.getElementById('categoria').value;
-            const num = parseInt(numRaw);
 
-            if(!nomeRaw || !numRaw) return alert("Preencha todos os campos!");
+            if(!nome || !num) return alert("Preencha os campos!");
             
             try {
                 const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
                 if (statusSnap.val() !== true) return alert("🚫 Prova Fechada!");
 
-                const snapshot = await db.ref('competidores').once('value');
-                const competidores = snapshot.val() || {};
-                if (competidores[num]) return alert("Este número de carro já existe!");
-
-                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                await db.ref('competidores/' + num).set({ nome, categoria: cat });
                 localStorage.setItem('rally_carro_ativo', num);
                 iniciarFluxoRastreio(num);
             } catch (e) { alert("Erro de conexão."); }
         };
 
         async function encerrarSessao() {
-            if(!confirm("Encerrar e enviar rastro completo?")) return;
+            if(!confirm("Enviar rastro completo?")) return;
             const num = localStorage.getItem('rally_carro_ativo');
-            
             try {
-                const btn = document.querySelector('.btn-sair');
-                btn.innerText = "ENVIANDO...";
-                btn.disabled = true;
-
                 await db.ref('rastros_completos/' + num).set({
                     log: rastroDatalogger,
                     finalizadoEm: Date.now()
                 });
-
                 if (watchID) navigator.geolocation.clearWatch(watchID);
                 localStorage.removeItem('rally_carro_ativo');
-                alert("Rastro enviado!");
                 location.reload();
-            } catch (e) {
-                alert("Erro ao enviar.");
-                location.reload();
-            }
+            } catch (e) { alert("Erro ao enviar."); }
         }
 
         window.onload = function() {
