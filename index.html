@@ -41,7 +41,7 @@
         <div id="setup">
             <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
             <h2 style="color:#ffffff; text-align:center; margin-top: 0;">Rally Tracker</h2>
-            <p style="font-size: 12px; color: #888; margin-bottom: 20px;">MODO DATALOGGER (FUNDO)</p>
+            <p style="font-size: 11px; color: #888; margin-bottom: 20px;">MODO DATALOGGER (SEGUNDO PLANO)</p>
             <input type="text" id="nome" placeholder="Nome do Piloto" oninput="this.value = this.value.replace(/[0-9]/g, '')">
             <select id="categoria">
                 <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
@@ -62,7 +62,7 @@
                 <div id="detalheOffline" class="aviso-offline">DADOS PROTEGIDOS NO CELULAR.<br>NÃO FECHE ESTA ABA!</div>
             </div>
 
-            <p style="color: #555; font-size: 11px; margin-top: 15px;">Você pode alternar para o Rabbit.<br>Mantenha esta aba aberta em segundo plano.</p>
+            <p style="color: #666; font-size: 11px; margin-top: 15px;">Use o Rabbit normalmente.<br>Mantenha esta aba aberta ao fundo.</p>
             
             <button class="btn-sair" onclick="encerrarSessao()">Encerrar Sessão / Sair</button>
         </div>
@@ -89,8 +89,12 @@
         }
 
         function iniciarFluxoRastreio(num) {
-            document.getElementById('setup').style.display = 'none';
-            document.getElementById('ativo').style.display = 'block';
+            const setupDiv = document.getElementById('setup');
+            const ativoDiv = document.getElementById('ativo');
+            
+            if(setupDiv) setupDiv.style.display = 'none';
+            if(ativoDiv) ativoDiv.style.display = 'block';
+            
             document.getElementById('viewCarro').innerText = "Carro " + num;
             
             solicitarWakeLock();
@@ -117,10 +121,74 @@
                 const kmh = Math.round(speedMS * 3.6);
                 const timestamp = Date.now();
 
-                // Log visual simples para conferência
-                document.getElementById('logCoord').innerText = lat.toFixed(5) + ", " + lng.toFixed(5);
+                const logEl = document.getElementById('logCoord');
+                if(logEl) logEl.innerText = lat.toFixed(5) + ", " + lng.toFixed(5);
 
-                // Envio de dados (Mantendo sua estrutura original intacta)
                 const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
                 db.ref('posicoes/' + num).set(dados);
-                db.ref('rastros/' + num
+                db.ref('rastros/' + num).push(dados);
+
+            }, (err) => {
+                console.error("Erro GPS:", err);
+            }, { 
+                enableHighAccuracy: true, 
+                maximumAge: 0, 
+                timeout: 10000 
+            });
+        }
+
+        window.onload = function() {
+            const salvo = localStorage.getItem('rally_carro_ativo');
+            if (salvo) iniciarFluxoRastreio(salvo);
+        };
+
+        // Correção no Evento do Botão
+        document.getElementById('btnIniciar').addEventListener('click', async function() {
+            const numRaw = document.getElementById('carro').value;
+            const nomeRaw = document.getElementById('nome').value.trim();
+            const cat = document.getElementById('categoria').value;
+            const num = parseInt(numRaw);
+
+            if(!nomeRaw || !numRaw) {
+                alert("Preencha todos os campos!");
+                return;
+            }
+            
+            try {
+                const statusSnap = await db.ref('configuracoes/provaAberta').once('value');
+                if (statusSnap.val() !== true) {
+                    alert("🚫 A prova está fechada no momento.");
+                    return;
+                }
+
+                const snapshot = await db.ref('competidores/' + num).once('value');
+                if (snapshot.exists()) {
+                    alert("Este número de carro já está registrado!");
+                    return;
+                }
+
+                await db.ref('competidores/' + num).set({ nome: nomeRaw, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxoRastreio(num);
+            } catch (e) {
+                console.error(e);
+                alert("Erro de conexão ou permissão.");
+            }
+        });
+
+        function encerrarSessao() {
+            if(confirm("Encerrar o rastro?")) {
+                if (watchID) navigator.geolocation.clearWatch(watchID);
+                localStorage.removeItem('rally_carro_ativo');
+                location.reload();
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                solicitarWakeLock();
+            }
+        });
+    </script>
+</body>
+</html>
