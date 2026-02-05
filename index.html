@@ -3,42 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Rally Tracker Pro</title>
+    <title>Rally Odômetro Pro</title>
 
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#0d0af0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rally Tracker">
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png">
-    
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     
     <style>
         body { font-family: sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; overflow: hidden; }
-        .card { background: #1e1e1e; padding: 25px; border-radius: 12px; width: 95%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #ffffff; z-index: 10; }
-        .logo { display: block; margin: 0 auto 20px auto; max-width: 120px; height: auto; }
-        input, select, button { width: 100%; padding: 14px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
-        button { background: #f80303; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        #setup { display: block; } 
-        .tracking { text-align: center; display: none; }
-        .status-container { margin-top: 20px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.3); border: 1px solid #333; }
-        .status-gps { color: #2ecc71; font-weight: bold; font-size: 13px; }
-        .status-offline { color: #f1c40f !important; }
-        .odo-box { margin-top: 10px; padding: 20px 10px; background: rgba(0,0,0,0.2); border-radius: 10px; }
-        .odo-label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; }
-        .odo-val { font-size: 6.5rem; font-weight: bold; color: #f1c40f; margin: 10px 0; cursor: pointer; font-family: monospace; line-height: 1; }
-        .odo-btns { display: flex; gap: 5px; justify-content: center; margin-top: 15px; }
-        .btn-mini { padding: 15px 5px; font-size: 12px; background: #333; margin-bottom: 0; width: auto; flex: 1; border: 1px solid #444; }
-        .btn-pausa { background: #444; color: white; }
-        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 25px; text-decoration: underline; cursor: pointer; border: none; width: 100%; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 95%; max-width: 400px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); border-top: 5px solid #ffffff; text-align: center; }
+        
+        /* Telas */
+        #setup { display: block; }
+        #ativo { display: none; }
+
+        input, select, button { width: 100%; padding: 14px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; font-size: 16px; box-sizing: border-box; }
+        button { background: #f80303; border: none; font-weight: bold; cursor: pointer; }
+        
+        /* Odômetro */
+        .odo-box { margin: 10px 0; padding: 20px 10px; background: rgba(0,0,0,0.2); border-radius: 10px; border: 1px solid #333; }
+        .odo-label { font-size: 14px; color: #888; text-transform: uppercase; letter-spacing: 2px; }
+        .odo-val { font-size: 6rem; font-weight: bold; color: #f1c40f; margin: 10px 0; font-family: monospace; line-height: 1; }
+        
+        /* Botões de Controle */
+        .odo-btns { display: flex; gap: 8px; justify-content: center; margin-top: 15px; }
+        .btn-mini { padding: 15px 5px; font-size: 12px; background: #333; margin-bottom: 0; flex: 1; border: 1px solid #444; color: white; }
+        
+        .status-gps { margin-top: 15px; font-size: 12px; color: #2ecc71; font-weight: bold; }
+        .status-offline { color: #f1c40f; }
+        .btn-sair { background: transparent; color: #555; font-size: 11px; margin-top: 20px; text-decoration: underline; border: none; }
     </style>
 </head>
 <body>
 
     <div class="card">
         <div id="setup">
-            <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
-            <h2 style="color:#ffffff; text-align:center; margin-top: 0;">Rally Tracker Pro</h2>
-            <input type
+            <h2 style="margin-top:0">Rally Tracker</h2>
+            <input type="text" id="nome" placeholder="Piloto">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº Carro">
+            <button onclick="iniciarProva()">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo">
+            <h2 id="viewCarro">Carro --</h2>
+
+            <div class="odo-box">
+                <span class="odo-label">Kilômetros</span>
+                <div id="displayOdo" class="odo-val" onclick="ajusteManualOdo()">0.000</div>
+                
+                <div class="odo-btns">
+                    <button class="btn-mini" onclick="alterarOdo(-0.001)">-1m</button>
+                    <button id="btnPausa" class="btn-mini" onclick="togglePausa()" style="background: #444;">PAUSAR</button>
