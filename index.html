@@ -167,39 +167,38 @@
     const lng = position.coords.longitude;
     const accuracy = position.coords.accuracy;
     
-    // 1. FILTRO DE PRECISÃO: Se o sinal estiver ruim, ignora totalmente
-    if (accuracy > 25) return; 
+    // 1. FILTRO DE PRECISÃO RIGOROSO
+    // Se a precisão for maior que 20 metros, o sinal está muito ruidoso para odômetro
+    if (accuracy > 20) return; 
 
-    // 2. TRATAMENTO DE VELOCIDADE:
-    // Muitos dispositivos Android retornam null no speed se não houver deslocamento real
+    // 2. FILTRO DE VELOCIDADE (KM/H)
     let speedMS = position.coords.speed || 0;
-    if (speedMS < 0.5) speedMS = 0; // Se for menos de 1.8km/h, considera parado
-    
+    if (speedMS < 0) speedMS = 0;
     const kmh = speedMS * 3.6;
+
+    // Atualiza o mostrador de velocidade (limpa ruído abaixo de 3km/h)
+    document.getElementById('viewVel').innerText = kmh > 3 ? kmh.toFixed(1) : "0.0";
 
     if (ultimaPos) {
         const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
         
-        // 3. FILTRO DE MOVIMENTO REAL:
-        // Só conta distância se:
-        // - Deslocou mais de 10 metros (0.010 km) 
-        // - E a velocidade atual é superior a 4 km/h (evita drift de caminhada/ruído)
-        if (dist > 0.010 && kmh > 4) { 
+        // 3. LÓGICA DE MOVIMENTO REAL (A "CHAVE" DO PROBLEMA)
+        // Só soma a distância se:
+        // A velocidade for maior que 5km/h (carro em movimento real)
+        // E a distância do pulo for maior que 12 metros (evita o jitter parado)
+        if (kmh > 5 && dist > 0.012) { 
             odoTotal += dist;
             atualizarTelaOdo();
-            ultimaPos = { lat, lng }; 
+            ultimaPos = { lat, lng }; // Só atualiza a referência se houve movimento real
         }
     } else {
+        // Primeira posição do GPS
         ultimaPos = { lat, lng };
     }
 
-    // Atualiza Velocidade na Tela (mostra 0 se estiver abaixo de 2km/h para não "tremer")
-    document.getElementById('viewVel').innerText = kmh > 2 ? kmh.toFixed(1) : "0.0";
-    
-    // Gravação no Firebase
+    // Envio para o Firebase (mantendo o rastro para auditoria)
     const timestamp = Date.now();
     const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
-    
     db.ref('posicoes/' + num).set(dados);
     db.ref('rastros/' + num).push(dados);
 
@@ -208,7 +207,7 @@
 }, { 
     enableHighAccuracy: true, 
     maximumAge: 0, 
-    timeout: 5000 // Reduzi para 5s para forçar respostas mais rápidas
+    timeout: 5000 
 });
         }
 
