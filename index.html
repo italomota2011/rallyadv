@@ -163,46 +163,53 @@
             });
 
             watchID = navigator.geolocation.watchPosition(position => {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                const speedMS = position.coords.speed || 0;
-                const kmh = Math.round(speedMS * 3.6);
+    const lat = position.coords.latitude;
+    const lng = position.coords.longitude;
+    const accuracy = position.coords.accuracy;
+    
+    // 1. FILTRO DE PRECISÃO: Se o sinal estiver ruim, ignora totalmente
+    if (accuracy > 25) return; 
 
-                // --- FILTRO DE ESTABILIDADE ---
-                // Se a precisão for ruim (> 20m), ignora para não "pular" o odômetro
-                if (accuracy > 20) return;
+    // 2. TRATAMENTO DE VELOCIDADE:
+    // Muitos dispositivos Android retornam null no speed se não houver deslocamento real
+    let speedMS = position.coords.speed || 0;
+    if (speedMS < 0.5) speedMS = 0; // Se for menos de 1.8km/h, considera parado
+    
+    const kmh = speedMS * 3.6;
 
-                if (ultimaPos) {
-                    const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
-                    
-                    // Só move o odômetro se deslocou mais de 5 metros e está a mais de 7km/h
-                    if (dist > 0.005 && kmh > 7) { 
-                        odoTotal += dist;
-                        atualizarTelaOdo();
-                        ultimaPos = { lat, lng }; 
-                    }
-                } else {
-                    ultimaPos = { lat, lng };
-                }
+    if (ultimaPos) {
+        const dist = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+        
+        // 3. FILTRO DE MOVIMENTO REAL:
+        // Só conta distância se:
+        // - Deslocou mais de 10 metros (0.010 km) 
+        // - E a velocidade atual é superior a 4 km/h (evita drift de caminhada/ruído)
+        if (dist > 0.010 && kmh > 4) { 
+            odoTotal += dist;
+            atualizarTelaOdo();
+            ultimaPos = { lat, lng }; 
+        }
+    } else {
+        ultimaPos = { lat, lng };
+    }
 
-                // Atualiza Velocidade na Tela
-                document.getElementById('viewVel').innerText = kmh.toFixed(1);
-                
-                // Gravação no Firebase (Conforme sua estrutura original)
-                const timestamp = Date.now();
-                const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
-                
-                db.ref('posicoes/' + num).set(dados);
-                db.ref('rastros/' + num).push(dados);
+    // Atualiza Velocidade na Tela (mostra 0 se estiver abaixo de 2km/h para não "tremer")
+    document.getElementById('viewVel').innerText = kmh > 2 ? kmh.toFixed(1) : "0.0";
+    
+    // Gravação no Firebase
+    const timestamp = Date.now();
+    const dados = { lat, lng, vel: kmh, acc: accuracy, ts: timestamp };
+    
+    db.ref('posicoes/' + num).set(dados);
+    db.ref('rastros/' + num).push(dados);
 
-            }, (err) => {
-                console.error("Erro GPS:", err);
-            }, { 
-                enableHighAccuracy: true, 
-                maximumAge: 0, 
-                timeout: 10000 
-            });
+}, (err) => {
+    console.error("Erro GPS:", err);
+}, { 
+    enableHighAccuracy: true, 
+    maximumAge: 0, 
+    timeout: 5000 // Reduzi para 5s para forçar respostas mais rápidas
+});
         }
 
         window.onload = function() {
