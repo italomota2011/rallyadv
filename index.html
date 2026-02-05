@@ -26,4 +26,115 @@
 
     <div class="card">
         <div id="setup">
-            <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class
+            <img src="https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png" class="logo">
+            <h2 style="text-align:center;">Rally de Aventura</h2>
+            <input type="text" id="nome" placeholder="Nome do Piloto">
+            <select id="categoria">
+                <option>BAIANO 4x2</option><option>BAIANO 4x4</option>
+                <option>INICIANTE 4x2</option><option>INICIANTE 4x4</option>
+            </select>
+            <input type="number" id="carro" placeholder="Nº do Carro">
+            <button onclick="tentarIniciar()">INICIAR PROVA</button>
+        </div>
+
+        <div id="ativo" class="tracking">
+            <h2 id="viewCarro">Carro --</h2>
+            <div class="odo-box">
+                <div id="displayOdo" class="odo-val">0.000</div>
+                <div class="odo-btns">
+                    <button class="btn-mini" onclick="alterarOdo(-0.001)">-1m</button>
+                    <button class="btn-mini" onclick="zerarOdo()" style="background:#b30000;">ZERAR</button>
+                    <button class="btn-mini" onclick="alterarOdo(0.001)">+1m</button>
+                </div>
+            </div>
+            <button onclick="encerrarSessao()" style="background:transparent; color:#555; text-decoration:underline; border:none; margin-top:20px;">Sair</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyBPJkehV9C1x0hiY5dQSwSRtVf5c4P2JGE",
+            authDomain: "cronometro-rally.firebaseapp.com",
+            databaseURL: "https://cronometro-rally-default-rtdb.firebaseio.com",
+            projectId: "cronometro-rally",
+            appId: "1:341731891354:web:d0c34265be68015e98a723"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let watchID = null, odoTotal = 0, ultimaPos = null, historicoVel = [0,0,0];
+
+        function atualizarTelaOdo() { document.getElementById('displayOdo').innerText = odoTotal.toFixed(3); }
+        function alterarOdo(v) { odoTotal = Math.max(0, odoTotal + v); atualizarTelaOdo(); }
+        function zerarOdo() { if(confirm("Zerar?")) { odoTotal = 0; atualizarTelaOdo(); } }
+
+        function calcularDistancia(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+
+        async function tentarIniciar() {
+            const num = document.getElementById('carro').value;
+            const nome = document.getElementById('nome').value;
+            const cat = document.getElementById('categoria').value;
+
+            if(!num || !nome) return alert("Preencha tudo!");
+
+            try {
+                // TESTE DE CONEXÃO E STATUS
+                const snapStatus = await db.ref('configuracoes/provaAberta').once('value');
+                if (snapStatus.val() !== true) return alert("🚫 Prova fechada pela organização!");
+
+                await db.ref('competidores/' + num).set({ nome, categoria: cat });
+                localStorage.setItem('rally_carro_ativo', num);
+                iniciarFluxo(num);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao conectar com o Firebase. Verifique a internet.");
+            }
+        }
+
+        function iniciarFluxo(num) {
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('ativo').style.display = 'block';
+            document.getElementById('viewCarro').innerText = "Carro " + num;
+
+            watchID = navigator.geolocation.watchPosition(pos => {
+                const { latitude: lat, longitude: lng, accuracy, speed } = pos.coords;
+                if (accuracy > 20) return;
+
+                const vKmh = (speed || 0) * 3.6;
+                historicoVel.push(vKmh); historicoVel.shift();
+                const mediaV = historicoVel.reduce((a,b)=>a+b)/3;
+
+                if (ultimaPos) {
+                    const d = calcularDistancia(ultimaPos.lat, ultimaPos.lng, lat, lng);
+                    // FILTRO ANDROID: 25 metros e 6 km/h
+                    if (d > 0.025 && mediaV > 6) {
+                        odoTotal += d;
+                        atualizarTelaOdo();
+                        ultimaPos = { lat, lng };
+                    }
+                } else { ultimaPos = { lat, lng }; }
+
+                db.ref('posicoes/' + num).set({ lat, lng, vel: mediaV, acc: accuracy, ts: Date.now() });
+            }, null, { enableHighAccuracy: true });
+        }
+
+        window.onload = () => {
+            const salvo = localStorage.getItem('rally_carro_ativo');
+            if(salvo) iniciarFluxo(salvo);
+        };
+
+        function encerrarSessao() {
+            if(confirm("Encerrar?")) {
+                localStorage.removeItem('rally_carro_ativo');
+                location.reload();
+            }
+        }
+    </script>
+</body>
+</html>
