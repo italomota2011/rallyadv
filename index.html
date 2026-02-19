@@ -248,6 +248,15 @@
             }
         }
     </script>
+    <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('Service Worker ativo para o Rally!'))
+        .catch(err => console.log('Erro no Service Worker:', err));
+    });
+  }
+</script>
 </body>
 </html>
 
