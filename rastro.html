@@ -34,7 +34,7 @@
         <div class="legenda">
             <strong>Dicionário do Mapa:</strong>
             <div class="item-legenda"><span style="color:#3498db; font-weight:bold;">━━</span> Rota Planejada</div>
-            <div class="item-legenda"><span style="color:#4CAF50; font-size:16px;">●</span> Rastro Normal (OK)</div>
+            <div class="item-legenda"><span style="color:#ffff00; font-size:16px;">●</span> Rastro Normal (OK)</div>
             <div class="item-legenda"><span style="color:red; font-size:16px;">●</span> Excesso de Velocidade</div>
             <div class="item-legenda"><span style="color:#38a169; font-size:16px;">●</span> Waypoint Validado</div>
             <div class="item-legenda"><span style="color:#e74c3c; font-size:16px;">●</span> Waypoint Perdido</div>
@@ -172,9 +172,9 @@
             else if(index % espacamentoVerde === 0) {
                 L.circleMarker([p.lat, p.lng], {
                     radius: 2.5, 
-                    color: '#1b5e20', 
+                    color: '#b8860b', 
                     weight: 1, 
-                    fillColor: '#4CAF50', 
+                    fillColor: '#ffff00', 
                     fillOpacity: 0.5
                 }).addTo(camadas.alertas).bindPopup(`
                     <b>Rastro OK</b><br>
@@ -197,6 +197,7 @@
     </script>
 </body>
 </html>
+
 
 
 
