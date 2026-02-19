@@ -235,7 +235,7 @@
 }
 
         window.apurar = async function() {
-            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -300pts/30s)?")) return;
+            if(!confirm("Rodar apuração (Regra: 10% tol, 10s carência, -500pts/30s)?")) return;
             const config = (await db.ref('configuracoes/percurso').once('value')).val();
             const rastros = (await db.ref('rastros').once('value')).val();
             const comps = (await db.ref('competidores').once('value')).val();
@@ -273,13 +273,13 @@ for(let i = 1; i < rastroArr.length; i++) {
 
 // A carência de 10 segundos que você já tem continua valendo:
 if(tempoExcessoMs > 10000) {
-    pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 300;
+    pen += (Math.floor((tempoExcessoMs - 10000) / 30000) + 1) * 500;
 }
                     } else if(feat.properties?.type === 'circle') {
                         const centro = feat.geometry.coordinates;
                         const raio = feat.properties.radius / 1000;
                         if(!rastroArr.some(pt => turf.distance(turf.point([pt.lng, pt.lat]), turf.point(centro)) <= raio)) {
-                            pen += 500;
+                            pen += 2000;
                         }
                     }
                 });
@@ -368,6 +368,7 @@ window.alternarStatusProva = function() {
     </script>
 </body>
 </html>
+
 
 
 
