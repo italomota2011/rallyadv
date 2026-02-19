@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Relatório de Prova - Ranking Geral</title>
+    <title>Relatório de Prova</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
@@ -102,9 +102,9 @@
             }
             
             list.sort((a, b) => {
-                if (a.tSeg !== b.tSeg) return a.tSeg - b.tSeg;
-                return b.totalPts - a.totalPts;
-            });
+    if (a.totalPts !== b.totalPts) return b.totalPts - a.totalPts; // Pontos primeiro (maior para menor)
+    return a.tSeg - b.tSeg;                                       // Tempo depois (menor para menor)
+});
 
             if(list.length > 0) {
                 html += `
