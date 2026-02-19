@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Rally Tracker Pro</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0d0af0">
@@ -92,15 +90,6 @@
         };
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
-       // 1. Primeiro ativa a persistência (O Capacitor)
-firebase.database().enablePersistence()
-  .catch((err) => {
-      console.log("Persistência offline não disponível:", err.code);
-  });
-
-// 2. Depois garante que está online
-firebase.database().goOnline();
-        
 
         let wakeLock = null;
         let watchID = null;
@@ -259,15 +248,6 @@ firebase.database().goOnline();
             }
         }
     </script>
-    <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('Service Worker ativo para o Rally!'))
-        .catch(err => console.log('Erro no Service Worker:', err));
-    });
-  }
-</script>
 </body>
 </html>
 
