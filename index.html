@@ -90,7 +90,15 @@
         };
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
-        firebase.database().goOnline();
+       // 1. Primeiro ativa a persistência (O Capacitor)
+firebase.database().enablePersistence()
+  .catch((err) => {
+      console.log("Persistência offline não disponível:", err.code);
+  });
+
+// 2. Depois garante que está online
+firebase.database().goOnline();
+        
 
         let wakeLock = null;
         let watchID = null;
