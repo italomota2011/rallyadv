@@ -1,33 +1,23 @@
 {
-  "name": "Rally Tracker Datalogger",
+  "name": "Rally Tracker Pro",
   "short_name": "RallyTracker",
-  "description": "Rastreador de GPS para Rally em segundo plano",
   "start_url": "index.html",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#121212",
-  "theme_color": "#0d0af0",
+  "theme_color": "#e67e22",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
-    }
-  ],
-  "scope": "/",
-  "categories": ["utilities", "sports"],
-  "shortcuts": [
-    {
-      "name": "Iniciar Rastreio",
-      "url": "/index.html",
-      "icons": [{ "src": "https://raw.githubusercontent.com/italomota2011/rallyadv/refs/heads/main/Logo.png", "sizes": "192x192" }]
+      "purpose": "maskable"
     }
   ]
 }
