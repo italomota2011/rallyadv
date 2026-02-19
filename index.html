@@ -90,6 +90,7 @@
         };
         const app = firebase.initializeApp(firebaseConfig);
         const db = firebase.database(app);
+        firebase.database().goOnline();
 
         let wakeLock = null;
         let watchID = null;
