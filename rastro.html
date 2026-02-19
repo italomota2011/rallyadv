@@ -118,7 +118,7 @@
                     let raioM = feat.properties.radius || 50;
                     let visitou = rastroArr.some(p => (turf.distance(turf.point([p.lng, p.lat]), turf.point(coords))*1000) <= raioM);
                     L.circle([coords[1], coords[0]], { radius: raioM, color: visitou ? '#38a169' : '#e74c3c', fillOpacity: 0.2 }).addTo(camadas.rota);
-                    if(!visitou) { penTotal += 20000; logs += "❌ WP Perdido (-20.000)<br>"; }
+                    if(!visitou) { penTotal += 500; logs += "❌ WP Perdido (-500)<br>"; }
                 }
 
                 // Identificação de Radares (Polígonos)
@@ -197,4 +197,5 @@
     </script>
 </body>
 </html>
+
 
